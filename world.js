@@ -131,6 +131,24 @@ const Overworld = (() => {
     return mailboxBlocked(px, py);
   }
 
+  function interiorBlocked(px, py) {
+    // The player has a small lower-body hitbox, matching the overworld collision shape.
+    const left = px + 3, right = px + 12, top = py + 9, bottom = py + 15;
+    const obstacles = [
+      // Bedroom furniture
+      [54,55,106,100], [111,58,135,78], [112,86,135,101],
+      [193,57,251,100], [254,45,275,104], [185,96,215,110],
+      // Kitchen counters, pantry, table and stools
+      [47,137,138,161], [43,166,55,204], [102,174,136,196],
+      [96,180,101,189], [138,180,143,189],
+      // Bathroom fixtures
+      [190,140,265,160], [221,168,258,190], [187,173,207,195],
+      // Fireplace, couch and low table in the shared space
+      [174,43,198,74], [205,48,247,70], [204,83,236,99]
+    ];
+    return obstacles.some(([x1,y1,x2,y2]) => left < x2 && right > x1 && top < y2 && bottom > y1);
+  }
+
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
   function isNight() { const h = worldClock % 1; return h >= 0.76 || h < 0.19; }
@@ -794,10 +812,13 @@ const Overworld = (() => {
       const speed = keys.has('shift') ? 66 : 46;
       const nx = interiorPlayer.x + ix * speed * dt;
       const ny = interiorPlayer.y + iy * speed * dt;
-      const hitsVerticalWall = nx > 153 && nx < 164 && interiorPlayer.y < 121 && !(interiorPlayer.y > 80 && interiorPlayer.y < 103);
-      const hitsHorizontalWall = ny > 119 && ny < 128 && (interiorPlayer.x < 148 || interiorPlayer.x > 172);
-      if (nx > 48 && nx < 272 && !hitsVerticalWall) interiorPlayer.x = nx;
-      if (ny > 53 && ny < 187 && !hitsHorizontalWall) interiorPlayer.y = ny;
+      // Partition walls have real thickness, with openings left for the doorways.
+      const hitsVerticalWall = nx > 150 && nx < 168 && interiorPlayer.y < 121 &&
+        !(interiorPlayer.y > 73 && interiorPlayer.y < 107);
+      const hitsHorizontalWall = ny > 121 && ny < 134 &&
+        (interiorPlayer.x < 145 || interiorPlayer.x > 175);
+      if (nx > 48 && nx < 272 && !hitsVerticalWall && !interiorBlocked(nx, interiorPlayer.y)) interiorPlayer.x = nx;
+      if (ny > 53 && ny < 187 && !hitsHorizontalWall && !interiorBlocked(interiorPlayer.x, ny)) interiorPlayer.y = ny;
       return;
     }
     stats.playTime += dt;
