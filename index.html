@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Pixelquest</title>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; min-height: 100%; background: #09080b; }
   body { min-height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden; }
   .tv-shell {
-    position: relative; width: min(96vw, 1040px); aspect-ratio: 4 / 3;
+    position: relative; width: min(96vw, 1040px, calc(88dvh * 4 / 3)); max-height: 88dvh; aspect-ratio: 4 / 3;
     padding: clamp(10px, 2vw, 24px); border-radius: 7% / 9%;
     background: linear-gradient(145deg, #39363a, #171619 42%, #29262a 72%, #111);
     box-shadow: 0 24px 65px #000, inset 0 2px 4px #7778, inset 0 -7px 12px #000;
@@ -30,11 +30,52 @@
     image-rendering: pixelated; image-rendering: crisp-edges;
     background: #000; filter: saturate(.88) contrast(1.08);
   }
-  @media (max-width: 600px) { .tv-shell { width: 98vw; padding: 10px; } }
+  @media (max-width: 900px) {
+    body { min-height: 100dvh; padding: 12px 0; }
+    .tv-shell { width: min(90vw, calc(82dvh * 4 / 3)); max-height: 82dvh; padding: 8px; }
+  }
+  @media (max-width: 600px) {
+    .tv-shell { width: min(88vw, calc(76dvh * 4 / 3)); max-height: 76dvh; padding: 7px; }
+    .tv-shell::after { inset: 7px; }
+  }
+  .mobile-controls {
+    display: none; position: absolute; z-index: 5; left: 4%; right: 4%; bottom: 5%;
+    align-items: flex-end; justify-content: space-between; pointer-events: none;
+  }
+  .mobile-pad { display: grid; grid-template-columns: repeat(3, 34px); grid-template-rows: repeat(2, 34px); gap: 3px; pointer-events: none; }
+  .mobile-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; width: 118px; pointer-events: none; }
+  .mobile-controls button {
+    width: 34px; height: 34px; padding: 0; border: 1px solid #f1d18a; border-radius: 8px;
+    background: #241a2bd9; color: #fff0c5; font: bold 12px monospace;
+    box-shadow: 0 2px 5px #0009; touch-action: none; pointer-events: auto; user-select: none;
+  }
+  .mobile-actions button { width: 34px; height: 30px; font-size: 9px; }
+  .mobile-pad button:active, .mobile-actions button:active { background: #9a6847; }
+  .tv-shell.playing .mobile-controls { display: flex; }
+  @media (pointer: coarse) {
+    .tv-shell { -webkit-tap-highlight-color: transparent; }
+  }
 </style>
 </head>
 <body>
-<div class="tv-shell"><canvas id="game" width="320" height="240"></canvas></div>
+<div class="tv-shell" id="tvShell">
+  <canvas id="game" width="320" height="240"></canvas>
+  <div class="mobile-controls" aria-label="Touch game controls">
+    <div class="mobile-pad">
+      <span></span><button type="button" data-game-key="ArrowUp">▲</button><span></span>
+      <button type="button" data-game-key="ArrowLeft">◀</button><button type="button" data-game-key="ArrowDown">▼</button><button type="button" data-game-key="ArrowRight">▶</button>
+    </div>
+    <div class="mobile-actions">
+      <button type="button" data-game-key="e">E</button>
+      <button type="button" data-game-key="Shift">RUN</button>
+      <button type="button" data-game-key="i">BAG</button>
+      <button type="button" data-game-key="c">STATS</button>
+      <button type="button" data-game-key="z">NIGHT</button>
+      <button type="button" data-game-key="1">FIGHT</button>
+      <button type="button" data-game-key="2">RUN</button>
+    </div>
+  </div>
+</div>
 <script src="world.js?v=rustic-interior-3"></script>
 <script>
 const canvas = document.getElementById('game');
@@ -341,6 +382,25 @@ canvas.addEventListener('click', e => {
   const i = hit(toCanvas(e));
   if (i >= 100) { state.sel = 0; state.screen = 'deleteConfirm'; message = ''; return; }
   if (i >= 0) { state.sel = i; activate(); }
+});
+
+// Touch controls send the same keyboard events used by the desktop controls.
+document.querySelectorAll('[data-game-key]').forEach(button => {
+  const key = button.dataset.gameKey;
+  const code = key === 'z' ? 'KeyZ' : key === 'Shift' ? 'ShiftLeft' : key.startsWith('Arrow') ? key : '';
+  const press = event => {
+    event.preventDefault();
+    button.setPointerCapture?.(event.pointerId);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true, cancelable: true }));
+  };
+  const release = event => {
+    event.preventDefault();
+    window.dispatchEvent(new KeyboardEvent('keyup', { key, code, bubbles: true, cancelable: true }));
+  };
+  button.addEventListener('pointerdown', press);
+  button.addEventListener('pointerup', release);
+  button.addEventListener('pointercancel', release);
+  button.addEventListener('lostpointercapture', release);
 });
 
 function update(dt) {
