@@ -690,21 +690,14 @@ const Overworld = (() => {
     ctx.fillStyle = '#e4c48d'; ctx.fillRect(188, 198, 22, 7);
     ctx.fillStyle = '#6c4940'; ctx.fillRect(215, 199, 43, 7);
 
-    // Central living/dining space: fireplace, couch, coffee table and wall details.
-    ctx.fillStyle = '#493027'; ctx.fillRect(174, 34, 72, 7);
-    ctx.fillStyle = '#9c6540'; ctx.fillRect(179, 36, 62, 3);
-    ctx.fillStyle = '#5c382c'; ctx.fillRect(174, 43, 24, 31);
-    ctx.fillStyle = '#a66d45'; ctx.fillRect(177, 46, 18, 24);
-    ctx.fillStyle = '#30262a'; ctx.fillRect(180, 51, 12, 16);
-    ctx.fillStyle = '#e17b3e'; ctx.fillRect(183, 58, 6, 8);
-    ctx.fillStyle = '#ffd06c'; ctx.fillRect(185, 55, 3, 6);
-    ctx.fillStyle = '#6c4435'; ctx.fillRect(205, 48, 42, 17);
-    ctx.fillStyle = '#b27655'; ctx.fillRect(208, 50, 36, 12);
-    ctx.fillStyle = '#d99a77'; ctx.fillRect(211, 52, 30, 8);
-    ctx.fillStyle = '#5c392b'; ctx.fillRect(214, 66, 4, 4); ctx.fillRect(238, 66, 4, 4);
-    ctx.fillStyle = '#75482f'; ctx.fillRect(204, 83, 32, 16);
-    ctx.fillStyle = '#c08a54'; ctx.fillRect(207, 86, 26, 10);
-    ctx.fillStyle = '#e7d0a2'; ctx.fillRect(215, 88, 10, 5);
+    // Small shared hallway details: wall hooks, a framed family picture and a runner.
+    ctx.fillStyle = '#5b392b'; ctx.fillRect(178, 106, 92, 5);
+    ctx.fillStyle = '#bd8752'; ctx.fillRect(181, 107, 86, 2);
+    ctx.fillStyle = '#4c3028'; ctx.fillRect(187, 108, 13, 10);
+    ctx.fillStyle = '#d8bd83'; ctx.fillRect(189, 110, 9, 6);
+    ctx.fillStyle = '#6e9c83'; ctx.fillRect(191, 111, 5, 4);
+    ctx.fillStyle = '#795039'; ctx.fillRect(235, 107, 24, 10);
+    ctx.fillStyle = '#c18a54'; ctx.fillRect(238, 109, 18, 6);
     // Wall window, picture frame and a hanging lantern.
     ctx.fillStyle = '#57372b'; ctx.fillRect(70, 32, 25, 15);
     ctx.fillStyle = '#86b5c0'; ctx.fillRect(73, 35, 19, 9);
