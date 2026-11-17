@@ -280,7 +280,7 @@ const Overworld = (() => {
     const k = e.key.toLowerCase();
     if (k === 'escape') {
       stop();
-      if (onExit) onExit();
+      if (onExit) onExit(getSaveData());
       return;
     }
     if (GAME_KEYS.includes(k)) {
