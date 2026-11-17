@@ -829,6 +829,19 @@ const Overworld = (() => {
       else if (k === '2' || k === 'escape') { battleAction('run'); e.preventDefault(); }
       return;
     }
+    if (k === 'z') {
+      if (e.repeat) return;
+      const alreadyNight = isNight();
+      worldClock = 0.80;
+      if (!alreadyNight) {
+        wolves.length = 0;
+        wolfSpawned = false;
+      }
+      notice = 'Night has fallen...';
+      noticeUntil = time + 2.5;
+      e.preventDefault();
+      return;
+    }
     if (k === 'escape') {
       e.preventDefault();
       if (panel) { panel = null; return; }
