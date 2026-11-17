@@ -13,6 +13,9 @@ const Overworld = (() => {
   let worldClock = 0.28, wolfSpawned = false, wolfNoticeCooldown = 0;
   const wolves = [];
   const DAY_LENGTH = 180;
+  let battle = null;
+  const BATTLE_FADE = 0.7;
+
   let camX = 0, camY = 0;
   let panel = null;
   let notice = '';
@@ -143,9 +146,9 @@ const Overworld = (() => {
       const nx=w.x+vx*dt, ny=w.y+vy*dt;
       if (!blocked(nx,w.y)) w.x=nx; if (!blocked(w.x,ny)) w.y=ny;
       w.attackCooldown=Math.max(0,w.attackCooldown-dt);
-      if (distance<19 && w.attackCooldown<=0) {
-        stats.health=Math.max(0,stats.health-2); w.attackCooldown=1.25;
-        if (wolfNoticeCooldown<=0) { notice=stats.health>0?'A wolf bit you! Get away!':'You are exhausted! The wolves back away...'; noticeUntil=time+2.2; wolfNoticeCooldown=2.5; }
+      if (distance<23 && !battle) {
+        beginBattle(w);
+        return;
       }
     });
     wolfNoticeCooldown=Math.max(0,wolfNoticeCooldown-dt);
@@ -413,8 +416,135 @@ const Overworld = (() => {
     }
     ctx.fillStyle='#f1d28c'; ctx.fillRect(sx+6,sy+7,4,1);
   }
+  function beginBattle(w) {
+    if (battle) return;
+    battle = { wolf:w, wolfHP:12, maxWolfHP:12, phase:'intro', fade:0, message:'A wild wolf appeared!', menu:0, turn:0 };
+    keys.clear();
+    player.moving = false;
+  }
+
+  function updateBattle(dt) {
+    if (!battle) return;
+    if (battle.phase === 'intro') {
+      battle.fade = Math.min(1, battle.fade + dt / BATTLE_FADE);
+      if (battle.fade >= 1) battle.phase = 'command';
+    } else if (battle.phase === 'outro') {
+      battle.fade = Math.max(0, battle.fade - dt / BATTLE_FADE);
+      if (battle.fade <= 0) {
+        if (battle.wolf) {
+          const i = wolves.indexOf(battle.wolf);
+          if (i >= 0) wolves.splice(i,1);
+        }
+        battle = null;
+      }
+    }
+  }
+
+  function battleAction(action) {
+    if (!battle || battle.phase !== 'command') return;
+    if (action === 'fight') {
+      const damage = Math.max(3, stats.strength + 2);
+      battle.wolfHP = Math.max(0, battle.wolfHP - damage);
+      if (battle.wolfHP <= 0) {
+        battle.message = 'The wolf ran back into the forest!';
+        battle.phase = 'outro';
+        return;
+      }
+      battle.message = 'You stand your ground! The wolf lunges!';
+      stats.health = Math.max(0, stats.health - 2);
+      if (stats.health <= 0) {
+        battle.message = 'You are worn out! The wolf retreats.';
+        battle.phase = 'outro';
+      }
+    } else if (action === 'run') {
+      battle.message = 'You escaped from the wolf!';
+      battle.phase = 'outro';
+    }
+  }
+
+  function drawBattleWolf() {
+    // Large, layered pixel-art wolf, facing the player.
+    const x=218, y=82, bob=Math.sin(time*3)*2;
+    ctx.save(); ctx.translate(x,y+bob);
+    ctx.fillStyle='rgba(0,0,0,0.38)'; ctx.fillRect(-38,55,112,10);
+    // Back legs and paws
+    ctx.fillStyle='#252b3b'; ctx.fillRect(-22,28,17,31); ctx.fillRect(30,27,17,32);
+    ctx.fillStyle='#151b29'; ctx.fillRect(-28,51,25,9); ctx.fillRect(25,51,27,9);
+    // Tail
+    ctx.fillStyle='#424b61'; ctx.fillRect(-46,0,22,12); ctx.fillRect(-57,-10,17,13);
+    ctx.fillStyle='#7b879b'; ctx.fillRect(-59,-10,9,7);
+    // Body layers
+    ctx.fillStyle='#465269'; ctx.fillRect(-29,-5,80,47);
+    ctx.fillStyle='#68758a'; ctx.fillRect(-17,-12,57,19);
+    ctx.fillStyle='#8792a2'; ctx.fillRect(-8,-9,32,9);
+    ctx.fillStyle='#343e53'; ctx.fillRect(-28,17,76,16);
+    // Chest ruff
+    ctx.fillStyle='#aab0b8'; ctx.fillRect(28,-2,21,37); ctx.fillRect(34,7,19,22);
+    ctx.fillStyle='#d0c9bc'; ctx.fillRect(37,13,10,12);
+    // Front legs
+    ctx.fillStyle='#4b566d'; ctx.fillRect(0,26,15,31); ctx.fillRect(35,25,15,32);
+    ctx.fillStyle='#222938'; ctx.fillRect(-3,52,22,9); ctx.fillRect(31,52,23,9);
+    // Neck and head
+    ctx.fillStyle='#59667c'; ctx.fillRect(31,-24,31,34);
+    ctx.fillStyle='#768398'; ctx.fillRect(40,-31,30,30);
+    ctx.fillStyle='#3b455a'; ctx.fillRect(42,-42,12,17); ctx.fillRect(61,-39,12,16);
+    ctx.fillStyle='#a2aaba'; ctx.fillRect(45,-39,5,9); ctx.fillRect(64,-36,5,8);
+    ctx.fillStyle='#7c899c'; ctx.fillRect(62,-19,24,17);
+    ctx.fillStyle='#c5c5c2'; ctx.fillRect(68,-8,24,10); ctx.fillRect(78,-3,13,6);
+    ctx.fillStyle='#242a38'; ctx.fillRect(85,-5,7,5);
+    // Eye and brow
+    ctx.fillStyle='#242b3a'; ctx.fillRect(66,-23,13,6);
+    ctx.fillStyle='#f0bd55'; ctx.fillRect(69,-22,6,4);
+    ctx.fillStyle='#171b27'; ctx.fillRect(73,-22,2,3);
+    ctx.fillStyle='#3a4050'; ctx.fillRect(61,-29,18,5);
+    // Fur highlights
+    ctx.fillStyle='#9ca6b5'; ctx.fillRect(-8,-6,19,4); ctx.fillRect(10,1,17,4);
+    ctx.fillStyle='#d3d7d8'; ctx.fillRect(42,1,7,5); ctx.fillRect(51,7,5,5);
+    ctx.restore();
+  }
+
+  function drawBattle() {
+    ctx.fillStyle='#17233a'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    // Distant forest silhouettes and a moonlit clearing
+    ctx.fillStyle='#202f43';
+    for(let i=0;i<9;i++){const x=i*42-10;ctx.fillRect(x,55,25,105);ctx.fillRect(x+7,35,12,35);}
+    ctx.fillStyle='#33465a'; ctx.fillRect(0,147,canvas.width,93);
+    ctx.fillStyle='#50634c'; ctx.fillRect(0,173,canvas.width,67);
+    ctx.fillStyle='#71815a'; ctx.fillRect(0,180,canvas.width,3);
+    // Soft moon glow
+    const glow=ctx.createRadialGradient(245,65,5,245,65,95);
+    glow.addColorStop(0,'rgba(173,195,231,0.22)');glow.addColorStop(1,'rgba(173,195,231,0)');
+    ctx.fillStyle=glow;ctx.fillRect(140,0,180,165);
+    // Player shown close-up from behind on the left
+    ctx.fillStyle='rgba(0,0,0,0.3)';ctx.fillRect(35,180,105,16);
+    ctx.save();ctx.translate(76,108);ctx.scale(4.8,4.8);drawPlayer(0,0);ctx.restore();
+    drawBattleWolf();
+    // Battle HUD
+    ctx.fillStyle='rgba(10,14,27,0.94)';ctx.fillRect(12,10,133,47);
+    ctx.strokeStyle='#e4d5b5';ctx.lineWidth=2;ctx.strokeRect(13,11,131,45);
+    ctx.fillStyle='#fff0ce';ctx.textAlign='left';ctx.font='bold 10px monospace';ctx.fillText('YOUR ADVENTURER',20,25);
+    ctx.font='8px monospace';ctx.fillText('HP '+stats.health+' / '+stats.maxHealth,20,39);
+    drawBar(20,43,112,7,stats.health,stats.maxHealth,'#c74f54');
+    ctx.fillStyle='rgba(10,14,27,0.94)';ctx.fillRect(190,12,119,43);
+    ctx.strokeStyle='#e4d5b5';ctx.strokeRect(190.5,12.5,118,42);
+    ctx.fillStyle='#fff0ce';ctx.font='bold 10px monospace';ctx.fillText('WILD WOLF',199,27);
+    drawBar(199,35,99,8,battle.wolfHP,battle.maxWolfHP,'#a7c66b');
+    ctx.fillStyle='rgba(8,12,23,0.96)';ctx.fillRect(7,190,306,44);
+    ctx.strokeStyle='#d7c69e';ctx.strokeRect(8,191,304,42);
+    ctx.fillStyle='#fff0ce';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText(battle.message,16,205);
+    if(battle.phase==='command'){
+      ctx.fillStyle='#f5dca6';ctx.font='bold 9px monospace';
+      ctx.fillText('1  FIGHT',18,222);ctx.fillText('2  RUN',111,222);
+    } else {
+      ctx.fillStyle='#c8d5e7';ctx.font='8px monospace';ctx.fillText('...',18,222);
+    }
+    if(battle.phase==='intro') {ctx.fillStyle='rgba(4,7,16,'+(1-battle.fade)+')';ctx.fillRect(0,0,canvas.width,canvas.height);}
+    if(battle.phase==='outro') {ctx.fillStyle='rgba(4,7,16,'+(1-battle.fade)+')';ctx.fillRect(0,0,canvas.width,canvas.height);}
+  }
+
   function update(dt) {
     time += dt;
+    if (battle) { updateBattle(dt); return; }
     stats.playTime += dt;
     const wasNight = isNight();
     worldClock = (worldClock + dt / DAY_LENGTH) % 1;
@@ -577,6 +707,7 @@ const Overworld = (() => {
   }
 
   function draw() {
+    if (battle) { drawBattle(); return; }
     ctx.fillStyle = '#1b1f3a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     const x0 = Math.max(0, Math.floor(camX / TILE));
@@ -672,6 +803,11 @@ const Overworld = (() => {
 
   function onKeyDown(e) {
     const k = e.key.toLowerCase();
+    if (battle) {
+      if (k === '1' || k === 'enter' || k === ' ') { battleAction('fight'); e.preventDefault(); }
+      else if (k === '2' || k === 'escape') { battleAction('run'); e.preventDefault(); }
+      return;
+    }
     if (k === 'escape') {
       e.preventDefault();
       if (panel) { panel = null; return; }
@@ -711,7 +847,7 @@ const Overworld = (() => {
     panel = null;
     notice = '';
     time = 0;
-    wolves.length=0; wolfSpawned=false; wolfNoticeCooldown=0;
+    wolves.length=0; wolfSpawned=false; wolfNoticeCooldown=0; battle=null;
     bunnies.forEach((b, i) => {
       const starts = [
         [17 * TILE, 10 * TILE], [22 * TILE, 20 * TILE],
