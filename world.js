@@ -955,6 +955,10 @@ const Overworld = (() => {
       x: player.x,
       y: player.y,
       facing: player.facing,
+      insideHouse,
+      interiorX: interiorPlayer.x,
+      interiorY: interiorPlayer.y,
+      interiorFacing: interiorPlayer.facing,
       inventory: { ...inventory },
       stats: { ...stats },
       stepDistance,
@@ -965,11 +969,17 @@ const Overworld = (() => {
   function applySave(saveData) {
     // Reset the slot to a clean starting state before applying saved values.
     player.x = SPAWN.x * TILE; player.y = SPAWN.y * TILE; player.facing = 'down';
+    insideHouse = false;
+    interiorPlayer.x = 225; interiorPlayer.y = 150; interiorPlayer.facing = 'down';
     inventory.berries = 3; inventory.wood = 0; inventory.fish = 0;
     Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0 });
     stepDistance = 0;
     worldClock = 0.28;
-    if (!saveData || typeof saveData !== 'object') return;
+    // A genuinely new slot begins in the kid's bedroom.
+    if (!saveData || typeof saveData !== 'object') {
+      insideHouse = true;
+      return;
+    }
 
     if (Number.isFinite(saveData.x) && Number.isFinite(saveData.y)) {
       const sx = clamp(saveData.x, TILE, (MAP_W - 2) * TILE);
@@ -993,6 +1003,12 @@ const Overworld = (() => {
     }
     if (Number.isFinite(saveData.stepDistance)) stepDistance = Math.max(0, saveData.stepDistance);
     if (Number.isFinite(saveData.worldClock)) worldClock = ((saveData.worldClock % 1) + 1) % 1;
+    if (saveData.insideHouse === true) {
+      insideHouse = true;
+      if (Number.isFinite(saveData.interiorX)) interiorPlayer.x = clamp(saveData.interiorX, 24, 296);
+      if (Number.isFinite(saveData.interiorY)) interiorPlayer.y = clamp(saveData.interiorY, 42, 214);
+      if (['up', 'down', 'left', 'right'].includes(saveData.interiorFacing)) interiorPlayer.facing = saveData.interiorFacing;
+    }
   }
 
   function onKeyDown(e) {
