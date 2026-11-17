@@ -46,7 +46,7 @@ const Overworld = (() => {
   const HOUSE = { x: 8 * TILE, y: 8 * TILE, w: 7 * TILE, h: 5 * TILE };
   const HOUSE_DOOR = { x: HOUSE.x + HOUSE.w / 2, y: HOUSE.y + 67 };
   let insideHouse = false;
-  const interiorPlayer = { x: 160, y: 190, facing: 'up' };
+  const interiorPlayer = { x: 160, y: 174, facing: 'up' };
   const MAILBOX = { x: 15.4 * TILE, y: 12.4 * TILE };
 
   function rng(seed) {
@@ -645,7 +645,7 @@ const Overworld = (() => {
     ctx.strokeStyle = '#d9b56b'; ctx.strokeRect(54.5, 4.5, 211, 15);
     ctx.fillStyle = '#fff0c8'; ctx.font = '7px monospace'; ctx.textAlign = 'center';
     ctx.fillText('DAD\'S ROOM                 MY ROOM', 160, 14);
-    if (Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 34) {
+    if (Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 25) {
       ctx.fillStyle = 'rgba(15,12,24,0.92)'; ctx.fillRect(132, 183, 56, 14);
       ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(132.5, 183.5, 55, 13);
       ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 8px monospace'; ctx.fillText('[ E ] OUTSIDE', 160, 193);
@@ -934,7 +934,7 @@ const Overworld = (() => {
     if (Math.hypot(player.x - HOUSE_DOOR.x, player.y - HOUSE_DOOR.y) < 39) {
       insideHouse = true;
       interiorPlayer.x = 160;
-      interiorPlayer.y = 190;
+      interiorPlayer.y = 174;
       keys.clear();
       notice = '';
       return;
