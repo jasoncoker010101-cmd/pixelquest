@@ -131,6 +131,14 @@ async function saveCloudSlot(slot, data) {
   });
 }
 
+async function deleteCloudSlot(slot) {
+  if (!cloudSession) return;
+  await cloudRequest('/rest/v1/game_saves?slot=eq.' + slot + '&user_id=eq.' + encodeURIComponent(cloudSession.user.id), {
+    method: 'DELETE',
+    headers: { Prefer: 'return=minimal' }
+  });
+}
+
 async function signInOrCreate(createAccount) {
   const email = prompt('Enter your email address:');
   if (!email) return;
@@ -253,7 +261,8 @@ const screens = {
   slots:    { y: 100, items: slotLabels },
   settings: { y: 110, items: () => ['MUSIC: ' + (settings.music ? 'ON' : 'OFF'), 'SOUND: ' + (settings.sound ? 'ON' : 'OFF'), 'BACK'] },
   credits:  { y: 190, items: () => ['BACK'] },
-  account:  { y: 104, items: () => cloudSession ? ['PROFILE / NAME', 'SIGN OUT', 'BACK'] : ['SIGN IN', 'CREATE ACCOUNT', 'BACK'] }
+  account:  { y: 104, items: () => cloudSession ? ['PROFILE / NAME', 'SIGN OUT', 'BACK'] : ['SIGN IN', 'CREATE ACCOUNT', 'BACK'] },
+  deleteConfirm: { y: 150, items: () => ['YES, DELETE', 'CANCEL'] }
 };
 
 function rectFor(s, i) { return { x: 100, y: s.y + i * 20, w: 120, h: 14 }; }
@@ -264,6 +273,17 @@ function activate() {
   const id = state.screen, sel = state.sel;
   if (id === 'title') go(['slots', 'account', 'settings', 'credits'][sel]);
   else if (id === 'slots') { if (sel === 3) go('title'); else enterWorld(sel + 1); }
+  else if (id === 'deleteConfirm') {
+    if (sel === 0) {
+      const slot = state.deleteSlot;
+      try { localStorage.removeItem(SAVE_KEY + slot); } catch {}
+      if (cloudSession) {
+        deleteCloudSlot(slot).then(() => { message = 'SAVE SLOT ' + slot + ' DELETED'; })
+          .catch(error => { message = 'LOCAL SAVE DELETED; CLOUD ERROR: ' + error.message; });
+      } else message = 'SAVE SLOT ' + slot + ' DELETED';
+      go('slots');
+    } else go('slots');
+  }
   else if (id === 'account') { enterAccountAction(sel); }
   else if (id === 'settings') {
     if (sel === 0) settings.music = !settings.music;
@@ -292,6 +312,15 @@ function toCanvas(e) {
   return { x: (e.clientX - r.left) * 320 / r.width, y: (e.clientY - r.top) * 240 / r.height };
 }
 function hit(p) {
+  if (state.screen === 'slots') {
+    for (let slot = 1; slot <= 3; slot++) {
+      const y = screens.slots.y + (slot - 1) * 20;
+      if (p.x >= 224 && p.x <= 244 && p.y >= y - 2 && p.y <= y + 16) {
+        state.deleteSlot = slot;
+        return 100 + slot;
+      }
+    }
+  }
   const s = screens[state.screen];
   const n = s.items().length;
   for (let i = 0; i < n; i++) {
@@ -300,8 +329,19 @@ function hit(p) {
   }
   return -1;
 }
-canvas.addEventListener('mousemove', e => { if (inWorld) return; const i = hit(toCanvas(e)); if (i >= 0) state.sel = i; });
-canvas.addEventListener('click', e => { if (inWorld) return; const i = hit(toCanvas(e)); if (i >= 0) { state.sel = i; activate(); } });
+canvas.addEventListener('mousemove', e => {
+  if (inWorld) return;
+  const p = toCanvas(e);
+  if (state.screen === 'slots' && p.x >= 224 && p.x <= 244 && p.y >= 98 && p.y <= 156) return;
+  const i = hit(p);
+  if (i >= 0 && i < 100) state.sel = i;
+});
+canvas.addEventListener('click', e => {
+  if (inWorld) return;
+  const i = hit(toCanvas(e));
+  if (i >= 100) { state.sel = 0; state.screen = 'deleteConfirm'; message = ''; return; }
+  if (i >= 0) { state.sel = i; activate(); }
+});
 
 function update(dt) {
   clouds.forEach(c => { c.x -= dt * 4; if (c.x + c.w < 0) c.x = 320; });
@@ -466,6 +506,18 @@ function drawLogo() {
   ctx.fillText('A PIXEL ADVENTURE', 160, 80);
 }
 
+function drawTrashCan(x, y) {
+  ctx.save();
+  ctx.fillStyle = '#d8c7a5';
+  ctx.fillRect(x + 3, y + 4, 8, 9);
+  ctx.fillRect(x + 2, y + 2, 10, 2);
+  ctx.fillRect(x + 5, y, 4, 1);
+  ctx.fillStyle = '#6b3447';
+  ctx.fillRect(x + 5, y + 6, 1, 5);
+  ctx.fillRect(x + 8, y + 6, 1, 5);
+  ctx.restore();
+}
+
 function drawMenu() {
   const s = screens[state.screen];
   s.items().forEach((label, i) => {
@@ -481,6 +533,11 @@ function drawMenu() {
     ctx.fillStyle = on ? '#2a0f2a' : '#ffe9b8';
     ctx.fillText(label, 160, r.y + 10);
     if (on) { ctx.textAlign = 'left'; ctx.fillText('>', r.x + 6, r.y + 10); }
+    if (state.screen === 'slots' && i < 3) {
+      ctx.fillStyle = 'rgba(20,8,30,0.8)';
+      ctx.fillRect(224, r.y - 2, 16, 17);
+      drawTrashCan(226, r.y);
+    }
   });
 }
 
@@ -504,6 +561,13 @@ function drawScreen() {
       ctx.fillStyle = '#ffd27a';
       ctx.fillText(message, 160, 210);
     }
+  } else if (state.screen === 'deleteConfirm') {
+    ctx.fillText('DELETE SAVE SLOT ' + state.deleteSlot + '?', 160, 88);
+    ctx.font = '8px monospace';
+    ctx.fillStyle = '#d8c7a5';
+    ctx.fillText('ARE YOU SURE YOU WANT TO DELETE IT?', 160, 112);
+    ctx.fillText('THIS CANNOT BE UNDONE.', 160, 124);
+    drawMenu();
   } else if (state.screen === 'account') {
     ctx.fillText('PLAYER ACCOUNT', 160, 87);
     ctx.font = '8px monospace';
