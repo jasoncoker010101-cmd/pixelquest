@@ -161,7 +161,9 @@ const Overworld = (() => {
       // Bedroom / sitting-room divider, with a wide doorway.
       [150,25,159,49], [150,72,159,88],
       // Kitchen / bathroom divider, with a wide doorway.
-      [170,139,179,163], [170,187,179,218]
+      [170,139,179,163], [170,187,179,218],
+      // Side walls keep the long entrance passage clearly bounded.
+      [25,139,33,218], [70,139,78,218]
     ];
     const furniture = [
       // Bedroom: bed, wardrobe and bedside chest.
