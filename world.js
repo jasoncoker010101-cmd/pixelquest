@@ -123,6 +123,47 @@ const Overworld = (() => {
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
+  function isNight() { const h = worldClock % 1; return h >= 0.76 || h < 0.19; }
+  function clockLabel() { const hour = Math.floor((worldClock % 1) * 24); return (hour % 12 || 12) + ':00 ' + (hour >= 12 ? 'PM' : 'AM'); }
+  function spawnWolves() {
+    wolves.length = 0;
+    [[-100,-65],[105,-75],[-115,75],[110,90]].forEach(([ox,oy],i) => {
+      let x = clamp(player.x + ox, TILE*2, (MAP_W-3)*TILE);
+      let y = clamp(player.y + oy, TILE*2, (MAP_H-3)*TILE);
+      for (let n=0; n<12 && blocked(x,y); n++) { x=clamp(x+(i%2?16:-16),TILE*2,(MAP_W-3)*TILE); y=clamp(y+(i%2?-16:16),TILE*2,(MAP_H-3)*TILE); }
+      if (!blocked(x,y)) wolves.push({x,y,attackCooldown:0,howl:i*0.7});
+    });
+  }
+  function updateWolves(dt) {
+    if (!isNight()) { wolves.length=0; wolfSpawned=false; return; }
+    if (!wolfSpawned) { spawnWolves(); wolfSpawned=true; notice='WOLVES ARE HUNTING! Keep moving!'; noticeUntil=time+3.5; }
+    wolves.forEach(w => {
+      const dx=player.x-w.x, dy=player.y-w.y, distance=Math.max(1,Math.hypot(dx,dy));
+      const speed=distance<25?0:38, vx=dx/distance*speed, vy=dy/distance*speed;
+      const nx=w.x+vx*dt, ny=w.y+vy*dt;
+      if (!blocked(nx,w.y)) w.x=nx; if (!blocked(w.x,ny)) w.y=ny;
+      w.attackCooldown=Math.max(0,w.attackCooldown-dt);
+      if (distance<19 && w.attackCooldown<=0) {
+        stats.health=Math.max(0,stats.health-2); w.attackCooldown=1.25;
+        if (wolfNoticeCooldown<=0) { notice=stats.health>0?'A wolf bit you! Get away!':'You are exhausted! The wolves back away...'; noticeUntil=time+2.2; wolfNoticeCooldown=2.5; }
+      }
+    });
+    wolfNoticeCooldown=Math.max(0,wolfNoticeCooldown-dt);
+  }
+  function drawWolf(w) {
+    const x=Math.round(w.x-camX), y=Math.round(w.y-camY), bob=Math.round(Math.sin(time*8+w.howl));
+    ctx.fillStyle='rgba(0,0,0,0.3)'; ctx.fillRect(x-7,y+6,16,3);
+    ctx.fillStyle='#343847'; ctx.fillRect(x-5,y+1+bob,3,6); ctx.fillRect(x+3,y+1+bob,3,6);
+    ctx.fillStyle='#202431'; ctx.fillRect(x-6,y+5+bob,4,2); ctx.fillRect(x+2,y+5+bob,4,2);
+    ctx.fillStyle='#596174'; ctx.fillRect(x-7,y-4+bob,14,8); ctx.fillRect(x+4,y-6+bob,5,7);
+    ctx.fillStyle='#8992a2'; ctx.fillRect(x-4,y-5+bob,8,3);
+    ctx.fillStyle='#343847'; ctx.fillRect(x-9,y-5+bob,3,2); ctx.fillRect(x-11,y-7+bob,3,3);
+    ctx.fillStyle='#687286'; ctx.fillRect(x+5,y-8+bob,7,7); ctx.fillRect(x+7,y-11+bob,2,4); ctx.fillRect(x+11,y-10+bob,2,4);
+    ctx.fillStyle='#c2c4c8'; ctx.fillRect(x+10,y-4+bob,5,3);
+    ctx.fillStyle='#e7bd64'; ctx.fillRect(x+10,y-7+bob,2,2);
+    ctx.fillStyle='#171923'; ctx.fillRect(x+14,y-3+bob,1,1);
+  }
+
   function drawGrass(px, py, h) {
     ctx.fillStyle = '#5b8f3e';
     ctx.fillRect(px, py, TILE, TILE);
