@@ -10,6 +10,9 @@ const Overworld = (() => {
 
   let canvas, ctx, onExit, map = [];
   let time = 0;
+  let worldClock = 0.28, wolfSpawned = false, wolfNoticeCooldown = 0;
+  const wolves = [];
+  const DAY_LENGTH = 180;
   let camX = 0, camY = 0;
   let panel = null;
   let notice = '';
