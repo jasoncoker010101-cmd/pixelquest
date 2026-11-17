@@ -46,7 +46,7 @@ const Overworld = (() => {
   const HOUSE = { x: 8 * TILE, y: 8 * TILE, w: 7 * TILE, h: 5 * TILE };
   const HOUSE_DOOR = { x: HOUSE.x + HOUSE.w / 2, y: HOUSE.y + 67 };
   let insideHouse = false;
-  const interiorPlayer = { x: 160, y: 174, facing: 'up' };
+  const interiorPlayer = { x: 160, y: 174, facing: 'up', moving: false, walk: 0 };
   const MAILBOX = { x: 15.4 * TILE, y: 12.4 * TILE };
 
   function rng(seed) {
@@ -561,94 +561,112 @@ const Overworld = (() => {
   }
 
   function drawHouseInterior() {
-    // A warm, lived-in two-bedroom home. The father's room is kept, but he is away.
-    ctx.fillStyle = '#241d2a'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#a9784e'; ctx.fillRect(9, 25, 302, 204);
-    ctx.fillStyle = '#c99560'; ctx.fillRect(15, 31, 290, 190);
-    // Plank floor
-    for (let y = 34; y < 221; y += 14) {
-      ctx.fillStyle = y % 28 ? '#bd8957' : '#b27d4e';
-      ctx.fillRect(16, y, 288, 13);
-      ctx.fillStyle = 'rgba(85,48,35,0.24)';
-      ctx.fillRect(16, y + 12, 288, 1);
+    // Compact cottage interior: two bedrooms upstairs, kitchen and bathroom downstairs.
+    ctx.fillStyle = '#211b29'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Outer timber frame and a smaller floor footprint.
+    ctx.fillStyle = '#49302d'; ctx.fillRect(31, 29, 258, 183);
+    ctx.fillStyle = '#b77f50'; ctx.fillRect(37, 35, 246, 171);
+    ctx.fillStyle = '#d3a36a'; ctx.fillRect(43, 43, 234, 155);
+    // Small warm plank floor.
+    for (let y = 47; y < 198; y += 10) {
+      ctx.fillStyle = (y / 10) % 2 ? '#c18d59' : '#bd8754';
+      ctx.fillRect(43, y, 234, 9);
+      ctx.fillStyle = 'rgba(83,48,34,0.25)'; ctx.fillRect(43, y + 9, 234, 1);
     }
-    // Outer walls and trim
-    ctx.fillStyle = '#593a35'; ctx.fillRect(9, 24, 302, 10); ctx.fillRect(9, 24, 8, 205); ctx.fillRect(303, 24, 8, 205);
-    ctx.fillStyle = '#e0b77b'; ctx.fillRect(17, 34, 286, 3);
-    // Two rooms, divided by a timber wall with an open passage at the bottom.
-    ctx.fillStyle = '#754936'; ctx.fillRect(157, 35, 6, 132);
-    ctx.fillStyle = '#9c6544'; ctx.fillRect(153, 35, 3, 132); ctx.fillRect(164, 35, 2, 132);
-    // Room rugs
-    ctx.fillStyle = '#9a4e45'; ctx.fillRect(29, 119, 104, 66);
-    ctx.fillStyle = '#d49a72'; ctx.fillRect(34, 124, 94, 56);
-    ctx.fillStyle = '#a85e51'; ctx.fillRect(187, 119, 100, 66);
-    ctx.fillStyle = '#e0ad7d'; ctx.fillRect(192, 124, 90, 56);
-    // Dad's bed: dark blue quilt, neatly made, no one home.
-    ctx.fillStyle = '#543a32'; ctx.fillRect(39, 48, 78, 61);
-    ctx.fillStyle = '#d6c5a3'; ctx.fillRect(43, 51, 70, 54);
-    ctx.fillStyle = '#344d69'; ctx.fillRect(43, 67, 70, 38);
-    ctx.fillStyle = '#536f8b'; ctx.fillRect(47, 72, 62, 27);
-    ctx.fillStyle = '#e8dfc8'; ctx.fillRect(47, 54, 29, 15); ctx.fillRect(80, 54, 29, 15);
-    ctx.fillStyle = '#8c6a50'; ctx.fillRect(39, 105, 78, 5);
-    // Dad's bedside table, lamp, and folded spare shirt.
-    ctx.fillStyle = '#70452f'; ctx.fillRect(120, 57, 25, 24);
-    ctx.fillStyle = '#9d6943'; ctx.fillRect(122, 59, 21, 4);
-    ctx.fillStyle = '#e5c77e'; ctx.fillRect(130, 47, 5, 10);
-    ctx.fillStyle = '#f5df9b'; ctx.fillRect(125, 43, 15, 5);
-    ctx.fillStyle = '#b9b6a6'; ctx.fillRect(121, 86, 21, 7);
-    ctx.fillStyle = '#e0d6bd'; ctx.fillRect(124, 84, 15, 4);
-    // Empty chair with father's coat hanging over it.
-    ctx.fillStyle = '#64402e'; ctx.fillRect(119, 132, 22, 5); ctx.fillRect(122, 137, 4, 20); ctx.fillRect(136, 137, 4, 20);
-    ctx.fillStyle = '#39475b'; ctx.fillRect(126, 119, 13, 18); ctx.fillRect(122, 123, 7, 12);
-    ctx.fillStyle = '#c1a77d'; ctx.fillRect(130, 120, 3, 6);
-    // Dad's room label and a small note on the bedside table.
-    ctx.fillStyle = '#382b2a'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
-    ctx.fillText("DAD'S ROOM", 82, 43);
-    ctx.fillStyle = '#f4e8c8'; ctx.fillRect(117, 97, 31, 18);
-    ctx.fillStyle = '#74533c'; ctx.font = '5px monospace'; ctx.fillText('BACK SOON', 132, 104); ctx.fillText('- DAD', 132, 111);
-    // Kid's room: brighter quilt, bookshelf, toys and drawings.
-    ctx.fillStyle = '#70452f'; ctx.fillRect(190, 50, 79, 60);
-    ctx.fillStyle = '#e6d2ad'; ctx.fillRect(194, 53, 71, 53);
-    ctx.fillStyle = '#4b7890'; ctx.fillRect(194, 68, 71, 38);
-    ctx.fillStyle = '#72a8b2'; ctx.fillRect(199, 73, 61, 27);
-    ctx.fillStyle = '#eee2c7'; ctx.fillRect(198, 56, 28, 14); ctx.fillRect(231, 56, 28, 14);
-    ctx.fillStyle = '#8c6a50'; ctx.fillRect(190, 106, 79, 5);
-    ctx.fillStyle = '#382b2a'; ctx.font = 'bold 8px monospace'; ctx.fillText("MY ROOM", 239, 43);
-    // Toy chest and colorful blocks.
-    ctx.fillStyle = '#80502f'; ctx.fillRect(190, 143, 39, 26);
-    ctx.fillStyle = '#b77b43'; ctx.fillRect(192, 145, 35, 7);
-    ctx.fillStyle = '#e7bd58'; ctx.fillRect(198, 151, 7, 7);
-    ctx.fillStyle = '#d66c59'; ctx.fillRect(208, 151, 7, 7);
-    ctx.fillStyle = '#6e9e72'; ctx.fillRect(218, 151, 6, 7);
-    // Small bookshelf and books.
-    ctx.fillStyle = '#70452f'; ctx.fillRect(276, 49, 20, 61);
-    ctx.fillStyle = '#b47b4b'; ctx.fillRect(278, 54, 16, 3); ctx.fillRect(278, 80, 16, 3);
-    ctx.fillStyle = '#d46a58'; ctx.fillRect(280, 58, 4, 20);
-    ctx.fillStyle = '#e3c15e'; ctx.fillRect(285, 61, 4, 17);
-    ctx.fillStyle = '#6d91a5'; ctx.fillRect(290, 56, 3, 22);
-    ctx.fillStyle = '#9e6654'; ctx.fillRect(280, 85, 5, 19);
-    ctx.fillStyle = '#d9b56b'; ctx.fillRect(286, 88, 6, 16);
-    // Window and moonlit view in kid's room.
-    ctx.fillStyle = '#70452f'; ctx.fillRect(222, 35, 30, 22);
-    ctx.fillStyle = '#6d9eae'; ctx.fillRect(225, 38, 24, 16);
-    ctx.fillStyle = '#d9e7d9'; ctx.fillRect(236, 40, 2, 2);
-    ctx.fillStyle = '#70452f'; ctx.fillRect(236, 38, 2, 16); ctx.fillRect(225, 45, 24, 2);
-    // Center hall and front door at the bottom, opening to the outside.
-    ctx.fillStyle = '#593a35'; ctx.fillRect(142, 207, 36, 14);
-    ctx.fillStyle = '#9c5939'; ctx.fillRect(146, 207, 28, 14);
-    ctx.fillStyle = '#e1b875'; ctx.fillRect(150, 207, 20, 3);
-    ctx.fillStyle = '#e6c36e'; ctx.fillRect(169, 213, 2, 2);
-    // Character inside the shared hall.
+    // Wall caps, beams and compact room dividers.
+    ctx.fillStyle = '#6c4435'; ctx.fillRect(31, 29, 258, 9);
+    ctx.fillStyle = '#e2b779'; ctx.fillRect(38, 38, 244, 3);
+    ctx.fillStyle = '#704633'; ctx.fillRect(155, 48, 7, 73);
+    ctx.fillStyle = '#9a6543'; ctx.fillRect(153, 48, 2, 73); ctx.fillRect(162, 48, 2, 73);
+    ctx.fillStyle = '#704633'; ctx.fillRect(43, 120, 105, 7); ctx.fillRect(172, 120, 105, 7);
+    ctx.fillStyle = '#9a6543'; ctx.fillRect(43, 120, 105, 2); ctx.fillRect(172, 120, 105, 2);
+    // Soft rugs in the bedrooms.
+    ctx.fillStyle = '#8e4844'; ctx.fillRect(54, 82, 83, 31);
+    ctx.fillStyle = '#d39a78'; ctx.fillRect(58, 86, 75, 23);
+    ctx.fillStyle = '#426879'; ctx.fillRect(179, 82, 83, 31);
+    ctx.fillStyle = '#83aeb0'; ctx.fillRect(183, 86, 75, 23);
+    // Dad's compact bed, folded blanket and pillow.
+    ctx.fillStyle = '#60402f'; ctx.fillRect(59, 53, 57, 29);
+    ctx.fillStyle = '#e7d8b8'; ctx.fillRect(62, 56, 51, 23);
+    ctx.fillStyle = '#354f70'; ctx.fillRect(62, 64, 51, 15);
+    ctx.fillStyle = '#597a98'; ctx.fillRect(66, 67, 43, 9);
+    ctx.fillStyle = '#f0e5ce'; ctx.fillRect(65, 57, 19, 7);
+    ctx.fillStyle = '#8a6345'; ctx.fillRect(59, 79, 57, 4);
+    // Bedside stand, tiny lamp and father's folded coat.
+    ctx.fillStyle = '#70452f'; ctx.fillRect(120, 57, 23, 19);
+    ctx.fillStyle = '#a9784b'; ctx.fillRect(122, 59, 19, 3);
+    ctx.fillStyle = '#e7c77d'; ctx.fillRect(129, 49, 5, 8);
+    ctx.fillStyle = '#f8e3a5'; ctx.fillRect(125, 46, 13, 4);
+    ctx.fillStyle = '#38475d'; ctx.fillRect(121, 87, 15, 11);
+    ctx.fillStyle = '#c6b18b'; ctx.fillRect(125, 86, 7, 3);
+    // Kid's bed and colorful quilt.
+    ctx.fillStyle = '#70452f'; ctx.fillRect(190, 53, 57, 29);
+    ctx.fillStyle = '#e8d9b9'; ctx.fillRect(193, 56, 51, 23);
+    ctx.fillStyle = '#4a7890'; ctx.fillRect(193, 64, 51, 15);
+    ctx.fillStyle = '#79b0b8'; ctx.fillRect(197, 67, 43, 9);
+    ctx.fillStyle = '#f3e6cc'; ctx.fillRect(196, 57, 19, 7);
+    ctx.fillStyle = '#8a6345'; ctx.fillRect(190, 79, 57, 4);
+    // Small bookshelf, books and toy chest.
+    ctx.fillStyle = '#70452f'; ctx.fillRect(253, 51, 19, 43);
+    ctx.fillStyle = '#b77b4b'; ctx.fillRect(255, 57, 15, 3); ctx.fillRect(255, 75, 15, 3);
+    ctx.fillStyle = '#d46a58'; ctx.fillRect(256, 61, 4, 13);
+    ctx.fillStyle = '#e3c15e'; ctx.fillRect(261, 60, 4, 14);
+    ctx.fillStyle = '#6d91a5'; ctx.fillRect(266, 62, 3, 12);
+    ctx.fillStyle = '#80502f'; ctx.fillRect(194, 91, 35, 20);
+    ctx.fillStyle = '#b77b43'; ctx.fillRect(196, 93, 31, 5);
+    ctx.fillStyle = '#e7bd58'; ctx.fillRect(200, 100, 6, 7);
+    ctx.fillStyle = '#d66c59'; ctx.fillRect(210, 100, 6, 7);
+    ctx.fillStyle = '#6e9e72'; ctx.fillRect(220, 100, 6, 7);
+    // Kitchen: counter, sink, stove, shelves and a tiny table.
+    ctx.fillStyle = '#754a32'; ctx.fillRect(51, 137, 83, 18);
+    ctx.fillStyle = '#d4b58a'; ctx.fillRect(53, 139, 79, 5);
+    ctx.fillStyle = '#8b9b9a'; ctx.fillRect(58, 145, 19, 8);
+    ctx.fillStyle = '#c4d4c9'; ctx.fillRect(61, 146, 13, 5);
+    ctx.fillStyle = '#493a37'; ctx.fillRect(101, 145, 26, 9);
+    ctx.fillStyle = '#252a32'; ctx.fillRect(105, 147, 7, 5); ctx.fillRect(116, 147, 7, 5);
+    ctx.fillStyle = '#d7bd8b'; ctx.fillRect(51, 134, 83, 4);
+    ctx.fillStyle = '#9b6942'; ctx.fillRect(57, 130, 2, 6); ctx.fillRect(127, 130, 2, 6);
+    ctx.fillStyle = '#70452f'; ctx.fillRect(68, 166, 43, 19);
+    ctx.fillStyle = '#c59a68'; ctx.fillRect(71, 168, 37, 13);
+    ctx.fillStyle = '#754a32'; ctx.fillRect(73, 180, 4, 8); ctx.fillRect(104, 180, 4, 8);
+    ctx.fillStyle = '#e4d1a6'; ctx.fillRect(84, 171, 11, 7);
+    // Bathroom: tub, toilet and washbasin.
+    ctx.fillStyle = '#5b514c'; ctx.fillRect(188, 137, 75, 20);
+    ctx.fillStyle = '#e5e5d8'; ctx.fillRect(191, 139, 69, 15);
+    ctx.fillStyle = '#9ec6c5'; ctx.fillRect(195, 142, 61, 9);
+    ctx.fillStyle = '#f0e9d6'; ctx.fillRect(197, 164, 18, 20);
+    ctx.fillStyle = '#d5cbb8'; ctx.fillRect(199, 166, 14, 10);
+    ctx.fillStyle = '#f4eee0'; ctx.fillRect(226, 165, 27, 13);
+    ctx.fillStyle = '#d5cbb8'; ctx.fillRect(229, 168, 21, 7);
+    ctx.fillStyle = '#8b9b9a'; ctx.fillRect(234, 160, 10, 5);
+    ctx.fillStyle = '#c6d9d4'; ctx.fillRect(237, 158, 4, 4);
+    // Tiny wall window and wall decor.
+    ctx.fillStyle = '#70452f'; ctx.fillRect(208, 40, 25, 13);
+    ctx.fillStyle = '#77a9b7'; ctx.fillRect(211, 42, 19, 9);
+    ctx.fillStyle = '#d9e7d9'; ctx.fillRect(220, 43, 2, 2);
+    ctx.fillStyle = '#70452f'; ctx.fillRect(220, 42, 2, 9); ctx.fillRect(211, 46, 19, 2);
+    ctx.fillStyle = '#d8c28e'; ctx.fillRect(65, 41, 19, 3);
+    // Room labels and small entrance hall.
+    ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#49312d';
+    ctx.fillText("DAD'S ROOM", 97, 47); ctx.fillText("MY ROOM", 220, 47);
+    ctx.fillText('KITCHEN', 91, 132); ctx.fillText('BATHROOM', 226, 132);
+    // Front door and threshold at the bottom of the little house.
+    ctx.fillStyle = '#54362e'; ctx.fillRect(145, 188, 30, 12);
+    ctx.fillStyle = '#945536'; ctx.fillRect(149, 189, 22, 10);
+    ctx.fillStyle = '#d7b779'; ctx.fillRect(153, 190, 14, 2);
+    ctx.fillStyle = '#f0cd75'; ctx.fillRect(167, 194, 2, 2);
+    // Draw the kid using the same walk cycle as the overworld sprite.
+    const oldFacing = player.facing, oldMoving = player.moving, oldWalk = player.walk;
+    player.facing = interiorPlayer.facing;
+    player.moving = interiorPlayer.moving;
+    player.walk = interiorPlayer.walk;
     drawPlayer(Math.round(interiorPlayer.x - 8), Math.round(interiorPlayer.y - 8));
-    // Small control reminder.
-    ctx.fillStyle = 'rgba(10,12,22,0.84)'; ctx.fillRect(54, 4, 212, 16);
-    ctx.strokeStyle = '#d9b56b'; ctx.strokeRect(54.5, 4.5, 211, 15);
-    ctx.fillStyle = '#fff0c8'; ctx.font = '7px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('DAD\'S ROOM                 MY ROOM', 160, 14);
-    if (Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 25) {
-      ctx.fillStyle = 'rgba(15,12,24,0.92)'; ctx.fillRect(132, 183, 56, 14);
-      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(132.5, 183.5, 55, 13);
-      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 8px monospace'; ctx.fillText('[ E ] OUTSIDE', 160, 193);
+    player.facing = oldFacing; player.moving = oldMoving; player.walk = oldWalk;
+    // Exit prompt.
+    if (Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 190) < 24) {
+      ctx.fillStyle = 'rgba(15,12,24,0.94)'; ctx.fillRect(128, 170, 64, 14);
+      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(128.5, 170.5, 63, 13);
+      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.fillText('[ E ] OUTSIDE', 160, 180);
     }
   }
 
@@ -707,12 +725,18 @@ const Overworld = (() => {
       if (keys.has('arrowup') || keys.has('w')) iy -= 1;
       if (keys.has('arrowdown') || keys.has('s')) iy += 1;
       if (ix && iy) { ix *= Math.SQRT1_2; iy *= Math.SQRT1_2; }
-      if (ix || iy) interiorPlayer.facing = iy < 0 ? 'up' : iy > 0 ? 'down' : ix < 0 ? 'left' : 'right';
-      const speed = keys.has('shift') ? 78 : 54;
+      interiorPlayer.moving = !!(ix || iy);
+      if (interiorPlayer.moving) {
+        interiorPlayer.facing = iy < 0 ? 'up' : iy > 0 ? 'down' : ix < 0 ? 'left' : 'right';
+        interiorPlayer.walk += dt * (keys.has('shift') ? 15 : 10);
+      }
+      const speed = keys.has('shift') ? 66 : 46;
       const nx = interiorPlayer.x + ix * speed * dt;
       const ny = interiorPlayer.y + iy * speed * dt;
-      if (nx > 20 && nx < 300 && !(nx > 150 && nx < 170 && interiorPlayer.y < 169) ) interiorPlayer.x = nx;
-      if (ny > 45 && ny < 216) interiorPlayer.y = ny;
+      const hitsVerticalWall = nx > 153 && nx < 164 && interiorPlayer.y < 121 && !(interiorPlayer.y > 80 && interiorPlayer.y < 103);
+      const hitsHorizontalWall = ny > 119 && ny < 128 && (interiorPlayer.x < 148 || interiorPlayer.x > 172);
+      if (nx > 48 && nx < 272 && !hitsVerticalWall) interiorPlayer.x = nx;
+      if (ny > 53 && ny < 187 && !hitsHorizontalWall) interiorPlayer.y = ny;
       return;
     }
     stats.playTime += dt;
@@ -918,7 +942,7 @@ const Overworld = (() => {
 
   function interact() {
     if (insideHouse) {
-      if (Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 34) {
+      if (Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 190) < 28) {
         insideHouse = false;
         player.x = HOUSE_DOOR.x;
         player.y = HOUSE.y + 85;
@@ -935,6 +959,8 @@ const Overworld = (() => {
       insideHouse = true;
       interiorPlayer.x = 160;
       interiorPlayer.y = 174;
+      interiorPlayer.moving = false;
+      interiorPlayer.walk = 0;
       keys.clear();
       notice = '';
       return;
@@ -959,6 +985,7 @@ const Overworld = (() => {
       insideHouse,
       interiorX: interiorPlayer.x,
       interiorY: interiorPlayer.y,
+      interiorWalk: interiorPlayer.walk,
       interiorFacing: interiorPlayer.facing,
       inventory: { ...inventory },
       stats: { ...stats },
@@ -971,7 +998,7 @@ const Overworld = (() => {
     // Reset the slot to a clean starting state before applying saved values.
     player.x = SPAWN.x * TILE; player.y = SPAWN.y * TILE; player.facing = 'down';
     insideHouse = false;
-    interiorPlayer.x = 225; interiorPlayer.y = 150; interiorPlayer.facing = 'down';
+    interiorPlayer.x = 160; interiorPlayer.y = 174; interiorPlayer.facing = 'up'; interiorPlayer.moving = false; interiorPlayer.walk = 0;
     inventory.berries = 3; inventory.wood = 0; inventory.fish = 0;
     Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0 });
     stepDistance = 0;
@@ -1015,9 +1042,10 @@ const Overworld = (() => {
     }
     insideHouse = saveData.insideHouse === true;
     if (insideHouse) {
-      if (Number.isFinite(saveData.interiorX)) interiorPlayer.x = clamp(saveData.interiorX, 24, 296);
-      if (Number.isFinite(saveData.interiorY)) interiorPlayer.y = clamp(saveData.interiorY, 42, 214);
+      if (Number.isFinite(saveData.interiorX)) interiorPlayer.x = clamp(saveData.interiorX, 48, 272);
+      if (Number.isFinite(saveData.interiorY)) interiorPlayer.y = clamp(saveData.interiorY, 55, 187);
       if (['up', 'down', 'left', 'right'].includes(saveData.interiorFacing)) interiorPlayer.facing = saveData.interiorFacing;
+      if (Number.isFinite(saveData.interiorWalk)) interiorPlayer.walk = saveData.interiorWalk;
     }
   }
 
