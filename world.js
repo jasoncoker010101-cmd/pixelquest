@@ -44,6 +44,9 @@ const Overworld = (() => {
   ];
 
   const HOUSE = { x: 8 * TILE, y: 8 * TILE, w: 7 * TILE, h: 5 * TILE };
+  const HOUSE_DOOR = { x: HOUSE.x + HOUSE.w / 2, y: HOUSE.y + 67 };
+  let insideHouse = false;
+  const interiorPlayer = { x: 160, y: 190, facing: 'up' };
   const MAILBOX = { x: 15.4 * TILE, y: 12.4 * TILE };
 
   function rng(seed) {
@@ -323,6 +326,15 @@ const Overworld = (() => {
     ctx.fillRect(doorX + 19, y + 52, 2, 27);
   }
 
+  function drawHouseDoorPrompt() {
+    if (insideHouse || Math.hypot(player.x - HOUSE_DOOR.x, player.y - HOUSE_DOOR.y) > 52) return;
+    const x = Math.round(HOUSE_DOOR.x - camX), y = Math.round(HOUSE_DOOR.y - camY) - 24;
+    ctx.fillStyle = 'rgba(15,12,24,0.92)'; ctx.fillRect(x - 24, y - 8, 48, 14);
+    ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(x - 23.5, y - 7.5, 47, 13);
+    ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('[ E ] ENTER', x, y + 1);
+  }
+
   function drawMailbox() {
     const x = Math.round(MAILBOX.x - camX);
     const y = Math.round(MAILBOX.y - camY);
@@ -548,6 +560,98 @@ const Overworld = (() => {
     ctx.restore();
   }
 
+  function drawHouseInterior() {
+    // A warm, lived-in two-bedroom home. The father's room is kept, but he is away.
+    ctx.fillStyle = '#241d2a'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#a9784e'; ctx.fillRect(9, 25, 302, 204);
+    ctx.fillStyle = '#c99560'; ctx.fillRect(15, 31, 290, 190);
+    // Plank floor
+    for (let y = 34; y < 221; y += 14) {
+      ctx.fillStyle = y % 28 ? '#bd8957' : '#b27d4e';
+      ctx.fillRect(16, y, 288, 13);
+      ctx.fillStyle = 'rgba(85,48,35,0.24)';
+      ctx.fillRect(16, y + 12, 288, 1);
+    }
+    // Outer walls and trim
+    ctx.fillStyle = '#593a35'; ctx.fillRect(9, 24, 302, 10); ctx.fillRect(9, 24, 8, 205); ctx.fillRect(303, 24, 8, 205);
+    ctx.fillStyle = '#e0b77b'; ctx.fillRect(17, 34, 286, 3);
+    // Two rooms, divided by a timber wall with an open passage at the bottom.
+    ctx.fillStyle = '#754936'; ctx.fillRect(157, 35, 6, 132);
+    ctx.fillStyle = '#9c6544'; ctx.fillRect(153, 35, 3, 132); ctx.fillRect(164, 35, 2, 132);
+    // Room rugs
+    ctx.fillStyle = '#9a4e45'; ctx.fillRect(29, 119, 104, 66);
+    ctx.fillStyle = '#d49a72'; ctx.fillRect(34, 124, 94, 56);
+    ctx.fillStyle = '#a85e51'; ctx.fillRect(187, 119, 100, 66);
+    ctx.fillStyle = '#e0ad7d'; ctx.fillRect(192, 124, 90, 56);
+    // Dad's bed: dark blue quilt, neatly made, no one home.
+    ctx.fillStyle = '#543a32'; ctx.fillRect(39, 48, 78, 61);
+    ctx.fillStyle = '#d6c5a3'; ctx.fillRect(43, 51, 70, 54);
+    ctx.fillStyle = '#344d69'; ctx.fillRect(43, 67, 70, 38);
+    ctx.fillStyle = '#536f8b'; ctx.fillRect(47, 72, 62, 27);
+    ctx.fillStyle = '#e8dfc8'; ctx.fillRect(47, 54, 29, 15); ctx.fillRect(80, 54, 29, 15);
+    ctx.fillStyle = '#8c6a50'; ctx.fillRect(39, 105, 78, 5);
+    // Dad's bedside table, lamp, and folded spare shirt.
+    ctx.fillStyle = '#70452f'; ctx.fillRect(120, 57, 25, 24);
+    ctx.fillStyle = '#9d6943'; ctx.fillRect(122, 59, 21, 4);
+    ctx.fillStyle = '#e5c77e'; ctx.fillRect(130, 47, 5, 10);
+    ctx.fillStyle = '#f5df9b'; ctx.fillRect(125, 43, 15, 5);
+    ctx.fillStyle = '#b9b6a6'; ctx.fillRect(121, 86, 21, 7);
+    ctx.fillStyle = '#e0d6bd'; ctx.fillRect(124, 84, 15, 4);
+    // Empty chair with father's coat hanging over it.
+    ctx.fillStyle = '#64402e'; ctx.fillRect(119, 132, 22, 5); ctx.fillRect(122, 137, 4, 20); ctx.fillRect(136, 137, 4, 20);
+    ctx.fillStyle = '#39475b'; ctx.fillRect(126, 119, 13, 18); ctx.fillRect(122, 123, 7, 12);
+    ctx.fillStyle = '#c1a77d'; ctx.fillRect(130, 120, 3, 6);
+    // Dad's room label and a small note on the bedside table.
+    ctx.fillStyle = '#382b2a'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+    ctx.fillText("DAD'S ROOM", 82, 43);
+    ctx.fillStyle = '#f4e8c8'; ctx.fillRect(117, 97, 31, 18);
+    ctx.fillStyle = '#74533c'; ctx.font = '5px monospace'; ctx.fillText('BACK SOON', 132, 104); ctx.fillText('- DAD', 132, 111);
+    // Kid's room: brighter quilt, bookshelf, toys and drawings.
+    ctx.fillStyle = '#70452f'; ctx.fillRect(190, 50, 79, 60);
+    ctx.fillStyle = '#e6d2ad'; ctx.fillRect(194, 53, 71, 53);
+    ctx.fillStyle = '#4b7890'; ctx.fillRect(194, 68, 71, 38);
+    ctx.fillStyle = '#72a8b2'; ctx.fillRect(199, 73, 61, 27);
+    ctx.fillStyle = '#eee2c7'; ctx.fillRect(198, 56, 28, 14); ctx.fillRect(231, 56, 28, 14);
+    ctx.fillStyle = '#8c6a50'; ctx.fillRect(190, 106, 79, 5);
+    ctx.fillStyle = '#382b2a'; ctx.font = 'bold 8px monospace'; ctx.fillText("MY ROOM", 239, 43);
+    // Toy chest and colorful blocks.
+    ctx.fillStyle = '#80502f'; ctx.fillRect(190, 143, 39, 26);
+    ctx.fillStyle = '#b77b43'; ctx.fillRect(192, 145, 35, 7);
+    ctx.fillStyle = '#e7bd58'; ctx.fillRect(198, 151, 7, 7);
+    ctx.fillStyle = '#d66c59'; ctx.fillRect(208, 151, 7, 7);
+    ctx.fillStyle = '#6e9e72'; ctx.fillRect(218, 151, 6, 7);
+    // Small bookshelf and books.
+    ctx.fillStyle = '#70452f'; ctx.fillRect(276, 49, 20, 61);
+    ctx.fillStyle = '#b47b4b'; ctx.fillRect(278, 54, 16, 3); ctx.fillRect(278, 80, 16, 3);
+    ctx.fillStyle = '#d46a58'; ctx.fillRect(280, 58, 4, 20);
+    ctx.fillStyle = '#e3c15e'; ctx.fillRect(285, 61, 4, 17);
+    ctx.fillStyle = '#6d91a5'; ctx.fillRect(290, 56, 3, 22);
+    ctx.fillStyle = '#9e6654'; ctx.fillRect(280, 85, 5, 19);
+    ctx.fillStyle = '#d9b56b'; ctx.fillRect(286, 88, 6, 16);
+    // Window and moonlit view in kid's room.
+    ctx.fillStyle = '#70452f'; ctx.fillRect(222, 35, 30, 22);
+    ctx.fillStyle = '#6d9eae'; ctx.fillRect(225, 38, 24, 16);
+    ctx.fillStyle = '#d9e7d9'; ctx.fillRect(236, 40, 2, 2);
+    ctx.fillStyle = '#70452f'; ctx.fillRect(236, 38, 2, 16); ctx.fillRect(225, 45, 24, 2);
+    // Center hall and front door at the bottom, opening to the outside.
+    ctx.fillStyle = '#593a35'; ctx.fillRect(142, 207, 36, 14);
+    ctx.fillStyle = '#9c5939'; ctx.fillRect(146, 207, 28, 14);
+    ctx.fillStyle = '#e1b875'; ctx.fillRect(150, 207, 20, 3);
+    ctx.fillStyle = '#e6c36e'; ctx.fillRect(169, 213, 2, 2);
+    // Character inside the shared hall.
+    drawPlayer(Math.round(interiorPlayer.x - 8), Math.round(interiorPlayer.y - 8));
+    // Small control reminder.
+    ctx.fillStyle = 'rgba(10,12,22,0.84)'; ctx.fillRect(54, 4, 212, 16);
+    ctx.strokeStyle = '#d9b56b'; ctx.strokeRect(54.5, 4.5, 211, 15);
+    ctx.fillStyle = '#fff0c8'; ctx.font = '7px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('DAD\'S ROOM                 MY ROOM', 160, 14);
+    if (Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 34) {
+      ctx.fillStyle = 'rgba(15,12,24,0.92)'; ctx.fillRect(132, 183, 56, 14);
+      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(132.5, 183.5, 55, 13);
+      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 8px monospace'; ctx.fillText('[ E ] OUTSIDE', 160, 193);
+    }
+  }
+
   function drawBattle() {
     ctx.fillStyle='#17233a'; ctx.fillRect(0,0,canvas.width,canvas.height);
     // Distant forest silhouettes and a moonlit clearing
@@ -595,6 +699,22 @@ const Overworld = (() => {
       if (onSave) onSave(getSaveData());
     }
     if (battle) { updateBattle(dt); return; }
+    if (insideHouse) {
+      stats.playTime += dt;
+      let ix = 0, iy = 0;
+      if (keys.has('arrowleft') || keys.has('a')) ix -= 1;
+      if (keys.has('arrowright') || keys.has('d')) ix += 1;
+      if (keys.has('arrowup') || keys.has('w')) iy -= 1;
+      if (keys.has('arrowdown') || keys.has('s')) iy += 1;
+      if (ix && iy) { ix *= Math.SQRT1_2; iy *= Math.SQRT1_2; }
+      if (ix || iy) interiorPlayer.facing = iy < 0 ? 'up' : iy > 0 ? 'down' : ix < 0 ? 'left' : 'right';
+      const speed = keys.has('shift') ? 78 : 54;
+      const nx = interiorPlayer.x + ix * speed * dt;
+      const ny = interiorPlayer.y + iy * speed * dt;
+      if (nx > 20 && nx < 300 && !(nx > 150 && nx < 170 && interiorPlayer.y < 169) ) interiorPlayer.x = nx;
+      if (ny > 45 && ny < 216) interiorPlayer.y = ny;
+      return;
+    }
     stats.playTime += dt;
     const wasNight = isNight();
     worldClock = (worldClock + dt / DAY_LENGTH) % 1;
@@ -758,6 +878,7 @@ const Overworld = (() => {
 
   function draw() {
     if (battle) { drawBattle(); return; }
+    if (insideHouse) { drawHouseInterior(); return; }
     ctx.fillStyle = '#1b1f3a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     const x0 = Math.max(0, Math.floor(camX / TILE));
@@ -772,6 +893,7 @@ const Overworld = (() => {
     }
 
     drawHouse();
+    drawHouseDoorPrompt();
     drawMailbox();
     drawInteractionPrompt();
     drawFish();
@@ -795,6 +917,28 @@ const Overworld = (() => {
   }
 
   function interact() {
+    if (insideHouse) {
+      if (Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 34) {
+        insideHouse = false;
+        player.x = HOUSE_DOOR.x;
+        player.y = HOUSE.y + 85;
+        player.facing = 'up';
+        notice = 'You step outside.';
+        noticeUntil = time + 2;
+      } else {
+        notice = 'The front door is downstairs.';
+        noticeUntil = time + 1.8;
+      }
+      return;
+    }
+    if (Math.hypot(player.x - HOUSE_DOOR.x, player.y - HOUSE_DOOR.y) < 39) {
+      insideHouse = true;
+      interiorPlayer.x = 160;
+      interiorPlayer.y = 190;
+      keys.clear();
+      notice = '';
+      return;
+    }
     const distance = Math.hypot(player.x - MAILBOX.x, player.y - MAILBOX.y);
     if (distance < 39) {
       notice = 'The mailbox is empty for now.';
@@ -913,7 +1057,7 @@ const Overworld = (() => {
     panel = null;
     notice = '';
     time = 0;
-    wolves.length=0; wolfSpawned=false; wolfNoticeCooldown=0; battle=null;
+    wolves.length=0; wolfSpawned=false; wolfNoticeCooldown=0; battle=null; insideHouse=false;
     bunnies.forEach((b, i) => {
       const starts = [
         [17 * TILE, 10 * TILE], [22 * TILE, 20 * TILE],
