@@ -1,0 +1,8 @@
+Pixel Quest asset credits
+
+Interior furniture spritesheet:
+- Original artist/source: Kenney (Kenney.nl)
+- Asset pack: Roguelike Indoors
+- Source page: https://kenney.nl/assets/roguelike-indoors
+- License: Creative Commons CC0 1.0 (public domain dedication)
+- The sheet is stored in this project as assets/kenney-interior-tilemap.png.b64 and decoded by the game at runtime.
