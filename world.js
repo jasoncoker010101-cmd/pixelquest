@@ -951,7 +951,8 @@ const Overworld = (() => {
 
   function getSaveData() {
     return {
-      version: 2,
+      version: 3,
+      houseSpawnMigrated: true,
       x: player.x,
       y: player.y,
       facing: player.facing,
@@ -1003,9 +1004,9 @@ const Overworld = (() => {
     }
     if (Number.isFinite(saveData.stepDistance)) stepDistance = Math.max(0, saveData.stepDistance);
     if (Number.isFinite(saveData.worldClock)) worldClock = ((saveData.worldClock % 1) + 1) % 1;
-    // Migrate pre-bedroom saves into the kid's room once.
-    // Version 2 saves preserve the player's real inside/outside location.
-    if (!Number.isFinite(saveData.version) || saveData.version < 2) {
+    // One-time migration: older slots, including earlier version-2 slots,
+    // must begin in the kid's bedroom. Later saves preserve the real location.
+    if (saveData.houseSpawnMigrated !== true) {
       insideHouse = true;
       interiorPlayer.x = 225;
       interiorPlayer.y = 150;
