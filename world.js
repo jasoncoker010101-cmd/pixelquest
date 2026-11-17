@@ -517,7 +517,7 @@ const Overworld = (() => {
     ctx.fillStyle=glow;ctx.fillRect(140,0,180,165);
     // Player shown close-up from behind on the left
     ctx.fillStyle='rgba(0,0,0,0.3)';ctx.fillRect(35,180,105,16);
-    ctx.save();ctx.translate(76,108);ctx.scale(4.8,4.8);drawPlayer(0,0);ctx.restore();
+    ctx.save();ctx.translate(76,108);ctx.scale(4.8,4.8);const oldFacing=player.facing;player.facing='up';drawPlayer(0,0);player.facing=oldFacing;ctx.restore();
     drawBattleWolf();
     // Battle HUD
     ctx.fillStyle='rgba(10,14,27,0.94)';ctx.fillRect(12,10,133,47);
