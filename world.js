@@ -951,7 +951,7 @@ const Overworld = (() => {
 
   function getSaveData() {
     return {
-      version: 1,
+      version: 2,
       x: player.x,
       y: player.y,
       facing: player.facing,
@@ -1003,9 +1003,17 @@ const Overworld = (() => {
     }
     if (Number.isFinite(saveData.stepDistance)) stepDistance = Math.max(0, saveData.stepDistance);
     if (Number.isFinite(saveData.worldClock)) worldClock = ((saveData.worldClock % 1) + 1) % 1;
-    // Older saves predate the interior flag, so move those saves into the kid's room once.
-    if (saveData.insideHouse !== false) {
+    // Migrate pre-bedroom saves into the kid's room once.
+    // Version 2 saves preserve the player's real inside/outside location.
+    if (!Number.isFinite(saveData.version) || saveData.version < 2) {
       insideHouse = true;
+      interiorPlayer.x = 225;
+      interiorPlayer.y = 150;
+      interiorPlayer.facing = 'down';
+      return;
+    }
+    insideHouse = saveData.insideHouse === true;
+    if (insideHouse) {
       if (Number.isFinite(saveData.interiorX)) interiorPlayer.x = clamp(saveData.interiorX, 24, 296);
       if (Number.isFinite(saveData.interiorY)) interiorPlayer.y = clamp(saveData.interiorY, 42, 214);
       if (['up', 'down', 'left', 'right'].includes(saveData.interiorFacing)) interiorPlayer.facing = saveData.interiorFacing;
