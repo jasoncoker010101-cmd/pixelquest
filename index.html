@@ -25,6 +25,25 @@ let t = 0, last = performance.now(), message = '';
 const settings = { music: true, sound: true };
 const state = { screen: 'title', sel: 0 };
 let inWorld = false;
+let activeSlot = 0;
+const SAVE_KEY = 'pixelquest-save-';
+
+function readSlot(slot) {
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY + slot) || 'null'); }
+  catch { return null; }
+}
+
+function slotLabels() {
+  return [1, 2, 3].map(n => {
+    const save = readSlot(n);
+    return save ? `SLOT ${n} - LEVEL ${save.level || 1}` : `SLOT ${n} - NEW GAME`;
+  }).concat('BACK');
+}
+
+function saveActiveSlot(data) {
+  try { localStorage.setItem(SAVE_KEY + activeSlot, JSON.stringify(data)); }
+  catch (error) { console.warn('Could not save Pixel Quest slot.', error); }
+}
 
 function enterWorld() {
   inWorld = true;
@@ -49,7 +68,7 @@ const motes = [...Array(14)].map((_, i) => ({
 
 const screens = {
   title:    { y: 128, items: () => ['START GAME', 'SETTINGS', 'CREDITS'] },
-  slots:    { y: 100, items: () => ['SLOT 1 - EMPTY', 'SLOT 2 - EMPTY', 'SLOT 3 - EMPTY', 'BACK'] },
+  slots:    { y: 100, items: slotLabels },
   settings: { y: 110, items: () => ['MUSIC: ' + (settings.music ? 'ON' : 'OFF'), 'SOUND: ' + (settings.sound ? 'ON' : 'OFF'), 'BACK'] },
   credits:  { y: 190, items: () => ['BACK'] }
 };
@@ -61,7 +80,7 @@ function go(name) { state.screen = name; state.sel = 0; message = ''; }
 function activate() {
   const id = state.screen, sel = state.sel;
   if (id === 'title') go(['slots', 'settings', 'credits'][sel]);
-  else if (id === 'slots') { if (sel === 3) go('title'); else message = 'COMING SOON'; }
+  else if (id === 'slots') { if (sel === 3) go('title'); else enterWorld(sel + 1); }
   else if (id === 'settings') {
     if (sel === 0) settings.music = !settings.music;
     else if (sel === 1) settings.sound = !settings.sound;
