@@ -15,9 +15,10 @@ const Overworld = (() => {
   const DAY_LENGTH = 180;
   let battle = null;
   const BATTLE_FADE = 0.7;
-  // CC0 wolf sprite sheet by Pixor: 8 directions, 8 walk frames per direction.
+  // CC0 forest-enemy sprite sheet by Vomdrache (OpenGameArt).
+  // The middle cell of row two is the detailed grey wolf used in battles.
   const battleWolfSprite = new Image();
-  battleWolfSprite.src = 'https://pixor.art/library/files/wolf/wolf-selout-56.png';
+  battleWolfSprite.src = 'https://opengameart.org/sites/default/files/enemies_081719_zp.png';
 
   let camX = 0, camY = 0;
   let panel = null;
@@ -133,28 +134,46 @@ const Overworld = (() => {
   function clockLabel() { const hour = Math.floor((worldClock % 1) * 24); return (hour % 12 || 12) + ':00 ' + (hour >= 12 ? 'PM' : 'AM'); }
   function spawnWolves() {
     wolves.length = 0;
-    [[-100,-65],[105,-75],[-115,75],[110,90]].forEach(([ox,oy],i) => {
-      let x = clamp(player.x + ox, TILE*2, (MAP_W-3)*TILE);
-      let y = clamp(player.y + oy, TILE*2, (MAP_H-3)*TILE);
-      for (let n=0; n<12 && blocked(x,y); n++) { x=clamp(x+(i%2?16:-16),TILE*2,(MAP_W-3)*TILE); y=clamp(y+(i%2?-16:16),TILE*2,(MAP_H-3)*TILE); }
-      if (!blocked(x,y)) wolves.push({x,y,attackCooldown:0,howl:i*0.7});
-    });
+    // Keep the night encounter readable: only two wolves patrol the area.
+    const offsets = [[-150,-85],[150,85],[-155,85],[155,-85],[0,-175],[0,175]];
+    for (let i = 0; i < offsets.length && wolves.length < 2; i++) {
+      const [ox, oy] = offsets[i];
+      let x = clamp(player.x + ox, TILE * 2, (MAP_W - 3) * TILE);
+      let y = clamp(player.y + oy, TILE * 2, (MAP_H - 3) * TILE);
+      for (let n = 0; n < 12 && blocked(x, y); n++) {
+        x = clamp(x + (i % 2 ? 16 : -16), TILE * 2, (MAP_W - 3) * TILE);
+        y = clamp(y + (i % 2 ? -16 : 16), TILE * 2, (MAP_H - 3) * TILE);
+      }
+      if (!blocked(x, y) && Math.hypot(player.x - x, player.y - y) > 110) {
+        wolves.push({ x, y, attackCooldown: 0, howl: i * 0.7 });
+      }
+    }
   }
   function updateWolves(dt) {
-    if (!isNight()) { wolves.length=0; wolfSpawned=false; return; }
-    if (!wolfSpawned) { spawnWolves(); wolfSpawned=true; notice='WOLVES ARE HUNTING! Keep moving!'; noticeUntil=time+3.5; }
+    if (!isNight()) { wolves.length = 0; wolfSpawned = false; return; }
+    if (!wolfSpawned) {
+      spawnWolves();
+      wolfSpawned = true;
+      notice = 'Two wolves are roaming nearby...';
+      noticeUntil = time + 3.5;
+    }
     wolves.forEach(w => {
-      const dx=player.x-w.x, dy=player.y-w.y, distance=Math.max(1,Math.hypot(dx,dy));
-      const speed=distance<25?0:38, vx=dx/distance*speed, vy=dy/distance*speed;
-      const nx=w.x+vx*dt, ny=w.y+vy*dt;
-      if (!blocked(nx,w.y)) w.x=nx; if (!blocked(w.x,ny)) w.y=ny;
-      w.attackCooldown=Math.max(0,w.attackCooldown-dt);
-      if (distance<23 && !battle) {
+      const dx = player.x - w.x, dy = player.y - w.y;
+      const distance = Math.max(1, Math.hypot(dx, dy));
+      // Wolves remain calm at a distance, then slowly approach when the player gets close.
+      const speed = distance <= 145 ? 22 : 0;
+      const vx = dx / distance * speed, vy = dy / distance * speed;
+      const nx = w.x + vx * dt, ny = w.y + vy * dt;
+      if (!blocked(nx, w.y)) w.x = nx;
+      if (!blocked(w.x, ny)) w.y = ny;
+      w.attackCooldown = Math.max(0, w.attackCooldown - dt);
+      // The encounter starts only when a wolf reaches very close range.
+      if (distance < 27 && !battle) {
         beginBattle(w);
         return;
       }
     });
-    wolfNoticeCooldown=Math.max(0,wolfNoticeCooldown-dt);
+    wolfNoticeCooldown = Math.max(0, wolfNoticeCooldown - dt);
   }
   function drawWolf(w) {
     const x=Math.round(w.x-camX), y=Math.round(w.y-camY), bob=Math.round(Math.sin(time*8+w.howl));
@@ -508,19 +527,24 @@ const Overworld = (() => {
 
 
   function drawBattleWolf() {
-    if (!battleWolfSprite.complete || !battleWolfSprite.naturalWidth) {
+    if (!battleWolfSprite.complete || !battleWolfSprite.naturalWidth || !battleWolfSprite.naturalHeight) {
       drawBattleWolfFallback();
       return;
     }
-    const frame = Math.floor(time * 7) % 8;
-    const directionRow = 6; // Left-facing profile, toward the player.
-    const bob = Math.sin(time * 3) * 2;
+    const bob = Math.sin(time * 2.2) * 1.2;
+    const cellW = battleWolfSprite.naturalWidth / 3;
+    const cellH = battleWolfSprite.naturalHeight / 4;
+    // The detailed grey wolf is centered in the second row of this CC0 sheet.
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    ctx.fillStyle = 'rgba(0,0,0,0.38)';
-    ctx.fillRect(174, 188, 132, 12);
-    // 56x56 source pixels enlarged with crisp nearest-neighbour scaling.
-    ctx.drawImage(battleWolfSprite, frame * 56, directionRow * 56, 56, 56, 166, 57 + bob, 145, 145);
+    ctx.fillStyle = 'rgba(0,0,0,0.34)';
+    ctx.fillRect(202, 190, 98, 9);
+    // Set it farther back on the right so the player and wolf have clear space between them.
+    ctx.drawImage(
+      battleWolfSprite,
+      cellW, cellH, cellW, cellH,
+      198, 88 + bob, 104, 104
+    );
     ctx.restore();
   }
 
