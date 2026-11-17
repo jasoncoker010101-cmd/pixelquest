@@ -204,12 +204,22 @@ function slotLabels() {
 function saveActiveSlot(data) {
   try { localStorage.setItem(SAVE_KEY + activeSlot, JSON.stringify(data)); }
   catch (error) { console.warn('Could not save Pixel Quest slot.', error); }
+  if (cloudSession) saveCloudSlot(activeSlot, data).catch(error => { message = 'Cloud save error: ' + error.message; });
 }
 
-function enterWorld(slot) {
+async function enterWorld(slot) {
   activeSlot = slot || 1;
+  message = cloudSession ? 'LOADING CLOUD SAVE...' : '';
+  let save = readSlot(activeSlot);
+  if (cloudSession) {
+    const cloudSave = await syncCloudSlot(activeSlot);
+    if (cloudSave) {
+      save = cloudSave;
+      try { localStorage.setItem(SAVE_KEY + activeSlot, JSON.stringify(cloudSave)); } catch {}
+    }
+  }
   inWorld = true;
-  Overworld.init(canvas, exitWorld, readSlot(activeSlot), saveActiveSlot);
+  Overworld.init(canvas, exitWorld, save, saveActiveSlot);
 }
 
 function exitWorld(data) {
@@ -245,7 +255,8 @@ function activate() {
   const id = state.screen, sel = state.sel;
   if (id === 'title') go(['slots', 'account', 'settings', 'credits'][sel]);
   else if (id === 'slots') { if (sel === 3) go('title'); else enterWorld(sel + 1); }
-  else if (id === 'account') { enterAccountAction(sel); }\n  else if (id === 'settings') {
+  else if (id === 'account') { enterAccountAction(sel); }
+  else if (id === 'settings') {
     if (sel === 0) settings.music = !settings.music;
     else if (sel === 1) settings.sound = !settings.sound;
     else go('title');
