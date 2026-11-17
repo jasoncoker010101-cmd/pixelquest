@@ -15,6 +15,9 @@ const Overworld = (() => {
   const DAY_LENGTH = 180;
   let battle = null;
   const BATTLE_FADE = 0.7;
+  // CC0 wolf sprite sheet by Pixor: 8 directions, 8 walk frames per direction.
+  const battleWolfSprite = new Image();
+  battleWolfSprite.src = 'https://pixor.art/library/files/wolf/wolf-selout-56.png';
 
   let camX = 0, camY = 0;
   let panel = null;
@@ -462,7 +465,7 @@ const Overworld = (() => {
     }
   }
 
-  function drawBattleWolf() {
+  function drawBattleWolfFallback() {
     // Large, layered pixel-art wolf, facing the player.
     const x=218, y=82, bob=Math.sin(time*3)*2;
     ctx.save(); ctx.translate(x,y+bob);
@@ -500,6 +503,24 @@ const Overworld = (() => {
     // Fur highlights
     ctx.fillStyle='#9ca6b5'; ctx.fillRect(-8,-6,19,4); ctx.fillRect(10,1,17,4);
     ctx.fillStyle='#d3d7d8'; ctx.fillRect(42,1,7,5); ctx.fillRect(51,7,5,5);
+    ctx.restore();
+  }
+
+
+  function drawBattleWolf() {
+    if (!battleWolfSprite.complete || !battleWolfSprite.naturalWidth) {
+      drawBattleWolfFallback();
+      return;
+    }
+    const frame = Math.floor(time * 7) % 8;
+    const directionRow = 6; // Left-facing profile, toward the player.
+    const bob = Math.sin(time * 3) * 2;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    ctx.fillRect(174, 188, 132, 12);
+    // 56x56 source pixels enlarged with crisp nearest-neighbour scaling.
+    ctx.drawImage(battleWolfSprite, frame * 56, directionRow * 56, 56, 56, 166, 57 + bob, 145, 145);
     ctx.restore();
   }
 
