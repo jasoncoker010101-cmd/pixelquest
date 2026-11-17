@@ -15,6 +15,7 @@
 </head>
 <body>
 <canvas id="game" width="320" height="240"></canvas>
+<script src="world.js"></script>
 <script>
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -23,6 +24,16 @@ ctx.imageSmoothingEnabled = false;
 let t = 0, last = performance.now(), message = '';
 const settings = { music: true, sound: true };
 const state = { screen: 'title', sel: 0 };
+let inWorld = false;
+
+function enterWorld() {
+  inWorld = true;
+  Overworld.init(canvas, exitWorld);
+}
+
+function exitWorld() {
+  inWorld = false;
+}
 
 function rnd(i) { return Math.abs(Math.sin(i * 12.9898 + 78.233) * 43758.5453) % 1; }
 
@@ -63,6 +74,8 @@ function back() { if (state.screen !== 'title') go('title'); }
 
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
+  if (inWorld) return;
+  if (k === 'o' && state.screen === 'title') { enterWorld(); return; }
   if (['arrowup', 'arrowdown', 'w', 's', ' ', 'enter', 'escape'].includes(k)) e.preventDefault();
   const count = screens[state.screen].items().length;
   if (k === 'arrowup' || k === 'w') state.sel = (state.sel + count - 1) % count;
@@ -84,8 +97,8 @@ function hit(p) {
   }
   return -1;
 }
-canvas.addEventListener('mousemove', e => { const i = hit(toCanvas(e)); if (i >= 0) state.sel = i; });
-canvas.addEventListener('click', e => { const i = hit(toCanvas(e)); if (i >= 0) { state.sel = i; activate(); } });
+canvas.addEventListener('mousemove', e => { if (inWorld) return; const i = hit(toCanvas(e)); if (i >= 0) state.sel = i; });
+canvas.addEventListener('click', e => { if (inWorld) return; const i = hit(toCanvas(e)); if (i >= 0) { state.sel = i; activate(); } });
 
 function update(dt) {
   clouds.forEach(c => { c.x -= dt * 4; if (c.x + c.w < 0) c.x = 320; });
@@ -233,7 +246,7 @@ function drawScreen() {
     drawMenu();
     ctx.font = '7px monospace';
     ctx.fillStyle = '#ffd9a0';
-    ctx.fillText('ARROWS / WASD + ENTER   ESC BACK', 160, 228);
+    ctx.fillText('ARROWS / WASD + ENTER   ESC BACK   O WORLD', 160, 228);
     return;
   }
   ctx.font = 'bold 12px monospace';
@@ -289,8 +302,14 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   t += dt;
-  update(dt);
-  draw();
+  if (inWorld) {
+    ctx.textAlign = 'left';
+    Overworld.update(dt);
+    Overworld.draw();
+  } else {
+    update(dt);
+    draw();
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
