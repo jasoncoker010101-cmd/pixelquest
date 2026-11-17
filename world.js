@@ -152,10 +152,10 @@ const Overworld = (() => {
     const solidRects = [
       // Outer walls and room dividers. Open gaps are intentional doorways.
       [18,12,302,25], [18,25,30,218], [290,25,302,218], [18,218,42,230], [67,218,302,230],
-      [99,25,106,76], [181,25,188,76],
-      [30,77,73,84], [91,77,290,84],
-      [74,122,170,130], [180,122,290,130],
-      [170,130,178,215],
+      [99,25,106,76], [181,25,188,46], [181,66,188,76],
+      [30,77,73,84], [91,77,135,84], [155,77,225,84], [245,77,290,84],
+      [74,122,138,130], [168,122,170,130], [180,122,215,130], [246,122,290,130],
+      [170,130,178,160], [170,185,178,215],
 
       // Bedroom and living-room furniture footprints.
       [39,34,66,63], [68,39,85,60], [111,33,145,65],
@@ -636,15 +636,15 @@ const Overworld = (() => {
 
     // Short partitions define rooms but leave broad doorways into the hallway.
     ctx.fillStyle = '#57333a';
-    ctx.fillRect(99,25,7,51); ctx.fillRect(181,25,7,51);
-    ctx.fillRect(30,77,43,7); ctx.fillRect(91,77,199,7);
-    ctx.fillRect(74,122,96,8); ctx.fillRect(180,122,110,8);
-    ctx.fillRect(170,130,8,85);
+    ctx.fillRect(99,25,7,51); ctx.fillRect(181,25,7,21); ctx.fillRect(181,66,7,10);
+    ctx.fillRect(30,77,43,7); ctx.fillRect(91,77,44,7); ctx.fillRect(155,77,70,7); ctx.fillRect(245,77,45,7);
+    ctx.fillRect(74,122,64,8); ctx.fillRect(168,122,2,8); ctx.fillRect(180,122,35,8); ctx.fillRect(246,122,44,8);
+    ctx.fillRect(170,130,8,30); ctx.fillRect(170,185,8,30);
     ctx.fillStyle = '#bd8052';
-    ctx.fillRect(99,25,2,51); ctx.fillRect(181,25,2,51);
-    ctx.fillRect(30,77,43,2); ctx.fillRect(91,77,199,2);
-    ctx.fillRect(74,122,96,2); ctx.fillRect(180,122,110,2);
-    ctx.fillRect(170,130,2,85);
+    ctx.fillRect(99,25,2,51); ctx.fillRect(181,25,2,21); ctx.fillRect(181,66,2,10);
+    ctx.fillRect(30,77,43,2); ctx.fillRect(91,77,44,2); ctx.fillRect(155,77,70,2); ctx.fillRect(245,77,45,2);
+    ctx.fillRect(74,122,64,2); ctx.fillRect(168,122,2,2); ctx.fillRect(180,122,35,2); ctx.fillRect(246,122,44,2);
+    ctx.fillRect(170,130,2,30); ctx.fillRect(170,185,2,30);
 
     // Soft rugs and a long runner make the corridor the visual centre.
     ctx.fillStyle='#754653'; ctx.fillRect(36,31,57,39);
