@@ -745,7 +745,7 @@ const Overworld = (() => {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.58)';
     ctx.fillRect(0, canvas.height - 12, canvas.width, 12);
     ctx.fillStyle = '#ffffff'; ctx.font = '8px monospace'; ctx.textAlign = 'left';
-    ctx.fillText('WASD: WALK  SHIFT: RUN  I: BAG  C: STATS', 4, canvas.height - 3);
+    ctx.fillText('WASD: WALK  SHIFT: RUN  Z: NIGHT  I: BAG  C: STATS', 4, canvas.height - 3);
 
     if (notice && time < noticeUntil) {
       ctx.fillStyle = 'rgba(12, 10, 20, 0.88)';
@@ -858,7 +858,7 @@ const Overworld = (() => {
       else if (k === '2' || k === 'escape') { battleAction('run'); e.preventDefault(); }
       return;
     }
-    if (k === 'z') {
+    if (k === 'z' || e.code === 'KeyZ') {
       if (e.repeat) return;
       const alreadyNight = isNight();
       worldClock = 0.80;
@@ -869,6 +869,7 @@ const Overworld = (() => {
       notice = 'Night has fallen...';
       noticeUntil = time + 2.5;
       e.preventDefault();
+      e.stopPropagation();
       return;
     }
     if (k === 'escape') {
@@ -922,7 +923,7 @@ const Overworld = (() => {
       b.vx = 0; b.vy = 0; b.flee = 0;
     });
     applySave(saveData);
-    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('keyup', onKeyUp);
     const maxCamX = Math.max(0, MAP_W * TILE - canvas.width);
     const maxCamY = Math.max(0, MAP_H * TILE - canvas.height);
@@ -931,7 +932,7 @@ const Overworld = (() => {
   }
 
   function stop() {
-    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp);
     keys.clear();
   }
