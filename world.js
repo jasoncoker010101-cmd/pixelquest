@@ -265,6 +265,26 @@ const Overworld = (() => {
     ctx.fillRect(x + 9, y - 14, 5, 3);
   }
 
+  function drawInteractionPrompt() {
+    const distance = Math.hypot(player.x - MAILBOX.x, player.y - MAILBOX.y);
+    if (distance > 52) return;
+    const x = Math.round(MAILBOX.x - camX);
+    const y = Math.round(MAILBOX.y - camY) - 27;
+    const pulse = 0.55 + 0.45 * Math.sin(time * 8);
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = 'rgba(15, 12, 24, 0.92)';
+    ctx.fillRect(x - 28, y - 9, 56, 15);
+    ctx.strokeStyle = '#f4d27b';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x - 27.5, y - 8.5, 55, 14);
+    ctx.fillStyle = '#fff0bd';
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('[ E ] INTERACT', x, y + 1);
+    ctx.restore();
+  }
+
   function drawFish() {
     fish.forEach((f, i) => {
       const phase = (time + f.phase) % f.period;
@@ -476,61 +496,6 @@ const Overworld = (() => {
     }
   }
 
-  // On-screen controls for phones and tablets.
-  const touchMode = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-  const touchPointers = new Map();
-  const touchButtons = [
-    { id: 'up', x: 43, y: 178, r: 9, label: '▲', key: 'arrowup' },
-    { id: 'down', x: 43, y: 216, r: 9, label: '▼', key: 'arrowdown' },
-    { id: 'left', x: 24, y: 197, r: 9, label: '◀', key: 'arrowleft' },
-    { id: 'right', x: 62, y: 197, r: 9, label: '▶', key: 'arrowright' },
-    { id: 'interact', x: 276, y: 185, r: 13, label: 'E', action: 'interact' },
-    { id: 'bag', x: 244, y: 218, r: 9, label: 'I', action: 'inventory' },
-    { id: 'stats', x: 286, y: 218, r: 9, label: 'C', action: 'stats' }
-  ];
-
-  function canvasPoint(e) {
-    const r = canvas.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * canvas.width / r.width, y: (e.clientY - r.top) * canvas.height / r.height };
-  }
-
-  function touchDown(e) {
-    if (!touchMode) return;
-    const p = canvasPoint(e);
-    const b = touchButtons.find(v => Math.hypot(p.x - v.x, p.y - v.y) <= v.r + 3);
-    if (!b) return;
-    e.preventDefault();
-    canvas.setPointerCapture?.(e.pointerId);
-    touchPointers.set(e.pointerId, b);
-    if (b.key) keys.add(b.key);
-    else if (b.action === 'interact' && !panel) interact();
-    else if (b.action === 'inventory') panel = panel === 'inventory' ? null : 'inventory';
-    else if (b.action === 'stats') panel = panel === 'stats' ? null : 'stats';
-  }
-
-  function touchUp(e) {
-    const b = touchPointers.get(e.pointerId);
-    if (!b) return;
-    if (b.key) keys.delete(b.key);
-    touchPointers.delete(e.pointerId);
-  }
-
-  function drawTouchControls() {
-    if (!touchMode) return;
-    touchButtons.forEach(b => {
-      ctx.fillStyle = b.action === 'interact' ? 'rgba(176, 77, 54, 0.88)' : 'rgba(24, 25, 43, 0.82)';
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = b.action === 'interact' ? '#ffd28a' : '#d9c8a2';
-      ctx.lineWidth = 1.3; ctx.stroke();
-      ctx.fillStyle = '#fff2d0'; ctx.font = b.id === 'interact' ? 'bold 10px monospace' : 'bold 9px monospace';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(b.label, b.x, b.y + 0.5);
-    });
-    ctx.textBaseline = 'alphabetic';
-    ctx.textAlign = 'center'; ctx.font = '6px monospace'; ctx.fillStyle = '#fff0c8';
-    ctx.fillText('MOVE', 43, 232);
-    ctx.fillText('USE', 276, 205);
-  }
-
   function drawHUD() {
     ctx.fillStyle = 'rgba(9, 10, 20, 0.78)';
     ctx.fillRect(3, 3, 126, 25);
@@ -571,12 +536,12 @@ const Overworld = (() => {
 
     drawHouse();
     drawMailbox();
+    drawInteractionPrompt();
     drawFish();
     bunnies.forEach(drawBunny);
     drawPlayer(Math.round(player.x - camX), Math.round(player.y - camY));
     drawHUD();
     drawPanel();
-    drawTouchControls();
   }
 
   function interact() {
@@ -685,9 +650,6 @@ const Overworld = (() => {
     applySave(saveData);
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
-    canvas.addEventListener('pointerdown', touchDown);
-    canvas.addEventListener('pointerup', touchUp);
-    canvas.addEventListener('pointercancel', touchUp);
     const maxCamX = Math.max(0, MAP_W * TILE - canvas.width);
     const maxCamY = Math.max(0, MAP_H * TILE - canvas.height);
     camX = Math.round(clamp(player.x + 8 - canvas.width / 2, 0, maxCamX));
@@ -697,11 +659,6 @@ const Overworld = (() => {
   function stop() {
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
-    canvas?.removeEventListener('pointerdown', touchDown);
-    canvas?.removeEventListener('pointerup', touchUp);
-    canvas?.removeEventListener('pointercancel', touchUp);
-    touchPointers.forEach(b => { if (b.key) keys.delete(b.key); });
-    touchPointers.clear();
     keys.clear();
   }
 
