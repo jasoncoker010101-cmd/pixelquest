@@ -486,8 +486,8 @@ const Overworld = (() => {
 
   function drawBattleWolfFallback() {
     // Large, layered pixel-art wolf, facing the player.
-    const x=218, y=82, bob=Math.sin(time*3)*2;
-    ctx.save(); ctx.translate(x,y+bob);
+    const x=224, y=100, bob=Math.sin(time*2.2)*1.2;
+    ctx.save(); ctx.translate(x,y+bob); ctx.scale(0.72,0.72);
     ctx.fillStyle='rgba(0,0,0,0.38)'; ctx.fillRect(-38,55,112,10);
     // Back legs and paws
     ctx.fillStyle='#252b3b'; ctx.fillRect(-22,28,17,31); ctx.fillRect(30,27,17,32);
