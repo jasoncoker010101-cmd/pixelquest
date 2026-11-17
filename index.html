@@ -2,75 +2,188 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pixelquest</title>
   <style>
     html, body {
       margin: 0;
       height: 100%;
-      background: #0b0b1a;
+      background: #111;
       display: flex;
       align-items: center;
       justify-content: center;
     }
     canvas {
-      width: min(90vw, 960px);
-      aspect-ratio: 4 / 3;
+      width: 960px;
+      height: 720px;
       image-rendering: pixelated;
-      border: 4px solid #2e2e5c;
+      image-rendering: crisp-edges;
+      background: #000;
     }
   </style>
 </head>
 <body>
-<canvas id="game" width="320" height="240"></canvas>
+  <canvas id="game" width="320" height="240"></canvas>
 
-<script>
-  const canvas = document.getElementById("game");
-  const ctx = canvas.getContext("2d");
-  let scene = "title";
-  let blink = 0;
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = 320, H = 240;
 
-  function drawTitle() {
-    ctx.fillStyle = "#0b0b1a";
-    ctx.fillRect(0, 0, 320, 240);
+    let started = false;
+    let t = 0;
 
-    // Simple pixel stars
-    ctx.fillStyle = "#ffffff";
-    for (let i = 0; i < 40; i++) {
-      ctx.fillRect((i * 73) % 320, (i * 37) % 240, 1, 1);
+    // Deterministic grass blades so the field looks the same every frame
+    const blades = [];
+    let seed = 42;
+    function rand() {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    }
+    for (let i = 0; i < 260; i++) {
+      blades.push({
+        x: Math.floor(rand() * W),
+        y: 180 + Math.floor(rand() * 60),
+        dark: rand() < 0.6
+      });
     }
 
-    ctx.fillStyle = "#ffd700";
-    ctx.font = "bold 28px monospace";
-    ctx.textAlign = "center";
-    ctx.fillText("PIXELTOPIA", 160, 100);
+    // Each cloud: [x, y, speed]
+    const clouds = [
+      [20, 30, 0.08],
+      [150, 18, 0.05],
+      [240, 44, 0.07]
+    ];
 
-    blink++;
-    if (Math.floor(blink / 30) % 2 === 0) {
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "12px monospace";
-      ctx.fillText("PRESS ENTER TO START", 160, 170);
+    function r(x, y, w, h, color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(Math.round(x), Math.round(y), w, h);
     }
-  }
 
-  function drawGame() {
-    ctx.fillStyle = "#2a6f3a";
-    ctx.fillRect(0, 0, 320, 240);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "16px monospace";
-    ctx.textAlign = "center";
-    ctx.fillText("Your game starts here", 160, 120);
-  }
+    function drawSky() {
+      r(0, 0, W, 90, '#5fb8e8');
+      r(0, 90, W, 40, '#8fd3f0');
+      r(0, 130, W, 20, '#b8e6f7');
+    }
 
-  document.addEventListener("keydown", (e) => {
-    if (scene === "title" && e.key === "Enter") scene = "game";
-  });
+    function drawCloud(x, y) {
+      r(x, y, 22, 5, '#ffffff');
+      r(x + 4, y - 3, 10, 3, '#ffffff');
+      r(x + 16, y - 2, 6, 2, '#ffffff');
+      r(x, y + 5, 22, 1, '#d6ecf7');
+    }
 
-  function loop() {
-    if (scene === "title") drawTitle();
-    else drawGame();
-    requestAnimationFrame(loop);
-  }
-  loop();
-</script>
+    function drawHills() {
+      for (let x = 0; x < W; x++) {
+        const h = 150 + Math.round(8 * Math.sin(x * 0.03) + 4 * Math.sin(x * 0.11));
+        r(x, h, 1, H - h, '#3f8f3f');
+        r(x, h, 1, 1, '#2d6e2d');
+      }
+    }
+
+    function drawField() {
+      r(0, 178, W, 62, '#4d9e3a');
+      r(0, 178, W, 2, '#3b7d2c');
+      for (const b of blades) {
+        const c = b.dark ? '#2f7a2a' : '#6cc04a';
+        r(b.x, b.y, 1, 3, c);
+        r(b.x - 1, b.y + 1, 1, 1, c);
+        r(b.x + 1, b.y, 1, 1, c);
+      }
+    }
+
+    // Horse facing left, grazing when `grazing` is true
+    function drawHorse(x, y, body, dark, grazing) {
+      // Legs
+      r(x + 1, y + 7, 2, 6, dark);
+      r(x + 4, y + 7, 2, 6, dark);
+      r(x + 11, y + 7, 2, 6, dark);
+      r(x + 14, y + 7, 2, 6, dark);
+      // Body
+      r(x, y, 18, 7, body);
+      // Tail
+      r(x + 18, y - 1, 3, 4, dark);
+      r(x + 19, y + 3, 2, 3, dark);
+
+      if (grazing) {
+        // Neck and head lowered to the grass
+        r(x - 5, y - 1, 5, 8, body);
+        r(x - 8, y + 5, 6, 4, body);
+        r(x - 4, y - 2, 2, 5, dark);     // mane
+        r(x - 8, y + 6, 1, 1, '#000');   // eye
+        r(x - 10, y + 7, 2, 2, body);    // muzzle touching grass
+        // Mouthful of grass
+        if (Math.floor(t / 15) % 2 === 0) {
+          r(x - 11, y + 9, 1, 2, '#6cc04a');
+          r(x - 12, y + 10, 1, 1, '#6cc04a');
+        }
+      } else {
+        // Head raised
+        r(x - 4, y - 5, 5, 6, body);
+        r(x - 7, y - 9, 5, 5, body);
+        r(x - 4, y - 6, 2, 6, dark);     // mane
+        r(x - 6, y - 7, 1, 1, '#000');   // eye
+      }
+    }
+
+    function drawHorses() {
+      const grazing = Math.floor(t / 90) % 2 === 1;
+      // Back row, smaller and darker for depth
+      drawHorse(40, 170, '#7a5a3c', '#4a3322', grazing);
+      drawHorse(120, 166, '#8a6a4a', '#5a4330', !grazing);
+      drawHorse(230, 168, '#6e4e33', '#44301f', grazing);
+      drawHorse(290, 172, '#7a5a3c', '#4a3322', !grazing);
+    }
+
+    function drawClouds() {
+      for (const c of clouds) {
+        const x = ((c[0] + t * c[2]) % (W + 40)) - 30;
+        drawCloud(x, c[1]);
+      }
+    }
+
+    function drawTitle() {
+      const text = 'PIXELQUEST';
+      ctx.font = 'bold 28px "Courier New", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      // Drop shadow
+      ctx.fillStyle = '#1a2a10';
+      ctx.fillText(text, W / 2 + 2, 82);
+      ctx.fillStyle = '#ffd34d';
+      ctx.fillText(text, W / 2, 80);
+    }
+
+    function drawPrompt() {
+      ctx.font = 'bold 10px "Courier New", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      if (started) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('STARTING...', W / 2, 120);
+      } else if (Math.floor(t / 30) % 2 === 0) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('PRESS ENTER TO START', W / 2, 120);
+      }
+    }
+
+    function frame() {
+      t++;
+      drawSky();
+      drawClouds();
+      drawHills();
+      drawHorses();
+      drawField();
+      drawTitle();
+      drawPrompt();
+      requestAnimationFrame(frame);
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') started = true;
+    });
+
+    frame();
+  </script>
 </body>
 </html>
