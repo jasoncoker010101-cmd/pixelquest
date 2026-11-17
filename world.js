@@ -561,100 +561,167 @@ const Overworld = (() => {
   }
 
   function drawHouseInterior() {
-    // Compact cottage interior: two bedrooms upstairs, kitchen and bathroom downstairs.
-    ctx.fillStyle = '#211b29'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    // Outer timber frame and a smaller floor footprint.
-    ctx.fillStyle = '#49302d'; ctx.fillRect(31, 29, 258, 183);
-    ctx.fillStyle = '#b77f50'; ctx.fillRect(37, 35, 246, 171);
-    ctx.fillStyle = '#d3a36a'; ctx.fillRect(43, 43, 234, 155);
-    // Small warm plank floor.
-    for (let y = 47; y < 198; y += 10) {
-      ctx.fillStyle = (y / 10) % 2 ? '#c18d59' : '#bd8754';
-      ctx.fillRect(43, y, 234, 9);
-      ctx.fillStyle = 'rgba(83,48,34,0.25)'; ctx.fillRect(43, y + 9, 234, 1);
+    // Rustic connected cottage interior, inspired by classic top-down RPG houses.
+    ctx.fillStyle = '#17131d'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Outer walls, dark timber framing and warm plank floor.
+    ctx.fillStyle = '#39251f'; ctx.fillRect(27, 18, 266, 211);
+    ctx.fillStyle = '#875638'; ctx.fillRect(32, 23, 256, 201);
+    ctx.fillStyle = '#d0a06a'; ctx.fillRect(38, 30, 244, 187);
+    ctx.fillStyle = '#b98555';
+    for (let y = 34; y < 216; y += 9) {
+      ctx.fillRect(39, y, 242, 7);
+      ctx.fillStyle = '#e1b77d'; ctx.fillRect(39, y, 242, 1);
+      ctx.fillStyle = '#8b5d3d'; ctx.fillRect(39, y + 7, 242, 2);
+      ctx.fillStyle = '#b98555';
     }
-    // Wall caps, beams and compact room dividers.
-    ctx.fillStyle = '#6c4435'; ctx.fillRect(31, 29, 258, 9);
-    ctx.fillStyle = '#e2b779'; ctx.fillRect(38, 38, 244, 3);
-    ctx.fillStyle = '#704633'; ctx.fillRect(155, 48, 7, 73);
-    ctx.fillStyle = '#9a6543'; ctx.fillRect(153, 48, 2, 73); ctx.fillRect(162, 48, 2, 73);
-    ctx.fillStyle = '#704633'; ctx.fillRect(43, 120, 105, 7); ctx.fillRect(172, 120, 105, 7);
-    ctx.fillStyle = '#9a6543'; ctx.fillRect(43, 120, 105, 2); ctx.fillRect(172, 120, 105, 2);
-    // Soft rugs in the bedrooms.
-    ctx.fillStyle = '#8e4844'; ctx.fillRect(54, 82, 83, 31);
-    ctx.fillStyle = '#d39a78'; ctx.fillRect(58, 86, 75, 23);
-    ctx.fillStyle = '#426879'; ctx.fillRect(179, 82, 83, 31);
-    ctx.fillStyle = '#83aeb0'; ctx.fillRect(183, 86, 75, 23);
-    // Dad's compact bed, folded blanket and pillow.
-    ctx.fillStyle = '#60402f'; ctx.fillRect(59, 53, 57, 29);
-    ctx.fillStyle = '#e7d8b8'; ctx.fillRect(62, 56, 51, 23);
-    ctx.fillStyle = '#354f70'; ctx.fillRect(62, 64, 51, 15);
-    ctx.fillStyle = '#597a98'; ctx.fillRect(66, 67, 43, 9);
-    ctx.fillStyle = '#f0e5ce'; ctx.fillRect(65, 57, 19, 7);
-    ctx.fillStyle = '#8a6345'; ctx.fillRect(59, 79, 57, 4);
-    // Bedside stand, tiny lamp and father's folded coat.
-    ctx.fillStyle = '#70452f'; ctx.fillRect(120, 57, 23, 19);
-    ctx.fillStyle = '#a9784b'; ctx.fillRect(122, 59, 19, 3);
-    ctx.fillStyle = '#e7c77d'; ctx.fillRect(129, 49, 5, 8);
-    ctx.fillStyle = '#f8e3a5'; ctx.fillRect(125, 46, 13, 4);
-    ctx.fillStyle = '#38475d'; ctx.fillRect(121, 87, 15, 11);
-    ctx.fillStyle = '#c6b18b'; ctx.fillRect(125, 86, 7, 3);
-    // Kid's bed and colorful quilt.
-    ctx.fillStyle = '#70452f'; ctx.fillRect(190, 53, 57, 29);
-    ctx.fillStyle = '#e8d9b9'; ctx.fillRect(193, 56, 51, 23);
-    ctx.fillStyle = '#4a7890'; ctx.fillRect(193, 64, 51, 15);
-    ctx.fillStyle = '#79b0b8'; ctx.fillRect(197, 67, 43, 9);
-    ctx.fillStyle = '#f3e6cc'; ctx.fillRect(196, 57, 19, 7);
-    ctx.fillStyle = '#8a6345'; ctx.fillRect(190, 79, 57, 4);
-    // Small bookshelf, books and toy chest.
-    ctx.fillStyle = '#70452f'; ctx.fillRect(253, 51, 19, 43);
-    ctx.fillStyle = '#b77b4b'; ctx.fillRect(255, 57, 15, 3); ctx.fillRect(255, 75, 15, 3);
-    ctx.fillStyle = '#d46a58'; ctx.fillRect(256, 61, 4, 13);
-    ctx.fillStyle = '#e3c15e'; ctx.fillRect(261, 60, 4, 14);
-    ctx.fillStyle = '#6d91a5'; ctx.fillRect(266, 62, 3, 12);
-    ctx.fillStyle = '#80502f'; ctx.fillRect(194, 91, 35, 20);
-    ctx.fillStyle = '#b77b43'; ctx.fillRect(196, 93, 31, 5);
-    ctx.fillStyle = '#e7bd58'; ctx.fillRect(200, 100, 6, 7);
-    ctx.fillStyle = '#d66c59'; ctx.fillRect(210, 100, 6, 7);
-    ctx.fillStyle = '#6e9e72'; ctx.fillRect(220, 100, 6, 7);
-    // Kitchen: counter, sink, stove, shelves and a tiny table.
-    ctx.fillStyle = '#754a32'; ctx.fillRect(51, 137, 83, 18);
-    ctx.fillStyle = '#d4b58a'; ctx.fillRect(53, 139, 79, 5);
-    ctx.fillStyle = '#8b9b9a'; ctx.fillRect(58, 145, 19, 8);
-    ctx.fillStyle = '#c4d4c9'; ctx.fillRect(61, 146, 13, 5);
-    ctx.fillStyle = '#493a37'; ctx.fillRect(101, 145, 26, 9);
-    ctx.fillStyle = '#252a32'; ctx.fillRect(105, 147, 7, 5); ctx.fillRect(116, 147, 7, 5);
-    ctx.fillStyle = '#d7bd8b'; ctx.fillRect(51, 134, 83, 4);
-    ctx.fillStyle = '#9b6942'; ctx.fillRect(57, 130, 2, 6); ctx.fillRect(127, 130, 2, 6);
-    ctx.fillStyle = '#70452f'; ctx.fillRect(68, 166, 43, 19);
-    ctx.fillStyle = '#c59a68'; ctx.fillRect(71, 168, 37, 13);
-    ctx.fillStyle = '#754a32'; ctx.fillRect(73, 180, 4, 8); ctx.fillRect(104, 180, 4, 8);
-    ctx.fillStyle = '#e4d1a6'; ctx.fillRect(84, 171, 11, 7);
-    // Bathroom: tub, toilet and washbasin.
-    ctx.fillStyle = '#5b514c'; ctx.fillRect(188, 137, 75, 20);
-    ctx.fillStyle = '#e5e5d8'; ctx.fillRect(191, 139, 69, 15);
-    ctx.fillStyle = '#9ec6c5'; ctx.fillRect(195, 142, 61, 9);
-    ctx.fillStyle = '#f0e9d6'; ctx.fillRect(197, 164, 18, 20);
-    ctx.fillStyle = '#d5cbb8'; ctx.fillRect(199, 166, 14, 10);
-    ctx.fillStyle = '#f4eee0'; ctx.fillRect(226, 165, 27, 13);
-    ctx.fillStyle = '#d5cbb8'; ctx.fillRect(229, 168, 21, 7);
-    ctx.fillStyle = '#8b9b9a'; ctx.fillRect(234, 160, 10, 5);
-    ctx.fillStyle = '#c6d9d4'; ctx.fillRect(237, 158, 4, 4);
-    // Tiny wall window and wall decor.
-    ctx.fillStyle = '#70452f'; ctx.fillRect(208, 40, 25, 13);
-    ctx.fillStyle = '#77a9b7'; ctx.fillRect(211, 42, 19, 9);
-    ctx.fillStyle = '#d9e7d9'; ctx.fillRect(220, 43, 2, 2);
-    ctx.fillStyle = '#70452f'; ctx.fillRect(220, 42, 2, 9); ctx.fillRect(211, 46, 19, 2);
-    ctx.fillStyle = '#d8c28e'; ctx.fillRect(65, 41, 19, 3);
-    // Room labels and small entrance hall.
-    ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#49312d';
-    ctx.fillText("DAD'S ROOM", 97, 47); ctx.fillText("MY ROOM", 220, 47);
-    ctx.fillText('KITCHEN', 91, 132); ctx.fillText('BATHROOM', 226, 132);
-    // Front door and threshold at the bottom of the little house.
-    ctx.fillStyle = '#54362e'; ctx.fillRect(145, 188, 30, 12);
-    ctx.fillStyle = '#945536'; ctx.fillRect(149, 189, 22, 10);
-    ctx.fillStyle = '#d7b779'; ctx.fillRect(153, 190, 14, 2);
-    ctx.fillStyle = '#f0cd75'; ctx.fillRect(167, 194, 2, 2);
+    for (let y = 39; y < 214; y += 18) {
+      for (let x = 48 + ((y / 18) % 2) * 12; x < 278; x += 48) {
+        ctx.fillStyle = 'rgba(92,55,36,0.25)'; ctx.fillRect(x, y, 1, 5);
+      }
+    }
+
+    // Heavy wall caps and beams.
+    ctx.fillStyle = '#39241f'; ctx.fillRect(27, 18, 266, 12);
+    ctx.fillStyle = '#a66b43'; ctx.fillRect(31, 27, 258, 4);
+    ctx.fillStyle = '#59382b'; ctx.fillRect(34, 31, 5, 185); ctx.fillRect(279, 31, 5, 185);
+    ctx.fillStyle = '#704633'; ctx.fillRect(155, 31, 8, 91);
+    ctx.fillStyle = '#a66b43'; ctx.fillRect(153, 31, 2, 91); ctx.fillRect(163, 31, 2, 91);
+    // Open doorway through the central partition.
+    ctx.fillStyle = '#d0a06a'; ctx.fillRect(154, 77, 10, 25);
+    ctx.fillStyle = '#59382b'; ctx.fillRect(151, 74, 3, 31); ctx.fillRect(164, 74, 3, 31);
+    // Lower partitions create a connected kitchen/bath side and bedroom side.
+    ctx.fillStyle = '#704633'; ctx.fillRect(39, 124, 108, 7); ctx.fillRect(173, 124, 108, 7);
+    ctx.fillStyle = '#a66b43'; ctx.fillRect(39, 124, 108, 2); ctx.fillRect(173, 124, 108, 2);
+    ctx.fillStyle = '#d0a06a'; ctx.fillRect(145, 124, 29, 7);
+
+    // Bedroom rugs and woven runner.
+    ctx.fillStyle = '#704039'; ctx.fillRect(49, 43, 91, 68);
+    ctx.fillStyle = '#b9785c'; ctx.fillRect(53, 47, 83, 60);
+    ctx.fillStyle = '#8d5545'; ctx.fillRect(58, 52, 73, 50);
+    ctx.fillStyle = '#526b72'; ctx.fillRect(177, 43, 94, 68);
+    ctx.fillStyle = '#7e9a91'; ctx.fillRect(181, 47, 86, 60);
+    ctx.fillStyle = '#45616a'; ctx.fillRect(186, 52, 76, 50);
+    ctx.fillStyle = '#b47c4e'; ctx.fillRect(147, 135, 24, 68);
+    ctx.fillStyle = '#e0b77b'; ctx.fillRect(151, 139, 16, 60);
+    for (let y = 143; y < 198; y += 8) { ctx.fillStyle = '#9c6444'; ctx.fillRect(151, y, 16, 2); }
+
+    // Left bedroom: bed, quilt, pillow, chest and bedside lamp.
+    ctx.fillStyle = '#4b3025'; ctx.fillRect(54, 55, 52, 43);
+    ctx.fillStyle = '#d8c5a2'; ctx.fillRect(57, 58, 46, 37);
+    ctx.fillStyle = '#405d79'; ctx.fillRect(58, 70, 44, 24);
+    ctx.fillStyle = '#6f91a6'; ctx.fillRect(61, 74, 38, 16);
+    ctx.fillStyle = '#e8dfc8'; ctx.fillRect(60, 60, 18, 9);
+    ctx.fillStyle = '#b4a184'; ctx.fillRect(59, 96, 46, 4);
+    ctx.fillStyle = '#70452f'; ctx.fillRect(111, 58, 24, 19);
+    ctx.fillStyle = '#bd8a55'; ctx.fillRect(113, 60, 20, 4);
+    ctx.fillStyle = '#f0ce7d'; ctx.fillRect(120, 49, 6, 9);
+    ctx.fillStyle = '#fff0b5'; ctx.fillRect(116, 46, 14, 4);
+    ctx.fillStyle = '#49352b'; ctx.fillRect(112, 86, 23, 15);
+    ctx.fillStyle = '#9b6540'; ctx.fillRect(114, 88, 19, 4);
+    ctx.fillStyle = '#d9b66d'; ctx.fillRect(118, 94, 10, 5);
+
+    // Right bedroom: quilted bed, wardrobe, bookcase and scattered toys.
+    ctx.fillStyle = '#4b3025'; ctx.fillRect(193, 57, 58, 42);
+    ctx.fillStyle = '#e3d4b5'; ctx.fillRect(196, 60, 52, 36);
+    ctx.fillStyle = '#547c91'; ctx.fillRect(197, 72, 50, 22);
+    ctx.fillStyle = '#83a9a9'; ctx.fillRect(201, 75, 42, 15);
+    ctx.fillStyle = '#f0e5ce'; ctx.fillRect(199, 62, 20, 9);
+    ctx.fillStyle = '#805337'; ctx.fillRect(254, 45, 21, 59);
+    ctx.fillStyle = '#bd8955'; ctx.fillRect(257, 49, 15, 50);
+    ctx.fillStyle = '#50372d'; ctx.fillRect(258, 72, 13, 2);
+    ctx.fillStyle = '#d7b65e'; ctx.fillRect(261, 56, 3, 13);
+    ctx.fillStyle = '#b85b50'; ctx.fillRect(265, 55, 3, 14);
+    ctx.fillStyle = '#6d91a5'; ctx.fillRect(258, 79, 4, 15);
+    ctx.fillStyle = '#80502f'; ctx.fillRect(185, 96, 30, 14);
+    ctx.fillStyle = '#c18a4d'; ctx.fillRect(188, 98, 24, 4);
+    ctx.fillStyle = '#d86d5d'; ctx.fillRect(191, 103, 5, 5);
+    ctx.fillStyle = '#e7c35e'; ctx.fillRect(200, 103, 5, 5);
+
+    // Kitchen at lower left: cabinets, counter, sink, stove and hanging utensils.
+    ctx.fillStyle = '#503127'; ctx.fillRect(47, 139, 91, 22);
+    ctx.fillStyle = '#9c6540'; ctx.fillRect(49, 141, 87, 17);
+    ctx.fillStyle = '#d4b487'; ctx.fillRect(47, 137, 91, 5);
+    ctx.fillStyle = '#eee0c1'; ctx.fillRect(53, 143, 23, 12);
+    ctx.fillStyle = '#829c9a'; ctx.fillRect(56, 145, 17, 8);
+    ctx.fillStyle = '#d6e0d3'; ctx.fillRect(59, 146, 11, 5);
+    ctx.fillStyle = '#392d2a'; ctx.fillRect(91, 143, 39, 14);
+    ctx.fillStyle = '#25252a'; ctx.fillRect(95, 145, 13, 9); ctx.fillRect(113, 145, 13, 9);
+    ctx.fillStyle = '#b96c45'; ctx.fillRect(97, 146, 9, 2); ctx.fillRect(115, 146, 9, 2);
+    ctx.fillStyle = '#e4c88e'; ctx.fillRect(81, 128, 2, 9); ctx.fillRect(103, 128, 2, 9);
+    ctx.fillStyle = '#75452f'; ctx.fillRect(79, 126, 27, 3);
+    ctx.fillStyle = '#b88956'; ctx.fillRect(82, 130, 4, 5); ctx.fillRect(98, 130, 4, 5);
+    // Pantry shelves and jars.
+    ctx.fillStyle = '#59392b'; ctx.fillRect(43, 166, 12, 38);
+    ctx.fillStyle = '#b77b4b'; ctx.fillRect(45, 170, 8, 3); ctx.fillRect(45, 184, 8, 3);
+    ctx.fillStyle = '#d7bd83'; ctx.fillRect(46, 175, 5, 7); ctx.fillRect(46, 189, 5, 9);
+    ctx.fillStyle = '#a64f42'; ctx.fillRect(60, 167, 8, 11);
+    ctx.fillStyle = '#e0b45e'; ctx.fillRect(72, 168, 8, 10);
+    ctx.fillStyle = '#6f8b70'; ctx.fillRect(84, 168, 8, 10);
+    // Small kitchen table and stools.
+    ctx.fillStyle = '#59382a'; ctx.fillRect(102, 174, 34, 22);
+    ctx.fillStyle = '#b17b4b'; ctx.fillRect(105, 176, 28, 16);
+    ctx.fillStyle = '#e0c18a'; ctx.fillRect(114, 181, 10, 6);
+    ctx.fillStyle = '#54372b'; ctx.fillRect(106, 195, 5, 8); ctx.fillRect(128, 195, 5, 8);
+    ctx.fillStyle = '#825237'; ctx.fillRect(96, 180, 5, 9); ctx.fillRect(138, 180, 5, 9);
+
+    // Bathroom at lower right: tile floor, bath, washstand and toilet.
+    ctx.fillStyle = '#788d83'; ctx.fillRect(181, 137, 97, 76);
+    ctx.fillStyle = '#9eb0a0';
+    for (let y = 139; y < 211; y += 12) for (let x = 183 + ((y / 12) % 2) * 6; x < 278; x += 24) {
+      ctx.strokeStyle = 'rgba(53,75,68,0.35)'; ctx.strokeRect(x, y, 23, 11);
+    }
+    ctx.fillStyle = '#49352c'; ctx.fillRect(190, 140, 75, 20);
+    ctx.fillStyle = '#e4e0cf'; ctx.fillRect(193, 142, 69, 15);
+    ctx.fillStyle = '#9cc5c1'; ctx.fillRect(197, 145, 61, 9);
+    ctx.fillStyle = '#d8e6df'; ctx.fillRect(200, 146, 55, 3);
+    // Washstand with basin and mirror.
+    ctx.fillStyle = '#69432f'; ctx.fillRect(221, 168, 37, 22);
+    ctx.fillStyle = '#bb8958'; ctx.fillRect(224, 170, 31, 5);
+    ctx.fillStyle = '#e9e4d5'; ctx.fillRect(228, 173, 22, 10);
+    ctx.fillStyle = '#8db9b8'; ctx.fillRect(232, 175, 14, 6);
+    ctx.fillStyle = '#72503d'; ctx.fillRect(231, 158, 18, 8);
+    ctx.fillStyle = '#91b9c1'; ctx.fillRect(233, 160, 14, 5);
+    ctx.fillStyle = '#e7d6a7'; ctx.fillRect(239, 161, 2, 3);
+    // Toilet and bath mat.
+    ctx.fillStyle = '#d8d3c4'; ctx.fillRect(187, 173, 20, 22);
+    ctx.fillStyle = '#f2eee1'; ctx.fillRect(190, 176, 14, 15);
+    ctx.fillStyle = '#a4c5bf'; ctx.fillRect(193, 179, 8, 8);
+    ctx.fillStyle = '#e4c48d'; ctx.fillRect(188, 198, 22, 7);
+    ctx.fillStyle = '#6c4940'; ctx.fillRect(215, 199, 43, 7);
+
+    // Central living/dining space: fireplace, couch, coffee table and wall details.
+    ctx.fillStyle = '#493027'; ctx.fillRect(174, 34, 72, 7);
+    ctx.fillStyle = '#9c6540'; ctx.fillRect(179, 36, 62, 3);
+    ctx.fillStyle = '#5c382c'; ctx.fillRect(174, 43, 24, 31);
+    ctx.fillStyle = '#a66d45'; ctx.fillRect(177, 46, 18, 24);
+    ctx.fillStyle = '#30262a'; ctx.fillRect(180, 51, 12, 16);
+    ctx.fillStyle = '#e17b3e'; ctx.fillRect(183, 58, 6, 8);
+    ctx.fillStyle = '#ffd06c'; ctx.fillRect(185, 55, 3, 6);
+    ctx.fillStyle = '#6c4435'; ctx.fillRect(205, 48, 42, 17);
+    ctx.fillStyle = '#b27655'; ctx.fillRect(208, 50, 36, 12);
+    ctx.fillStyle = '#d99a77'; ctx.fillRect(211, 52, 30, 8);
+    ctx.fillStyle = '#5c392b'; ctx.fillRect(214, 66, 4, 4); ctx.fillRect(238, 66, 4, 4);
+    ctx.fillStyle = '#75482f'; ctx.fillRect(204, 83, 32, 16);
+    ctx.fillStyle = '#c08a54'; ctx.fillRect(207, 86, 26, 10);
+    ctx.fillStyle = '#e7d0a2'; ctx.fillRect(215, 88, 10, 5);
+    // Wall window, picture frame and a hanging lantern.
+    ctx.fillStyle = '#57372b'; ctx.fillRect(70, 32, 25, 15);
+    ctx.fillStyle = '#86b5c0'; ctx.fillRect(73, 35, 19, 9);
+    ctx.fillStyle = '#d8e8d9'; ctx.fillRect(74, 36, 5, 3);
+    ctx.fillStyle = '#5a392b'; ctx.fillRect(82, 35, 2, 9); ctx.fillRect(73, 39, 19, 2);
+    ctx.fillStyle = '#4c3028'; ctx.fillRect(116, 33, 15, 17);
+    ctx.fillStyle = '#d8bd83'; ctx.fillRect(119, 36, 9, 11);
+    ctx.fillStyle = '#6e9c83'; ctx.fillRect(121, 38, 5, 6);
+    ctx.fillStyle = '#4a3028'; ctx.fillRect(263, 32, 9, 12);
+    ctx.fillStyle = '#f3d17c'; ctx.fillRect(265, 35, 5, 6);
+
+    // Front entrance threshold and door at the bottom, kept clear for interaction.
+    ctx.fillStyle = '#39241f'; ctx.fillRect(143, 211, 34, 13);
+    ctx.fillStyle = '#875238'; ctx.fillRect(147, 212, 26, 10);
+    ctx.fillStyle = '#c18a55'; ctx.fillRect(151, 213, 18, 2);
+    ctx.fillStyle = '#edc56d'; ctx.fillRect(168, 217, 2, 2);
+
     // Draw the kid using the same walk cycle as the overworld sprite.
     const oldFacing = player.facing, oldMoving = player.moving, oldWalk = player.walk;
     player.facing = interiorPlayer.facing;
@@ -662,11 +729,12 @@ const Overworld = (() => {
     player.walk = interiorPlayer.walk;
     drawPlayer(Math.round(interiorPlayer.x - 8), Math.round(interiorPlayer.y - 8));
     player.facing = oldFacing; player.moving = oldMoving; player.walk = oldWalk;
+
     // Exit prompt.
     if (Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 190) < 24) {
       ctx.fillStyle = 'rgba(15,12,24,0.94)'; ctx.fillRect(128, 170, 64, 14);
       ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(128.5, 170.5, 63, 13);
-      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.fillText('[ E ] OUTSIDE', 160, 180);
+      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center'; ctx.fillText('[ E ] OUTSIDE', 160, 180);
     }
   }
 
