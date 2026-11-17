@@ -416,6 +416,10 @@ const Overworld = (() => {
   function update(dt) {
     time += dt;
     stats.playTime += dt;
+    const wasNight = isNight();
+    worldClock = (worldClock + dt / DAY_LENGTH) % 1;
+    if (wasNight && !isNight()) { wolves.length=0; wolfSpawned=false; notice='Sunrise! The wolves have retreated.'; noticeUntil=time+2.5; }
+    updateWolves(dt);
 
     // Nearby rabbits bolt away from the player, then settle down.
     bunnies.forEach(b => {
@@ -591,8 +595,21 @@ const Overworld = (() => {
     drawInteractionPrompt();
     drawFish();
     bunnies.forEach(drawBunny);
-    drawPlayer(Math.round(player.x - camX), Math.round(player.y - camY));
+    wolves.forEach(drawWolf);
+    drawPlayer(Math.round(player.x-camX),Math.round(player.y-camY));
+    const hour=worldClock%1;
+    let darkness=0;
+    if(hour>=0.62&&hour<0.76) darkness=(hour-0.62)/0.14*0.48;
+    else if(hour>=0.76||hour<0.19) darkness=0.48;
+    else if(hour>=0.19&&hour<0.33) darkness=(0.33-hour)/0.14*0.48;
+    if(darkness>0){
+      ctx.fillStyle='rgba(12,17,48,'+darkness+')';ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle='rgba(74,91,150,'+(darkness*0.18)+')';ctx.fillRect(0,0,canvas.width,canvas.height);
+    }
     drawHUD();
+    ctx.fillStyle='rgba(9,10,20,0.78)';ctx.fillRect(canvas.width-78,3,75,15);
+    ctx.fillStyle=isNight()?'#c8d7ff':'#ffe5a1';ctx.textAlign='right';ctx.font='8px monospace';
+    ctx.fillText(clockLabel(),canvas.width-7,13);
     drawPanel();
   }
 
@@ -615,7 +632,8 @@ const Overworld = (() => {
       facing: player.facing,
       inventory: { ...inventory },
       stats: { ...stats },
-      stepDistance
+      stepDistance,
+      worldClock
     };
   }
 
@@ -625,6 +643,7 @@ const Overworld = (() => {
     inventory.berries = 3; inventory.wood = 0; inventory.fish = 0;
     Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0 });
     stepDistance = 0;
+    worldClock = 0.28;
     if (!saveData || typeof saveData !== 'object') return;
 
     if (Number.isFinite(saveData.x) && Number.isFinite(saveData.y)) {
@@ -648,6 +667,7 @@ const Overworld = (() => {
       stats.stamina = clamp(stats.stamina, 0, stats.maxStamina);
     }
     if (Number.isFinite(saveData.stepDistance)) stepDistance = Math.max(0, saveData.stepDistance);
+    if (Number.isFinite(saveData.worldClock)) worldClock = ((saveData.worldClock % 1) + 1) % 1;
   }
 
   function onKeyDown(e) {
@@ -691,6 +711,7 @@ const Overworld = (() => {
     panel = null;
     notice = '';
     time = 0;
+    wolves.length=0; wolfSpawned=false; wolfNoticeCooldown=0;
     bunnies.forEach((b, i) => {
       const starts = [
         [17 * TILE, 10 * TILE], [22 * TILE, 20 * TILE],
