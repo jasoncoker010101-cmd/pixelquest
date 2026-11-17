@@ -1003,7 +1003,8 @@ const Overworld = (() => {
     }
     if (Number.isFinite(saveData.stepDistance)) stepDistance = Math.max(0, saveData.stepDistance);
     if (Number.isFinite(saveData.worldClock)) worldClock = ((saveData.worldClock % 1) + 1) % 1;
-    if (saveData.insideHouse === true) {
+    // Older saves predate the interior flag, so move those saves into the kid's room once.
+    if (saveData.insideHouse !== false) {
       insideHouse = true;
       if (Number.isFinite(saveData.interiorX)) interiorPlayer.x = clamp(saveData.interiorX, 24, 296);
       if (Number.isFinite(saveData.interiorY)) interiorPlayer.y = clamp(saveData.interiorY, 42, 214);
