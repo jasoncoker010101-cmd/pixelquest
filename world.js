@@ -4,7 +4,7 @@ const Overworld = (() => {
   const MAP_W = 40;
   const MAP_H = 30;
   const SPEED = 60;
-  const SOLID = new Set(['T', 'W', 'H', 'R']);
+  const SOLID = new Set(['T', 'W', 'H', 'R', 'D']);
   const SPAWN = { x: 20, y: 15 };
   const GAME_KEYS = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'];
 
@@ -101,11 +101,21 @@ const Overworld = (() => {
   }
 
   function blocked(px, py) {
-    const left = px + 3, right = px + 12, top = py + 9, bottom = py + 15;
-    const hitWall = [[left, top], [right, top], [left, bottom], [right, bottom]].some(
-      ([x, y]) => SOLID.has(tileAt(Math.floor(x / TILE), Math.floor(y / TILE)))
-    );
-    return hitWall || mailboxBlocked(px, py);
+    // Test the whole lower-body hitbox, not just its four corners.
+    // This prevents slipping through the edges of trees, rocks, water, and buildings.
+    const left = px + 3, right = px + 12;
+    const top = py + 9, bottom = py + 15;
+    const minTileX = Math.floor(left / TILE);
+    const maxTileX = Math.floor((right - 0.001) / TILE);
+    const minTileY = Math.floor(top / TILE);
+    const maxTileY = Math.floor((bottom - 0.001) / TILE);
+
+    for (let ty = minTileY; ty <= maxTileY; ty++) {
+      for (let tx = minTileX; tx <= maxTileX; tx++) {
+        if (SOLID.has(tileAt(tx, ty))) return true;
+      }
+    }
+    return mailboxBlocked(px, py);
   }
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
