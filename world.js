@@ -49,13 +49,9 @@ const Overworld = (() => {
   const interiorPlayer = { x: 160, y: 174, facing: 'up', moving: false, walk: 0 };
   const interiorSheet = new Image();
   let interiorSheetReady = false;
-  fetch('./assets/kenney-interior-tilemap.png.b64')
-    .then(response => { if (!response.ok) throw new Error('Interior art unavailable'); return response.text(); })
-    .then(encoded => {
-      interiorSheet.onload = () => { interiorSheetReady = true; };
-      interiorSheet.src = 'data:image/png;base64,' + encoded.replace(/\s/g, '');
-    })
-    .catch(() => { interiorSheetReady = false; });
+  interiorSheet.onload = () => { interiorSheetReady = true; };
+  interiorSheet.onerror = () => { interiorSheetReady = false; };
+  interiorSheet.src = './assets/kenney-interior-tilemap.png';
 
   function drawInteriorSprite(col, row, cols, rows, x, y) {
     if (!interiorSheetReady) return;
