@@ -148,26 +148,26 @@ const Overworld = (() => {
   }
 
   function interiorBlocked(px, py) {
-    // Feet-only collision lets the character overlap furniture visually without walking through it.
     const left = px + 3, right = px + 12, top = py + 9, bottom = py + 15;
     const solidRects = [
-      // Timber partitions. The central gaps are deliberate doorways.
-      [151,31,167,74], [151,107,167,122],
-      [39,124,147,132], [173,124,281,132],
+      // Outer walls and room dividers. Open gaps are intentional doorways.
+      [18,12,302,25], [18,25,30,218], [290,25,302,218], [18,218,42,230], [67,218,302,230],
+      [99,25,106,76], [181,25,188,76],
+      [30,77,73,84], [91,77,290,84],
+      [74,122,170,130], [180,122,290,130],
+      [170,130,178,215],
 
-      // Kenney furniture footprints.
-      [54,54,89,89],       // left bed
-      [105,55,124,75],     // bedside drawer
-      [190,55,255,91],     // right bed
-      [252,44,286,110],    // bookcase
-      [46,136,80,171],     // kitchen sink counter
-      [79,136,113,171],    // kitchen work counter
-      [77,165,143,200],    // kitchen table
-      [62,174,80,193],     // left chair
-      [142,174,160,193],   // right chair
+      // Bedroom and living-room furniture footprints.
+      [39,34,66,63], [68,39,85,60], [111,33,145,65],
+      [198,33,224,65], [249,33,278,65],
+      [205,91,231,108], [252,91,278,108],
+
+      // Kitchen fixtures and dining furniture.
+      [82,137,112,160], [116,137,148,160], [83,173,117,202],
+      [130,173,160,202],
 
       // Bathroom fixtures.
-      [190,140,265,160], [220,167,255,201], [187,173,207,195]
+      [191,139,276,162], [207,173,233,199], [247,173,275,199]
     ];
     return solidRects.some(([x1,y1,x2,y2]) =>
       left < x2 && right > x1 && top < y2 && bottom > y1
@@ -604,120 +604,234 @@ const Overworld = (() => {
   }
 
   function drawHouseInterior() {
-    // Rustic connected cottage interior, inspired by classic top-down RPG houses.
-    ctx.fillStyle = '#17131d'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Connected old-school RPG cottage: bedrooms and living room above a long hall,
+    // kitchen and washroom below it, with a narrow entrance passage on the left.
+    ctx.fillStyle = '#160d20'; ctx.fillRect(0,0,320,240);
 
-    // Outer walls, dark timber framing and warm plank floor.
-    ctx.fillStyle = '#39251f'; ctx.fillRect(27, 18, 266, 211);
-    ctx.fillStyle = '#875638'; ctx.fillRect(32, 23, 256, 201);
-    ctx.fillStyle = '#d0a06a'; ctx.fillRect(38, 30, 244, 187);
-    ctx.fillStyle = '#b98555';
-    for (let y = 34; y < 216; y += 9) {
-      ctx.fillRect(39, y, 242, 7);
-      ctx.fillStyle = '#e1b77d'; ctx.fillRect(39, y, 242, 1);
-      ctx.fillStyle = '#8b5d3d'; ctx.fillRect(39, y + 7, 242, 2);
-      ctx.fillStyle = '#b98555';
-    }
-    for (let y = 39; y < 214; y += 18) {
-      for (let x = 48 + ((y / 18) % 2) * 12; x < 278; x += 48) {
-        ctx.fillStyle = 'rgba(92,55,36,0.25)'; ctx.fillRect(x, y, 1, 5);
+    // Irregular outside silhouette and heavy timber wall framing.
+    ctx.fillStyle = '#39232c'; ctx.fillRect(18,12,284,218);
+    ctx.fillStyle = '#9a6044'; ctx.fillRect(22,16,276,210);
+    ctx.fillStyle = '#d4a06a'; ctx.fillRect(27,21,266,200);
+    ctx.fillStyle = '#6b3e37'; ctx.fillRect(30,24,260,194);
+
+    // Warm plank floor, drawn continuously through all connected spaces.
+    ctx.fillStyle = '#b9784d'; ctx.fillRect(31,25,258,192);
+    for (let y=28; y<218; y+=9) {
+      ctx.fillStyle = '#e8b779'; ctx.fillRect(31,y,258,2);
+      ctx.fillStyle = '#d5965b'; ctx.fillRect(31,y+2,258,5);
+      ctx.fillStyle = '#8f553e'; ctx.fillRect(31,y+7,258,2);
+      for (let x=38+((Math.floor(y/9)%2)*17); x<288; x+=34) {
+        ctx.fillStyle = 'rgba(91,48,38,0.42)'; ctx.fillRect(x,y+2,1,5);
+        ctx.fillStyle = 'rgba(255,220,160,0.3)'; ctx.fillRect(x+1,y+2,1,4);
       }
     }
 
-    // Heavy wall caps and beams.
-    ctx.fillStyle = '#39241f'; ctx.fillRect(27, 18, 266, 12);
-    ctx.fillStyle = '#a66b43'; ctx.fillRect(31, 27, 258, 4);
-    ctx.fillStyle = '#59382b'; ctx.fillRect(34, 31, 5, 185); ctx.fillRect(279, 31, 5, 185);
-    ctx.fillStyle = '#704633'; ctx.fillRect(155, 31, 8, 91);
-    ctx.fillStyle = '#a66b43'; ctx.fillRect(153, 31, 2, 91); ctx.fillRect(163, 31, 2, 91);
-    // Open doorway through the central partition.
-    ctx.fillStyle = '#d0a06a'; ctx.fillRect(154, 77, 10, 25);
-    ctx.fillStyle = '#59382b'; ctx.fillRect(151, 74, 3, 31); ctx.fillRect(164, 74, 3, 31);
-    // Lower partitions create a connected kitchen/bath side and bedroom side.
-    ctx.fillStyle = '#704633'; ctx.fillRect(39, 124, 108, 7); ctx.fillRect(173, 124, 108, 7);
-    ctx.fillStyle = '#a66b43'; ctx.fillRect(39, 124, 108, 2); ctx.fillRect(173, 124, 108, 2);
-    ctx.fillStyle = '#d0a06a'; ctx.fillRect(145, 124, 29, 7);
+    // Dark timber wall caps with bright worn edges.
+    ctx.fillStyle = '#43262c';
+    ctx.fillRect(18,12,284,13); ctx.fillRect(18,12,12,206); ctx.fillRect(290,12,12,206);
+    ctx.fillRect(18,218,24,12); ctx.fillRect(67,218,235,12);
+    ctx.fillStyle = '#bd8052';
+    ctx.fillRect(22,22,276,3); ctx.fillRect(27,25,3,192); ctx.fillRect(290,25,3,192);
+    ctx.fillRect(22,218,20,3); ctx.fillRect(67,218,231,3);
 
-    // Bedroom rugs and the woven runner keep each area visually connected.
-    ctx.fillStyle = '#704039'; ctx.fillRect(49, 43, 91, 68);
-    ctx.fillStyle = '#b9785c'; ctx.fillRect(53, 47, 83, 60);
-    ctx.fillStyle = '#8d5545'; ctx.fillRect(58, 52, 73, 50);
-    ctx.fillStyle = '#526b72'; ctx.fillRect(177, 43, 94, 68);
-    ctx.fillStyle = '#7e9a91'; ctx.fillRect(181, 47, 86, 60);
-    ctx.fillStyle = '#45616a'; ctx.fillRect(186, 52, 76, 50);
-    ctx.fillStyle = '#b47c4e'; ctx.fillRect(147, 135, 24, 68);
-    ctx.fillStyle = '#e0b77b'; ctx.fillRect(151, 139, 16, 60);
-    for (let y = 143; y < 198; y += 8) { ctx.fillStyle = '#9c6444'; ctx.fillRect(151, y, 16, 2); }
+    // Short partitions define rooms but leave broad doorways into the hallway.
+    ctx.fillStyle = '#57333a';
+    ctx.fillRect(99,25,7,51); ctx.fillRect(181,25,7,51);
+    ctx.fillRect(30,77,43,7); ctx.fillRect(91,77,199,7);
+    ctx.fillRect(74,122,96,8); ctx.fillRect(180,122,110,8);
+    ctx.fillRect(170,130,8,85);
+    ctx.fillStyle = '#bd8052';
+    ctx.fillRect(99,25,2,51); ctx.fillRect(181,25,2,51);
+    ctx.fillRect(30,77,43,2); ctx.fillRect(91,77,199,2);
+    ctx.fillRect(74,122,96,2); ctx.fillRect(180,122,110,2);
+    ctx.fillRect(170,130,2,85);
 
-    // Real Kenney CC0 sprites replace the placeholder rectangle furniture.
-    // Bedrooms: two beds, a bedside drawer and a tall bookcase.
-    drawInteriorSprite(9, 0, 2, 2, 56, 55);
-    drawInteriorSprite(4, 2, 1, 1, 108, 57);
-    drawInteriorSprite(14, 2, 4, 2, 190, 56);
-    drawInteriorSprite(25, 14, 2, 4, 254, 45);
+    // Soft rugs and a long runner make the corridor the visual centre.
+    ctx.fillStyle='#754653'; ctx.fillRect(36,31,57,39);
+    ctx.fillStyle='#b16d69'; ctx.fillRect(39,34,51,33);
+    ctx.fillStyle='#8b5262'; ctx.fillRect(43,38,43,25);
+    ctx.fillStyle='#435b77'; ctx.fillRect(190,88,88,27);
+    ctx.fillStyle='#7186a0'; ctx.fillRect(194,91,80,21);
+    ctx.fillStyle='#a96a6b'; ctx.fillRect(218,96,31,12);
+    ctx.fillStyle='#d99b83'; ctx.fillRect(229,100,9,4);
+    ctx.fillStyle='#754653'; ctx.fillRect(82,132,81,78);
+    ctx.fillStyle='#b16d69'; ctx.fillRect(86,136,73,70);
+    ctx.fillStyle='#8b5262'; ctx.fillRect(91,141,63,60);
+    ctx.fillStyle='#6b7f8c'; ctx.fillRect(185,134,99,78);
+    ctx.fillStyle='#a2b1a5'; ctx.fillRect(189,138,91,70);
 
-    // Kitchen: sink/work counters, a proper wooden table and two chairs.
-    drawInteriorSprite(14, 10, 2, 2, 47, 137);
-    drawInteriorSprite(12, 10, 2, 2, 80, 137);
-    drawInteriorSprite(0, 0, 4, 2, 78, 166);
-    drawInteriorSprite(0, 2, 1, 1, 64, 175);
-    drawInteriorSprite(1, 2, 1, 1, 143, 175);
+    // Pixel-art bed: timber frame, layered blanket and pillow.
+    const bed=(x,y,blanket,pillow)=>{
+      ctx.fillStyle='#38232c';ctx.fillRect(x-2,y+2,31,32);
+      ctx.fillStyle='#9a6044';ctx.fillRect(x,y,27,29);
+      ctx.fillStyle='#e1b477';ctx.fillRect(x+2,y+2,23,25);
+      ctx.fillStyle=blanket;ctx.fillRect(x+3,y+9,21,17);
+      ctx.fillStyle='#fff0cf';ctx.fillRect(x+4,y+3,19,6);
+      ctx.fillStyle=pillow;ctx.fillRect(x+7,y+4,13,4);
+      ctx.fillStyle='rgba(255,255,255,.32)';ctx.fillRect(x+4,y+10,2,13);
+      ctx.fillStyle='rgba(35,20,29,.25)';ctx.fillRect(x+22,y+11,2,13);
+      ctx.fillStyle='#6a3e35';ctx.fillRect(x+1,y+27,3,4);ctx.fillRect(x+23,y+27,3,4);
+    };
+    bed(40,35,'#557b57','#f4d8b4');
+    bed(205,34,'#758d59','#f4d8b4');
 
-    // Bathroom: tiled floor, bath, sink counter and toilet.
-    ctx.fillStyle = '#788d83'; ctx.fillRect(181, 137, 97, 76);
-    ctx.fillStyle = '#9eb0a0';
-    for (let y = 139; y < 211; y += 12) for (let x = 183 + ((y / 12) % 2) * 6; x < 278; x += 24) {
-      ctx.strokeStyle = 'rgba(53,75,68,0.35)'; ctx.strokeRect(x, y, 23, 11);
+    // Bedside drawers and lamps.
+    const dresser=(x,y)=>{
+      ctx.fillStyle='#38232c';ctx.fillRect(x-1,y+2,19,21);
+      ctx.fillStyle='#c27f68';ctx.fillRect(x,y,17,19);
+      ctx.fillStyle='#f0b1a1';ctx.fillRect(x+2,y+2,13,5);
+      ctx.fillStyle='#8a4d4b';ctx.fillRect(x+2,y+9,13,8);
+      ctx.fillStyle='#e7c18a';ctx.fillRect(x+8,y+11,2,2);
+      ctx.fillStyle='#4a3035';ctx.fillRect(x+2,y+19,3,3);ctx.fillRect(x+12,y+19,3,3);
+    };
+    dresser(70,43); dresser(250,43);
+
+    // Living-room bookcases with individual coloured book spines.
+    const bookshelf=(x,y)=>{
+      ctx.fillStyle='#38232c';ctx.fillRect(x-2,y+2,29,34);
+      ctx.fillStyle='#744532';ctx.fillRect(x,y,25,31);
+      ctx.fillStyle='#bd8750';ctx.fillRect(x+1,y+1,23,3);
+      for(let row=0;row<3;row++){
+        ctx.fillStyle='#4b302b';ctx.fillRect(x+2,y+5+row*8,21,6);
+        const colors=['#b95d50','#5d7b9b','#d2a34e','#63835d','#a77aab'];
+        for(let k=0;k<5;k++){
+          ctx.fillStyle=colors[(k+row*2)%colors.length];
+          ctx.fillRect(x+3+k*4,y+5+row*8,3,5);
+        }
+        ctx.fillStyle='#d5a36a';ctx.fillRect(x+1,y+11+row*8,23,1);
+      }
+      ctx.fillStyle='#d7a76d';ctx.fillRect(x+1,y+29,23,2);
+    };
+    bookshelf(194,39); bookshelf(257,39);
+
+    // A low tea table, two stools and potted plants in the upper sitting room.
+    ctx.fillStyle='#432b31';ctx.fillRect(224,51,24,15);
+    ctx.fillStyle='#9a5b40';ctx.fillRect(222,49,26,13);
+    ctx.fillStyle='#d29a61';ctx.fillRect(224,51,22,9);
+    ctx.fillStyle='#f0d19a';ctx.fillRect(232,54,6,4);
+    ctx.fillStyle='#6a4035';ctx.fillRect(226,62,3,5);ctx.fillRect(241,62,3,5);
+    const plant=(x,y)=>{
+      ctx.fillStyle='#513039';ctx.fillRect(x+3,y+10,10,8);
+      ctx.fillStyle='#b97858';ctx.fillRect(x+4,y+9,8,7);
+      ctx.fillStyle='#547d49';ctx.fillRect(x+7,y+2,3,9);
+      ctx.fillStyle='#78a65a';ctx.fillRect(x+2,y+4,6,4);ctx.fillRect(x+9,y+1,6,4);
+      ctx.fillStyle='#9bc56a';ctx.fillRect(x+4,y+3,3,2);ctx.fillRect(x+11,y,3,2);
+    };
+    plant(185,53); plant(277,53);
+
+    // Hallway wall lamps, framed pictures and a small clock.
+    const window=(x,y)=>{
+      ctx.fillStyle='#4a2b35';ctx.fillRect(x-2,y-2,17,17);
+      ctx.fillStyle='#f2c875';ctx.fillRect(x,y,13,13);
+      ctx.fillStyle='#f8e4a1';ctx.fillRect(x+2,y+2,9,9);
+      ctx.fillStyle='#d65f58';ctx.fillRect(x-2,y-2,2,17);ctx.fillRect(x+13,y-2,2,17);
+      ctx.fillStyle='#a35a48';ctx.fillRect(x+5,y,2,13);ctx.fillRect(x,y+5,13,2);
+    };
+    window(118,28); window(145,28);
+    window(218,28);
+    ctx.fillStyle='#4b2e32';ctx.fillRect(108,88,16,18);
+    ctx.fillStyle='#d5a36a';ctx.fillRect(110,90,12,14);
+    ctx.fillStyle='#f2e2b6';ctx.fillRect(112,92,8,10);
+    ctx.fillStyle='#493039';ctx.fillRect(115,96,2,2);
+    ctx.fillStyle='#f2d18a';ctx.fillRect(151,91,6,9);
+    ctx.fillStyle='#fff0bd';ctx.fillRect(153,92,2,5);
+
+    // Kitchen: long counter run, sink, stove, fridge, table and chairs.
+    ctx.fillStyle='#51333a';ctx.fillRect(80,135,70,28);
+    ctx.fillStyle='#9a6044';ctx.fillRect(82,136,66,24);
+    ctx.fillStyle='#d6a06b';ctx.fillRect(82,136,66,4);
+    ctx.fillStyle='#744535';ctx.fillRect(84,141,62,16);
+    ctx.fillStyle='#c58b5c';ctx.fillRect(86,143,18,12);ctx.fillRect(108,143,16,12);ctx.fillRect(128,143,16,12);
+    ctx.fillStyle='#e8c38e';ctx.fillRect(88,145,14,2);ctx.fillRect(110,145,12,2);ctx.fillRect(130,145,12,2);
+    // sink basin
+    ctx.fillStyle='#543f43';ctx.fillRect(86,137,19,14);
+    ctx.fillStyle='#a9c6bd';ctx.fillRect(88,139,15,10);
+    ctx.fillStyle='#5c8790';ctx.fillRect(90,141,11,6);
+    ctx.fillStyle='#d5e8d9';ctx.fillRect(94,138,3,2);
+    // stove and burners
+    ctx.fillStyle='#463039';ctx.fillRect(119,136,24,22);
+    ctx.fillStyle='#c8b9a1';ctx.fillRect(121,138,20,17);
+    ctx.fillStyle='#40333a';ctx.fillRect(124,140,5,5);ctx.fillRect(133,140,5,5);
+    ctx.fillStyle='#9a7d65';ctx.fillRect(125,141,3,3);ctx.fillRect(134,141,3,3);
+    ctx.fillStyle='#f2d28c';ctx.fillRect(124,150,14,2);
+    // pantry and fridge
+    ctx.fillStyle='#4a3035';ctx.fillRect(37,137,25,39);
+    ctx.fillStyle='#b9c4bd';ctx.fillRect(39,139,21,35);
+    ctx.fillStyle='#dce2d5';ctx.fillRect(41,141,17,30);
+    ctx.fillStyle='#809b91';ctx.fillRect(55,149,2,4);
+    ctx.fillStyle='#d1a16b';ctx.fillRect(39,137,21,3);
+    // kitchen table
+    ctx.fillStyle='#4b2d31';ctx.fillRect(89,177,34,28);
+    ctx.fillStyle='#a56b46';ctx.fillRect(91,176,30,23);
+    ctx.fillStyle='#d4a06b';ctx.fillRect(93,178,26,17);
+    ctx.fillStyle='#e6bd7c';ctx.fillRect(95,180,22,2);
+    ctx.fillStyle='#744431';ctx.fillRect(94,198,4,7);ctx.fillRect(114,198,4,7);
+    // stools
+    for(const [x,y] of [[79,184],[127,184]]){
+      ctx.fillStyle='#4b2d31';ctx.fillRect(x,y,13,13);
+      ctx.fillStyle='#b57a4f';ctx.fillRect(x+1,y+1,11,9);
+      ctx.fillStyle='#e0b777';ctx.fillRect(x+3,y+3,7,2);
     }
-    ctx.fillStyle = '#49352c'; ctx.fillRect(190, 140, 75, 20);
-    ctx.fillStyle = '#e4e0cf'; ctx.fillRect(193, 142, 69, 15);
-    ctx.fillStyle = '#9cc5c1'; ctx.fillRect(197, 145, 61, 9);
-    ctx.fillStyle = '#d8e6df'; ctx.fillRect(200, 146, 55, 3);
-    drawInteriorSprite(14, 10, 2, 2, 221, 168);
-    ctx.fillStyle = '#d8d3c4'; ctx.fillRect(187, 173, 20, 22);
-    ctx.fillStyle = '#f2eee1'; ctx.fillRect(190, 176, 14, 15);
-    ctx.fillStyle = '#a4c5bf'; ctx.fillRect(193, 179, 8, 8);
-    ctx.fillStyle = '#e4c48d'; ctx.fillRect(188, 198, 22, 7);
-    ctx.fillStyle = '#6c4940'; ctx.fillRect(215, 199, 43, 7);
 
-    // Small shared hallway details: wall hooks, a framed family picture and a runner.
-    ctx.fillStyle = '#5b392b'; ctx.fillRect(178, 106, 92, 5);
-    ctx.fillStyle = '#bd8752'; ctx.fillRect(181, 107, 86, 2);
-    ctx.fillStyle = '#4c3028'; ctx.fillRect(187, 108, 13, 10);
-    ctx.fillStyle = '#d8bd83'; ctx.fillRect(189, 110, 9, 6);
-    ctx.fillStyle = '#6e9c83'; ctx.fillRect(191, 111, 5, 4);
-    ctx.fillStyle = '#795039'; ctx.fillRect(235, 107, 24, 10);
-    ctx.fillStyle = '#c18a54'; ctx.fillRect(238, 109, 18, 6);
-    // Wall window, picture frame and a hanging lantern.
-    ctx.fillStyle = '#57372b'; ctx.fillRect(70, 32, 25, 15);
-    ctx.fillStyle = '#86b5c0'; ctx.fillRect(73, 35, 19, 9);
-    ctx.fillStyle = '#d8e8d9'; ctx.fillRect(74, 36, 5, 3);
-    ctx.fillStyle = '#5a392b'; ctx.fillRect(82, 35, 2, 9); ctx.fillRect(73, 39, 19, 2);
-    ctx.fillStyle = '#4c3028'; ctx.fillRect(116, 33, 15, 17);
-    ctx.fillStyle = '#d8bd83'; ctx.fillRect(119, 36, 9, 11);
-    ctx.fillStyle = '#6e9c83'; ctx.fillRect(121, 38, 5, 6);
-    ctx.fillStyle = '#4a3028'; ctx.fillRect(263, 32, 9, 12);
-    ctx.fillStyle = '#f3d17c'; ctx.fillRect(265, 35, 5, 6);
+    // Washroom: tiled floor, bathtub, washbasin and toilet.
+    for(let y=135;y<214;y+=12) for(let x=182;x<289;x+=13){
+      ctx.fillStyle=((x+y)/13)%2<1?'#82968b':'#91a398';ctx.fillRect(x,y,12,11);
+      ctx.fillStyle='rgba(54,70,64,.35)';ctx.fillRect(x,y+10,12,1);
+    }
+    ctx.fillStyle='#4a3035';ctx.fillRect(191,137,81,25);
+    ctx.fillStyle='#d4d5c5';ctx.fillRect(194,139,75,20);
+    ctx.fillStyle='#a6c8c2';ctx.fillRect(198,142,67,14);
+    ctx.fillStyle='#d9e8df';ctx.fillRect(201,144,61,9);
+    ctx.fillStyle='#7fa8a7';ctx.fillRect(204,146,55,5);
+    // bath taps
+    ctx.fillStyle='#f0d28a';ctx.fillRect(202,140,3,3);ctx.fillRect(258,140,3,3);
+    // washbasin
+    ctx.fillStyle='#4b3036';ctx.fillRect(208,174,23,20);
+    ctx.fillStyle='#d9dfd1';ctx.fillRect(210,174,19,15);
+    ctx.fillStyle='#9fc4bf';ctx.fillRect(213,177,13,9);
+    ctx.fillStyle='#e8eee0';ctx.fillRect(217,174,4,2);
+    // toilet
+    ctx.fillStyle='#4b3036';ctx.fillRect(248,174,25,24);
+    ctx.fillStyle='#d8d8c8';ctx.fillRect(251,176,19,19);
+    ctx.fillStyle='#f0eee0';ctx.fillRect(253,178,15,13);
+    ctx.fillStyle='#8eb5b3';ctx.fillRect(256,181,9,7);
+    ctx.fillStyle='#b3c9be';ctx.fillRect(254,174,13,3);
 
-    // Front entrance threshold and door at the bottom, kept clear for interaction.
-    ctx.fillStyle = '#39241f'; ctx.fillRect(143, 211, 34, 13);
-    ctx.fillStyle = '#875238'; ctx.fillRect(147, 212, 26, 10);
-    ctx.fillStyle = '#c18a55'; ctx.fillRect(151, 213, 18, 2);
-    ctx.fillStyle = '#edc56d'; ctx.fillRect(168, 217, 2, 2);
+    // Small decorations: hanging herbs, towels, flowers and a laundry basket.
+    ctx.fillStyle='#5c8547';ctx.fillRect(155,137,2,11);ctx.fillRect(160,139,2,9);
+    ctx.fillStyle='#9bb85e';ctx.fillRect(152,139,5,3);ctx.fillRect(159,141,5,3);
+    ctx.fillStyle='#d7a36c';ctx.fillRect(184,178,3,20);
+    ctx.fillStyle='#e7d2ad';ctx.fillRect(182,181,7,11);
+    ctx.fillStyle='#b36b61';ctx.fillRect(183,185,5,4);
+    ctx.fillStyle='#a56a45';ctx.fillRect(265,202,17,11);
+    ctx.fillStyle='#d8ad71';ctx.fillRect(267,204,13,7);
+    ctx.fillStyle='#e8c98f';ctx.fillRect(269,205,9,2);
 
-    // Draw the kid using the same walk cycle as the overworld sprite.
-    const oldFacing = player.facing, oldMoving = player.moving, oldWalk = player.walk;
-    player.facing = interiorPlayer.facing;
-    player.moving = interiorPlayer.moving;
-    player.walk = interiorPlayer.walk;
-    drawPlayer(Math.round(interiorPlayer.x - 8), Math.round(interiorPlayer.y - 8));
-    player.facing = oldFacing; player.moving = oldMoving; player.walk = oldWalk;
+    // Long, open entry corridor runs from the front door to the main hallway.
+    ctx.fillStyle='#8d543d';ctx.fillRect(39,128,30,87);
+    ctx.fillStyle='#d59b60';ctx.fillRect(42,130,24,83);
+    for(let y=132;y<212;y+=9){
+      ctx.fillStyle='#f0c17d';ctx.fillRect(42,y,24,2);
+      ctx.fillStyle='#a76a48';ctx.fillRect(42,y+7,24,2);
+    }
+    ctx.fillStyle='#4a2b35';ctx.fillRect(38,211,34,12);
+    ctx.fillStyle='#b9784d';ctx.fillRect(42,212,26,8);
+    ctx.fillStyle='#f1ce83';ctx.fillRect(46,213,18,2);
 
-    // Exit prompt.
-    if (Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 190) < 24) {
-      ctx.fillStyle = 'rgba(15,12,24,0.94)'; ctx.fillRect(128, 170, 64, 14);
-      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(128.5, 170.5, 63, 13);
-      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center'; ctx.fillText('[ E ] OUTSIDE', 160, 180);
+    // Draw the player with the exact same animation state as the overworld.
+    const oldFacing=player.facing, oldMoving=player.moving, oldWalk=player.walk;
+    player.facing=interiorPlayer.facing;
+    player.moving=interiorPlayer.moving;
+    player.walk=interiorPlayer.walk;
+    drawPlayer(Math.round(interiorPlayer.x-8),Math.round(interiorPlayer.y-8));
+    player.facing=oldFacing; player.moving=oldMoving; player.walk=oldWalk;
+
+    // Exit prompt at the bottom of the long entrance passage.
+    if(Math.hypot(interiorPlayer.x-55,interiorPlayer.y-207)<24){
+      ctx.fillStyle='rgba(15,12,24,.94)';ctx.fillRect(26,184,58,14);
+      ctx.strokeStyle='#f4d27b';ctx.strokeRect(26.5,184.5,57,13);
+      ctx.fillStyle='#fff0bd';ctx.font='bold 7px monospace';ctx.textAlign='center';
+      ctx.fillText('[ E ] OUTSIDE',55,194);
     }
   }
 
@@ -782,8 +896,8 @@ const Overworld = (() => {
       const nx = oldX + ix * speed * dt;
       const ny = oldY + iy * speed * dt;
       // Resolve each axis separately so hallways stay open and the player can slide along furniture.
-      if (nx > 48 && nx < 272 && !interiorBlocked(nx, oldY)) interiorPlayer.x = nx;
-      if (ny > 53 && ny < 187 && !interiorBlocked(interiorPlayer.x, ny)) interiorPlayer.y = ny;
+      if (nx > 31 && nx < 289 && !interiorBlocked(nx, oldY)) interiorPlayer.x = nx;
+      if (ny > 28 && ny < 213 && !interiorBlocked(interiorPlayer.x, ny)) interiorPlayer.y = ny;
       interiorPlayer.moving = Math.abs(interiorPlayer.x - oldX) > 0.01 || Math.abs(interiorPlayer.y - oldY) > 0.01;
       if (interiorPlayer.moving) interiorPlayer.walk += dt * (keys.has('shift') ? 15 : 10);
       return;
@@ -991,7 +1105,7 @@ const Overworld = (() => {
 
   function interact() {
     if (insideHouse) {
-      if (Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 190) < 28) {
+      if (Math.hypot(interiorPlayer.x - 55, interiorPlayer.y - 207) < 28) {
         insideHouse = false;
         player.x = HOUSE_DOOR.x;
         player.y = HOUSE.y + 85;
@@ -1006,8 +1120,8 @@ const Overworld = (() => {
     }
     if (Math.hypot(player.x - HOUSE_DOOR.x, player.y - HOUSE_DOOR.y) < 39) {
       insideHouse = true;
-      interiorPlayer.x = 160;
-      interiorPlayer.y = 174;
+      interiorPlayer.x = 55;
+      interiorPlayer.y = 194;
       interiorPlayer.moving = false;
       interiorPlayer.walk = 0;
       keys.clear();
@@ -1047,7 +1161,7 @@ const Overworld = (() => {
     // Reset the slot to a clean starting state before applying saved values.
     player.x = SPAWN.x * TILE; player.y = SPAWN.y * TILE; player.facing = 'down';
     insideHouse = false;
-    interiorPlayer.x = 160; interiorPlayer.y = 174; interiorPlayer.facing = 'up'; interiorPlayer.moving = false; interiorPlayer.walk = 0;
+    interiorPlayer.x = 55; interiorPlayer.y = 194; interiorPlayer.facing = 'up'; interiorPlayer.moving = false; interiorPlayer.walk = 0;
     inventory.berries = 3; inventory.wood = 0; inventory.fish = 0;
     Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0 });
     stepDistance = 0;
@@ -1091,8 +1205,8 @@ const Overworld = (() => {
     }
     insideHouse = saveData.insideHouse === true;
     if (insideHouse) {
-      if (Number.isFinite(saveData.interiorX)) interiorPlayer.x = clamp(saveData.interiorX, 48, 272);
-      if (Number.isFinite(saveData.interiorY)) interiorPlayer.y = clamp(saveData.interiorY, 55, 187);
+      if (Number.isFinite(saveData.interiorX)) interiorPlayer.x = clamp(saveData.interiorX, 31, 289);
+      if (Number.isFinite(saveData.interiorY)) interiorPlayer.y = clamp(saveData.interiorY, 28, 213);
       if (['up', 'down', 'left', 'right'].includes(saveData.interiorFacing)) interiorPlayer.facing = saveData.interiorFacing;
       if (Number.isFinite(saveData.interiorWalk)) interiorPlayer.walk = saveData.interiorWalk;
     }
