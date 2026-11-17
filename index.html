@@ -188,8 +188,7 @@ async function enterAccountAction(index) {
 
 async function syncCloudSlot(slot) {
   if (!cloudSession) return null;
-  try { return await loadCloudSlot(slot); }
-  catch (error) { message = 'Cloud save unavailable: ' + error.message; return null; }
+  return await loadCloudSlot(slot);
 }
 
 function readSlot(slot) {
@@ -215,13 +214,18 @@ async function enterWorld(slot) {
   message = cloudSession ? 'LOADING CLOUD SAVE...' : '';
   let save = readSlot(activeSlot);
   if (cloudSession) {
-    // A signed-in player's empty cloud slot must never inherit another account's local save.
-    const cloudSave = await syncCloudSlot(activeSlot);
-    save = cloudSave;
+    // Never start with a local fallback when cloud loading fails: it could overwrite a real cloud save.
     try {
-      if (cloudSave) localStorage.setItem(SAVE_KEY + activeSlot, JSON.stringify(cloudSave));
-      else localStorage.removeItem(SAVE_KEY + activeSlot);
-    } catch {}
+      const cloudSave = await syncCloudSlot(activeSlot);
+      save = cloudSave;
+      try {
+        if (cloudSave) localStorage.setItem(SAVE_KEY + activeSlot, JSON.stringify(cloudSave));
+        else localStorage.removeItem(SAVE_KEY + activeSlot);
+      } catch {}
+    } catch (error) {
+      message = 'CLOUD LOAD FAILED: ' + error.message;
+      return;
+    }
   }
   inWorld = true;
   Overworld.init(canvas, exitWorld, save, saveActiveSlot);
