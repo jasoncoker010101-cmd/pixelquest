@@ -8,7 +8,7 @@ const Overworld = (() => {
   const SPAWN = { x: 20, y: 15 };
   const GAME_KEYS = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'];
 
-  let canvas, ctx, onExit, map = [];
+  let canvas, ctx, onExit, onSave, saveTimer = 0, map = [];
   let time = 0;
   let worldClock = 0.28, wolfSpawned = false, wolfNoticeCooldown = 0;
   const wolves = [];
@@ -565,6 +565,11 @@ const Overworld = (() => {
 
   function update(dt) {
     time += dt;
+    saveTimer += dt;
+    if (saveTimer >= 5) {
+      saveTimer = 0;
+      if (onSave) onSave(getSaveData());
+    }
     if (battle) { updateBattle(dt); return; }
     stats.playTime += dt;
     const wasNight = isNight();
@@ -872,10 +877,12 @@ const Overworld = (() => {
 
   function onKeyUp(e) { keys.delete(e.key.toLowerCase()); }
 
-  function init(c, exitCallback, saveData = null) {
+  function init(c, exitCallback, saveData = null, saveCallback = null) {
     canvas = c;
     ctx = canvas.getContext('2d');
     onExit = exitCallback;
+    onSave = saveCallback;
+    saveTimer = 0;
     map = buildMap();
     keys.clear();
     panel = null;
