@@ -132,21 +132,33 @@ const Overworld = (() => {
   }
 
   function interiorBlocked(px, py) {
-    // The player has a small lower-body hitbox, matching the overworld collision shape.
+    // Collision uses the character's feet, not the full sprite, so the head can
+    // visually overlap furniture while the feet remain properly blocked.
     const left = px + 3, right = px + 12, top = py + 9, bottom = py + 15;
-    const obstacles = [
-      // Bedroom furniture
-      [54,55,106,100], [111,58,135,78], [112,86,135,101],
-      [193,57,251,100], [254,45,275,104], [185,96,215,110],
-      // Kitchen counters, pantry, table and stools
-      [47,137,138,161], [43,166,55,204], [102,174,136,196],
-      [96,180,101,189], [138,180,143,189],
-      // Bathroom fixtures
+    const solidRects = [
+      // Timber partitions. The gaps are the actual doorways into each area.
+      [151,31,167,74], [151,107,167,122],
+      [39,124,147,132], [173,124,281,132],
+
+      // Left bedroom: bed, bedside cabinet, and storage chest.
+      [54,55,106,100], [111,58,135,77], [112,86,135,101],
+
+      // Right bedroom: bed, wardrobe, and toy chest.
+      [193,57,251,99], [254,45,275,104], [185,96,215,110],
+
+      // Kitchen: worktop, pantry, jars, table, and stools.
+      [47,137,138,161], [43,166,55,204], [60,167,92,179],
+      [102,174,136,196], [96,180,101,189], [138,180,143,189],
+
+      // Bathroom: bath, washstand, and toilet.
       [190,140,265,160], [221,168,258,190], [187,173,207,195],
-      // Fireplace, couch and low table in the shared space
-      [174,43,198,74], [205,48,247,70], [204,83,236,99]
+
+      // Small wall-mounted hallway decorations.
+      [187,108,200,118], [235,107,259,118]
     ];
-    return obstacles.some(([x1,y1,x2,y2]) => left < x2 && right > x1 && top < y2 && bottom > y1);
+    return solidRects.some(([x1,y1,x2,y2]) =>
+      left < x2 && right > x1 && top < y2 && bottom > y1
+    );
   }
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
@@ -812,13 +824,10 @@ const Overworld = (() => {
       const speed = keys.has('shift') ? 66 : 46;
       const nx = interiorPlayer.x + ix * speed * dt;
       const ny = interiorPlayer.y + iy * speed * dt;
-      // Partition walls have real thickness, with openings left for the doorways.
-      const hitsVerticalWall = nx > 150 && nx < 168 && interiorPlayer.y < 121 &&
-        !(interiorPlayer.y > 73 && interiorPlayer.y < 107);
-      const hitsHorizontalWall = ny > 121 && ny < 134 &&
-        (interiorPlayer.x < 145 || interiorPlayer.x > 175);
-      if (nx > 48 && nx < 272 && !hitsVerticalWall && !interiorBlocked(nx, interiorPlayer.y)) interiorPlayer.x = nx;
-      if (ny > 53 && ny < 187 && !hitsHorizontalWall && !interiorBlocked(interiorPlayer.x, ny)) interiorPlayer.y = ny;
+      // Resolve each axis separately so the player can slide along furniture
+      // and cannot get caught on invisible/overlapping hallway wall checks.
+      if (nx > 48 && nx < 272 && !interiorBlocked(nx, interiorPlayer.y)) interiorPlayer.x = nx;
+      if (ny > 53 && ny < 187 && !interiorBlocked(interiorPlayer.x, ny)) interiorPlayer.y = ny;
       return;
     }
     stats.playTime += dt;
