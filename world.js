@@ -391,30 +391,28 @@ const Overworld = (() => {
   }
 
   function drawPlayer(sx, sy) {
-    const stride = player.moving ? Math.sign(Math.sin(player.walk)) : 0;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-    ctx.fillRect(sx + 4, sy + 14, 8, 2);
-    ctx.fillStyle = '#2d2d4a';
-    ctx.fillRect(sx + 5, sy + 12 + (stride > 0 ? 0 : 1), 2, 2);
-    ctx.fillRect(sx + 9, sy + 12 + (stride < 0 ? 0 : 1), 2, 2);
-    ctx.fillStyle = '#d9572b';
-    ctx.fillRect(sx + 4, sy + 7, 8, 6);
-    ctx.fillStyle = '#f2c89b';
-    ctx.fillRect(sx + 4, sy + 2, 8, 6);
-    ctx.fillStyle = '#4a2c1a';
-    ctx.fillRect(sx + 4, sy + 1, 8, 3);
-    if (player.facing === 'up') {
-      ctx.fillRect(sx + 4, sy + 2, 8, 5);
-    } else {
-      ctx.fillStyle = '#222';
-      if (player.facing === 'down') {
-        ctx.fillRect(sx + 6, sy + 5, 1, 1);
-        ctx.fillRect(sx + 9, sy + 5, 1, 1);
-      } else if (player.facing === 'left') ctx.fillRect(sx + 5, sy + 5, 1, 1);
-      else ctx.fillRect(sx + 10, sy + 5, 1, 1);
+    const stride=player.moving ? Math.sin(player.walk) : 0, a=stride>0?1:0, b=stride<0?1:0;
+    ctx.fillStyle='rgba(0,0,0,0.3)'; ctx.fillRect(sx+2,sy+15,12,2);
+    ctx.fillStyle='#39405a'; ctx.fillRect(sx+4,sy+11+a,3,4-a); ctx.fillRect(sx+9,sy+11+b,3,4-b);
+    ctx.fillStyle='#24283d'; ctx.fillRect(sx+3,sy+14+a,4,2); ctx.fillRect(sx+9,sy+14+b,4,2);
+    ctx.fillStyle='#8f352d'; ctx.fillRect(sx+3,sy+6,10,7);
+    ctx.fillStyle='#d65b3e'; ctx.fillRect(sx+4,sy+6,8,2);
+    ctx.fillStyle='#542b35'; ctx.fillRect(sx+3,sy+11,10,2);
+    ctx.fillStyle='#e2bd68'; ctx.fillRect(sx+7,sy+11,2,2);
+    ctx.fillStyle='#61364a'; ctx.fillRect(sx+2,sy+7,3,5);
+    ctx.fillStyle='#d99b70'; ctx.fillRect(sx+6,sy+4,4,3);
+    ctx.fillStyle='#efc39a'; ctx.fillRect(sx+4,sy+2,8,6); ctx.fillRect(sx+3,sy+4,2,3); ctx.fillRect(sx+11,sy+4,2,3);
+    ctx.fillStyle='#392638'; ctx.fillRect(sx+3,sy+1,10,3); ctx.fillRect(sx+3,sy+2,2,5); ctx.fillRect(sx+11,sy+2,2,4);
+    ctx.fillStyle='#624052'; ctx.fillRect(sx+5,sy,5,2);
+    if(player.facing==='up'){ctx.fillStyle='#392638';ctx.fillRect(sx+3,sy+2,10,6);}
+    else {
+      ctx.fillStyle='#302333';
+      if(player.facing==='down'){ctx.fillRect(sx+6,sy+5,1,1);ctx.fillRect(sx+10,sy+5,1,1);}
+      else if(player.facing==='left'){ctx.fillRect(sx+4,sy+5,1,1);ctx.fillRect(sx+2,sy+4,2,2);}
+      else {ctx.fillRect(sx+11,sy+5,1,1);ctx.fillRect(sx+12,sy+4,2,2);}
     }
+    ctx.fillStyle='#f1d28c'; ctx.fillRect(sx+6,sy+7,4,1);
   }
-
   function update(dt) {
     time += dt;
     stats.playTime += dt;
