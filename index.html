@@ -56,7 +56,7 @@ function readSlot(slot) {
 function slotLabels() {
   return [1, 2, 3].map(n => {
     const save = readSlot(n);
-    return save ? `SLOT ${n} - LEVEL ${save.level || 1}` : `SLOT ${n} - NEW GAME`;
+    return save ? `SLOT ${n} - LEVEL ${(save.stats && save.stats.level) || 1}` : `SLOT ${n} - NEW GAME`;
   }).concat('BACK');
 }
 
@@ -68,7 +68,7 @@ function saveActiveSlot(data) {
 function enterWorld(slot) {
   activeSlot = slot || 1;
   inWorld = true;
-  Overworld.init(canvas, exitWorld, readSlot(activeSlot));
+  Overworld.init(canvas, exitWorld, readSlot(activeSlot), saveActiveSlot);
 }
 
 function exitWorld(data) {
