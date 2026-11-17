@@ -157,7 +157,7 @@ async function signInOrCreate(createAccount) {
 
 async function signOut() {
   try {
-    if (cloudSession) await authRequest('logout', {}).catch(() => {});
+    if (cloudSession) await cloudRequest('/auth/v1/logout', { method: 'POST' }).catch(() => {});
   } finally {
     storeSession(null);
     cloudProfile = null;
@@ -166,6 +166,9 @@ async function signOut() {
 }
 
 async function enterAccountAction(index) {
+  if (cloudSession && !cloudProfile) {
+    try { await loadCloudProfile(); } catch (error) { message = error.message; }
+  }
   if (!cloudSession) {
     if (index === 0) await signInOrCreate(false);
     else if (index === 1) await signInOrCreate(true);
@@ -212,11 +215,13 @@ async function enterWorld(slot) {
   message = cloudSession ? 'LOADING CLOUD SAVE...' : '';
   let save = readSlot(activeSlot);
   if (cloudSession) {
+    // A signed-in player's empty cloud slot must never inherit another account's local save.
     const cloudSave = await syncCloudSlot(activeSlot);
-    if (cloudSave) {
-      save = cloudSave;
-      try { localStorage.setItem(SAVE_KEY + activeSlot, JSON.stringify(cloudSave)); } catch {}
-    }
+    save = cloudSave;
+    try {
+      if (cloudSave) localStorage.setItem(SAVE_KEY + activeSlot, JSON.stringify(cloudSave));
+      else localStorage.removeItem(SAVE_KEY + activeSlot);
+    } catch {}
   }
   inWorld = true;
   Overworld.init(canvas, exitWorld, save, saveActiveSlot);
@@ -501,6 +506,11 @@ function drawScreen() {
     ctx.fillStyle = '#d8c7a5';
     ctx.fillText(cloudSession ? ((cloudProfile && cloudProfile.username) || cloudSession.user.email || 'SIGNED IN') : 'CLOUD SAVES REQUIRE AN ACCOUNT', 160, 98);
     drawMenu();
+    if (message) {
+      ctx.font = '7px monospace';
+      ctx.fillStyle = '#ffd27a';
+      ctx.fillText(message.slice(0, 48), 160, 211);
+    }
   } else if (state.screen === 'settings') {
     ctx.fillText('SETTINGS', 160, 90);
     drawMenu();
