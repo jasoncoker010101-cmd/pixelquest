@@ -76,7 +76,7 @@
     </div>
   </div>
 </div>
-<script src="world.js?v=spacious-house-3"></script>
+<script src="world.js?v=dualsense-controls-1"></script>
 <script>
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -608,7 +608,7 @@ function drawScreen() {
     drawMenu();
     ctx.font = '7px monospace';
     ctx.fillStyle = '#ffd9a0';
-    ctx.fillText('ARROWS / WASD + ENTER   ESC BACK', 160, 228);
+    ctx.fillText('ARROWS / WASD / PS5 CONTROLLER + X', 160, 228);
     return;
   }
   ctx.font = 'bold 12px monospace';
@@ -692,8 +692,58 @@ function drawCRT() {
   ctx.restore();
 }
 
+// Native Gamepad API support for PS5 DualSense and standard controllers.
+const gamepadState = { held: new Set(), repeatAt: new Map(), actions: new Set() };
+window.addEventListener('gamepaddisconnected', () => {
+  gamepadState.held.forEach(key => dispatchPadKey(key, false));
+  gamepadState.held.clear(); gamepadState.repeatAt.clear(); gamepadState.actions.clear();
+});
+function dispatchPadKey(key, down, repeat = false) {
+  window.dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', {
+    key, code: key.startsWith('Arrow') ? key : key === 'Shift' ? 'ShiftLeft' : '',
+    bubbles: true, cancelable: true, repeat
+  }));
+}
+function pollGamepad(now) {
+  if (!navigator.getGamepads) return;
+  const pads = navigator.getGamepads();
+  let pad = null;
+  for (let i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) { pad = pads[i]; break; }
+  if (!pad) return;
+  const pressed = i => !!(pad.buttons[i] && pad.buttons[i].pressed);
+  const ax = pad.axes && Number.isFinite(pad.axes[0]) ? pad.axes[0] : 0;
+  const ay = pad.axes && Number.isFinite(pad.axes[1]) ? pad.axes[1] : 0;
+  const next = new Set();
+  if (pressed(14) || ax < -0.38) next.add('ArrowLeft');
+  if (pressed(15) || ax > 0.38) next.add('ArrowRight');
+  if (pressed(12) || ay < -0.38) next.add('ArrowUp');
+  if (pressed(13) || ay > 0.38) next.add('ArrowDown');
+  if (pressed(4)) next.add('Shift');
+  for (const key of gamepadState.held) {
+    if (!next.has(key)) { dispatchPadKey(key, false); gamepadState.repeatAt.delete(key); }
+  }
+  for (const key of next) {
+    if (!gamepadState.held.has(key)) {
+      dispatchPadKey(key, true); gamepadState.repeatAt.set(key, now + 280);
+    } else if (!inWorld && key.startsWith('Arrow') && now >= (gamepadState.repeatAt.get(key) || 0)) {
+      dispatchPadKey(key, true, true); gamepadState.repeatAt.set(key, now + 145);
+    }
+  }
+  gamepadState.held = next;
+  const actions = [[0,'primary'],[1,'back'],[2,'inventory'],[3,'stats'],[5,'night']];
+  for (const [button, action] of actions) {
+    const down = pressed(button), wasDown = gamepadState.actions.has(button);
+    if (down && !wasDown) {
+      if (inWorld) Overworld.controllerAction(action);
+      else if (action === 'primary') activate();
+      else if (action === 'back') back();
+    }
+    if (down) gamepadState.actions.add(button); else gamepadState.actions.delete(button);
+  }
+}
+
 function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000);
+  pollGamepad(now);\n  const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   t += dt;
   if (inWorld) {
