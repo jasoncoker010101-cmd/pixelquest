@@ -18,7 +18,7 @@
       height: 720px;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
-      background: #000;
+      cursor: pointer;
     }
   </style>
 </head>
@@ -28,12 +28,19 @@
   <script>
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
     const W = 320, H = 240;
 
-    let started = false;
     let t = 0;
+    let screen = 'title';
+    let sel = 0;
+    let message = '';
+    let music = true;
+    let sound = true;
 
-    // Deterministic grass blades so the field looks the same every frame
+    const BTN_X = 85, BTN_W = 150, BTN_H = 20, BTN_Y0 = 100, BTN_GAP = 28;
+
+    // Deterministic grass blades
     const blades = [];
     let seed = 42;
     function rand() {
@@ -48,13 +55,92 @@
       });
     }
 
-    // Each cloud: [x, y, speed]
     const clouds = [
       [20, 30, 0.08],
       [150, 18, 0.05],
       [240, 44, 0.07]
     ];
 
+    // ---------- Geometry helpers for building the horse sprite ----------
+    function distToSeg(px, py, x1, y1, x2, y2) {
+      const dx = x2 - x1, dy = y2 - y1;
+      let u = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy);
+      u = Math.max(0, Math.min(1, u));
+      const qx = x1 + u * dx - px, qy = y1 + u * dy - py;
+      return Math.sqrt(qx * qx + qy * qy);
+    }
+    // Capsule: [x1, y1, x2, y2, radius] - a thick line with rounded ends
+    function inCap(px, py, c) {
+      return distToSeg(px, py, c[0], c[1], c[2], c[3]) <= c[4];
+    }
+    // Ellipse: [cx, cy, rx, ry]
+    function inEll(px, py, e) {
+      const dx = (px - e[0]) / e[2], dy = (py - e[1]) / e[3];
+      return dx * dx + dy * dy <= 1;
+    }
+
+    const COL = {
+      base:  [139, 90, 43],
+      shade: [106, 66, 32],
+      dark:  [43, 26, 14],
+      eye:   [0, 0, 0],
+      hoof:  [30, 18, 10],
+      grass: [108, 192, 74]
+    };
+
+    // Builds a horse sprite (facing left) once, grazing or head-up
+    function makeHorse(grazing) {
+      const SW = 28, SH = 24;
+      const c = document.createElement('canvas');
+      c.width = SW; c.height = SH;
+      const g = c.getContext('2d');
+      const img = g.createImageData(SW, SH);
+      const d = img.data;
+
+      const body = [14, 12, 8.5, 4.5];
+      const legs = [
+        [9, 15, 9, 21, 0.9],
+        [11.5, 15, 11.5, 21, 0.9],
+        [17.5, 15, 17.5, 21, 0.9],
+        [20, 15, 20, 21, 0.9]
+      ];
+      const tail = [22.5, 9, 25, 17, 1.2];
+      const neck = grazing ? [8, 10, 3, 15, 2.6] : [8, 10, 5, 4, 2.8];
+      const head = grazing ? [3, 15, 1.5, 20.5, 2.1] : [5, 4, 2, 9.5, 2.2];
+      const mane = grazing ? [7.5, 8.5, 4, 13, 1.1] : [6.5, 3.5, 10, 9.5, 1.2];
+      const ear  = grazing ? [2.6, 14, 2, 12.6, 0.6] : [4.6, 3, 5, 1.2, 0.7];
+      const eye  = grazing ? [2.2, 17.2] : [3.2, 6.6];
+
+      for (let y = 0; y < SH; y++) {
+        for (let x = 0; x < SW; x++) {
+          const px = x + 0.5, py = y + 0.5;
+          let col = null;
+
+          if (inCap(px, py, tail)) col = COL.dark;
+          for (const L of legs) {
+            if (inCap(px, py, L)) col = py > 20 ? COL.hoof : COL.base;
+          }
+          if (inEll(px, py, body) || inCap(px, py, neck) || inCap(px, py, head)) {
+            col = py > 13.5 ? COL.shade : COL.base;
+          }
+          if (inCap(px, py, mane)) col = COL.dark;
+          if (inCap(px, py, ear)) col = COL.dark;
+          if (Math.abs(px - eye[0]) < 0.6 && Math.abs(py - eye[1]) < 0.6) col = COL.eye;
+
+          if (col) {
+            const i = (y * SW + x) * 4;
+            d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255;
+          }
+        }
+      }
+      g.putImageData(img, 0, 0);
+      return c;
+    }
+
+    const horseStand = makeHorse(false);
+    const horseGraze = makeHorse(true);
+
+    // ---------- Drawing helpers ----------
     function r(x, y, w, h, color) {
       ctx.fillStyle = color;
       ctx.fillRect(Math.round(x), Math.round(y), w, h);
@@ -71,6 +157,13 @@
       r(x + 4, y - 3, 10, 3, '#ffffff');
       r(x + 16, y - 2, 6, 2, '#ffffff');
       r(x, y + 5, 22, 1, '#d6ecf7');
+    }
+
+    function drawClouds() {
+      for (const c of clouds) {
+        const x = ((c[0] + t * c[2]) % (W + 40)) - 30;
+        drawCloud(x, c[1]);
+      }
     }
 
     function drawHills() {
@@ -92,96 +185,158 @@
       }
     }
 
-    // Horse facing left, grazing when `grazing` is true
-    function drawHorse(x, y, body, dark, grazing) {
-      // Legs
-      r(x + 1, y + 7, 2, 6, dark);
-      r(x + 4, y + 7, 2, 6, dark);
-      r(x + 11, y + 7, 2, 6, dark);
-      r(x + 14, y + 7, 2, 6, dark);
-      // Body
-      r(x, y, 18, 7, body);
-      // Tail
-      r(x + 18, y - 1, 3, 4, dark);
-      r(x + 19, y + 3, 2, 3, dark);
-
-      if (grazing) {
-        // Neck and head lowered to the grass
-        r(x - 5, y - 1, 5, 8, body);
-        r(x - 8, y + 5, 6, 4, body);
-        r(x - 4, y - 2, 2, 5, dark);     // mane
-        r(x - 8, y + 6, 1, 1, '#000');   // eye
-        r(x - 10, y + 7, 2, 2, body);    // muzzle touching grass
-        // Mouthful of grass
-        if (Math.floor(t / 15) % 2 === 0) {
-          r(x - 11, y + 9, 1, 2, '#6cc04a');
-          r(x - 12, y + 10, 1, 1, '#6cc04a');
-        }
-      } else {
-        // Head raised
-        r(x - 4, y - 5, 5, 6, body);
-        r(x - 7, y - 9, 5, 5, body);
-        r(x - 4, y - 6, 2, 6, dark);     // mane
-        r(x - 6, y - 7, 1, 1, '#000');   // eye
-      }
-    }
-
     function drawHorses() {
-      const grazing = Math.floor(t / 90) % 2 === 1;
-      // Back row, smaller and darker for depth
-      drawHorse(40, 170, '#7a5a3c', '#4a3322', grazing);
-      drawHorse(120, 166, '#8a6a4a', '#5a4330', !grazing);
-      drawHorse(230, 168, '#6e4e33', '#44301f', grazing);
-      drawHorse(290, 172, '#7a5a3c', '#4a3322', !grazing);
+      // Back row of grazing horses, each on its own cycle
+      const spots = [[18, 160], [96, 164], [210, 159], [262, 163]];
+      spots.forEach(([x, y], i) => {
+        const grazing = (Math.floor(t / 120) + i) % 2 === 1;
+        ctx.drawImage(grazing ? horseGraze : horseStand, x, y);
+        if (grazing && Math.floor(t / 10) % 2 === 0) {
+          r(x - 1, y + 23, 1, 1, '#6cc04a');
+          r(x + 1, y + 24, 1, 1, '#6cc04a');
+        }
+      });
     }
 
-    function drawClouds() {
-      for (const c of clouds) {
-        const x = ((c[0] + t * c[2]) % (W + 40)) - 30;
-        drawCloud(x, c[1]);
+    function drawPanel() {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.fillRect(60, 40, 200, 160);
+    }
+
+    function drawText(str, x, y, size, color, align = 'center') {
+      ctx.font = `bold ${size}px "Courier New", monospace`;
+      ctx.textAlign = align;
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = color;
+      ctx.fillText(str, x, y);
+    }
+
+    // ---------- Menu logic ----------
+    function go(s) {
+      screen = s;
+      sel = 0;
+      message = '';
+    }
+
+    function items() {
+      if (screen === 'title') {
+        return [
+          { label: 'START GAME', run: () => go('slots') },
+          { label: 'SETTINGS', run: () => go('settings') },
+          { label: 'CREDITS', run: () => go('credits') }
+        ];
+      }
+      if (screen === 'slots') {
+        const slots = [1, 2, 3].map(n => ({
+          label: `SLOT ${n} - EMPTY`,
+          run: () => { message = `SLOT ${n} SELECTED. GAME COMING SOON.`; }
+        }));
+        return slots.concat([{ label: 'BACK', run: () => go('title') }]);
+      }
+      if (screen === 'settings') {
+        return [
+          { label: `MUSIC: ${music ? 'ON' : 'OFF'}`, run: () => { music = !music; } },
+          { label: `SOUND: ${sound ? 'ON' : 'OFF'}`, run: () => { sound = !sound; } },
+          { label: 'BACK', run: () => go('title') }
+        ];
+      }
+      return [{ label: 'BACK', run: () => go('title') }];
+    }
+
+    function drawButton(i, label, selected) {
+      const y = BTN_Y0 + i * BTN_GAP;
+      r(BTN_X, y, BTN_W, BTN_H, selected ? '#ffd34d' : '#2a3d1f');
+      r(BTN_X + 2, y + 2, BTN_W - 4, BTN_H - 4, selected ? '#5a4a10' : '#1d2c15');
+      drawText(label, W / 2, y + BTN_H / 2 + 1, 10, selected ? '#ffffff' : '#c8e6a0');
+      if (selected) {
+        drawText('>', BTN_X + 9, y + BTN_H / 2 + 1, 10, '#ffd34d', 'center');
       }
     }
 
-    function drawTitle() {
-      const text = 'PIXELQUEST';
-      ctx.font = 'bold 28px "Courier New", monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      // Drop shadow
-      ctx.fillStyle = '#1a2a10';
-      ctx.fillText(text, W / 2 + 2, 82);
-      ctx.fillStyle = '#ffd34d';
-      ctx.fillText(text, W / 2, 80);
-    }
+    function drawMenu() {
+      drawPanel();
 
-    function drawPrompt() {
-      ctx.font = 'bold 10px "Courier New", monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      if (started) {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText('STARTING...', W / 2, 120);
-      } else if (Math.floor(t / 30) % 2 === 0) {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText('PRESS ENTER TO START', W / 2, 120);
+      if (screen === 'title') {
+        drawText('PIXELQUEST', W / 2 + 2, 62, 26, '#1a2a10');
+        drawText('PIXELQUEST', W / 2, 60, 26, '#ffd34d');
+      } else if (screen === 'slots') {
+        drawText('SELECT SAVE SLOT', W / 2, 60, 14, '#ffd34d');
+      } else if (screen === 'settings') {
+        drawText('SETTINGS', W / 2, 60, 14, '#ffd34d');
+      } else if (screen === 'credits') {
+        drawText('CREDITS', W / 2, 52, 14, '#ffd34d');
+        drawText('PIXELQUEST', W / 2, 70, 10, '#ffffff');
+        drawText('MADE BY JASON COKER', W / 2, 82, 9, '#c8e6a0');
+        drawText('THANKS FOR PLAYING', W / 2, 92, 9, '#c8e6a0');
+      }
+
+      const list = items();
+      list.forEach((item, i) => drawButton(i, item.label, i === sel));
+
+      if (message) {
+        drawText(message, W / 2, 214, 8, '#ffffff');
       }
     }
 
+    function hitIndex(mx, my) {
+      const n = items().length;
+      for (let i = 0; i < n; i++) {
+        const y = BTN_Y0 + i * BTN_GAP;
+        if (mx >= BTN_X && mx <= BTN_X + BTN_W && my >= y && my <= y + BTN_H) return i;
+      }
+      return -1;
+    }
+
+    function toCanvas(e) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left) * W / rect.width,
+        y: (e.clientY - rect.top) * H / rect.height
+      };
+    }
+
+    canvas.addEventListener('mousemove', (e) => {
+      const p = toCanvas(e);
+      const i = hitIndex(p.x, p.y);
+      if (i >= 0) sel = i;
+    });
+
+    canvas.addEventListener('click', (e) => {
+      const p = toCanvas(e);
+      const i = hitIndex(p.x, p.y);
+      if (i >= 0) {
+        sel = i;
+        items()[i].run();
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      const n = items().length;
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        sel = (sel - 1 + n) % n;
+        e.preventDefault();
+      } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        sel = (sel + 1) % n;
+        e.preventDefault();
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        items()[sel].run();
+        e.preventDefault();
+      } else if (e.key === 'Escape' && screen !== 'title') {
+        go('title');
+      }
+    });
+
+    // ---------- Main loop ----------
     function frame() {
       t++;
       drawSky();
       drawClouds();
       drawHills();
-      drawHorses();
       drawField();
-      drawTitle();
-      drawPrompt();
+      drawHorses();
+      drawMenu();
       requestAnimationFrame(frame);
     }
-
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') started = true;
-    });
 
     frame();
   </script>
