@@ -293,7 +293,7 @@ function activate() {
   else if (id === 'credits') go('title');
 }
 
-function back() { if (state.screen !== 'title') go('title'); }
+function back() { if (state.screen === 'deleteConfirm') go('slots'); else if (state.screen !== 'title') go('title'); }
 
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
