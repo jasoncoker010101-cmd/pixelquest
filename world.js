@@ -1291,5 +1291,24 @@ const Overworld = (() => {
     keys.clear();
   }
 
-  return { init, update, draw, stop };
+  function controllerAction(action) {
+    if (battle) {
+      if (action === 'primary') battleAction('fight');
+      else if (action === 'back') battleAction('run');
+      return;
+    }
+    if (action === 'primary') { if (panel) panel = null; else interact(); }
+    else if (action === 'back') {
+      if (panel) panel = null;
+      else { stop(); if (onExit) onExit(getSaveData()); }
+    } else if (action === 'inventory') panel = panel === 'inventory' ? null : 'inventory';
+    else if (action === 'stats') panel = panel === 'stats' ? null : 'stats';
+    else if (action === 'night') {
+      const alreadyNight = isNight();
+      worldClock = 0.80;
+      if (!alreadyNight) { wolves.length = 0; wolfSpawned = false; }
+      notice = 'Night has fallen...'; noticeUntil = time + 2.5;
+    }
+  }
+  return { init, update, draw, stop, controllerAction };
 })();
