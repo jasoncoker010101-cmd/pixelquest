@@ -1,0 +1,27 @@
+name: Preview nature sprites
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "assets/nature/nature free/global.png"
+      - ".github/workflows/preview-nature.yml"
+  workflow_dispatch:
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make enlarged preview
+        run: |
+          python - <<'PY'
+          from PIL import Image
+          im=Image.open("assets/nature/nature free/global.png").convert("RGBA")
+          print("Atlas dimensions:", im.size)
+          im.resize((im.width*6, im.height*6), Image.Resampling.NEAREST).save("nature-preview.png")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nature-preview
+          path: nature-preview.png
