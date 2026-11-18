@@ -1,141 +1,136 @@
-Pixeltopia End User License Agreement
-
+PIXELQUEST — PROPRIETARY LICENSE
 Copyright (c) 2026 Jason Coker. All rights reserved.
 
-1. Definitions
+This license applies only to original materials in the PixelQuest project
+that are owned by the copyright holder ("Project Materials"). It does not
+replace or override the license terms for third-party materials.
 
-"Software" means the Pixeltopia game, including its source code, compiled
-builds, executables, art, pixel sprites, animations, music, sound effects,
-text, maps, levels, designs, documentation, and any other materials in this
-repository or distributed with it.
+1. DEFINITIONS
 
-"Licensor" means Jason Coker.
+"Project" means PixelQuest, including its source code, game, original art,
+sprites, animations, original audio, text, maps, designs, documentation,
+and other original materials made available in this repository.
 
-"You" or "User" means the individual or entity that downloads, installs,
-or plays the Software.
+"Project Materials" means only those portions of the Project that the
+copyright holder owns and is authorized to license.
 
-"Derivative Work" means any work based on, derived from, or incorporating
-any portion of the Software, including modified versions, ports, mods,
-forks, reskins, translations, remixes, and works that adapt the Software's
-code, art, or other content.
+"User" means a person who accesses, downloads, or uses the Project.
 
-"Personal Use" means use by an individual for private, non-commercial
-entertainment, without charge, and without making the Software available
+2. LIMITED PERSONAL PERMISSION
+
+The copyright holder permits the User to access and play the publicly
+available version of the game for personal, non-commercial entertainment.
+
+The User may download a copy of the repository for personal inspection,
+backup, and private experimentation that does not involve distributing,
+publishing, or making the Project or modified Project Materials available
 to others.
 
-2. Grant of License
+This is a limited permission, not a transfer of ownership. No other rights
+are granted unless the copyright holder gives prior written permission.
 
-Subject to the terms of this Agreement, the Licensor grants You a limited,
-non-exclusive, non-transferable, non-sublicensable, revocable license to
-download, install, and play the Software on devices You own or control,
-solely for Personal Use.
+3. RESTRICTIONS
 
-3. Restrictions
+Except where applicable law provides a right that cannot legally be
+restricted, or where the copyright holder gives written permission, the
+User may not:
 
-Except as expressly permitted in Section 2, You may not, and may not allow
-any third party to:
+a. Re-upload, redistribute, mirror, publish, sell, rent, sublicense, or
+   otherwise provide the Project or any Project Materials to others;
 
-a. copy, reproduce, or distribute the Software, in whole or in part, by any
-   means, including uploading it to any website, file host, app store, or
-   peer-to-peer network;
+b. Publish, distribute, or provide modified versions, forks, ports,
+   remakes, translations, reskins, adaptations, or derivative works based
+   on the Project or Project Materials;
 
-b. modify, alter, adapt, translate, or otherwise change the Software;
+c. Copy, extract, reuse, or repurpose Project art, sprites, animations,
+   audio, music, maps, characters, text, designs, or other assets in
+   another game, website, video, product, dataset, or project;
 
-c. create, distribute, or publish any Derivative Work;
+d. Use the Project or Project Materials for commercial purposes, including
+   paid products, advertising, monetized distributions, or services;
 
-d. reverse engineer, decompile, disassemble, or attempt to derive the source
-   code of the Software, except where this restriction is prohibited by
-   applicable law;
+e. Remove, obscure, or alter copyright, attribution, or license notices;
 
-e. remove, alter, or obscure any copyright, trademark, license, or
-   attribution notice contained in the Software;
+f. Claim ownership of the Project or Project Materials, or imply that the
+   copyright holder endorses another work or product;
 
-f. sell, rent, lease, lend, sublicense, or otherwise commercially exploit
-   the Software or any part of it;
+g. Use Project Materials to train, fine-tune, benchmark, or build an AI
+   or machine-learning system or dataset, unless separately authorized;
 
-g. use the Software or its assets to train, test, or develop any machine
-   learning model, artificial intelligence system, or dataset;
+h. Circumvent technical restrictions or access controls for purposes
+   prohibited by this license.
 
-h. extract, rip, or reuse any art, sprite, animation, music, sound, text,
-   or other asset from the Software for use in any other project;
+4. OWNERSHIP AND RESERVED RIGHTS
 
-i. circumvent, disable, or interfere with any security, access control, or
-   technical measure in the Software; or
+The Project Materials are protected by copyright and other applicable
+intellectual-property laws. The copyright holder retains all rights,
+title, and interest in the Project Materials.
 
-j. use the Software in any way that violates applicable law.
+The Project is made available for public viewing and personal play.
+Public access to source code does not mean the source code is open-source
+or that reuse rights are granted. All rights not expressly granted here
+are reserved.
 
-4. Ownership
+5. THIRD-PARTY MATERIALS
 
-The Software is licensed, not sold. The Licensor retains all right, title,
-and interest in and to the Software, including all intellectual property
-rights, whether registered or unregistered. Nothing in this Agreement
-transfers any ownership of the Software to You. All rights not expressly
-granted in this Agreement are reserved by the Licensor.
+The repository may contain assets, code, fonts, tools, or other materials
+created by third parties. Those items are not covered by this license
+unless their owners have expressly authorized it. They remain subject to
+their respective licenses, permissions, and attribution requirements.
+Refer to the asset credits and notices included with the repository.
+If a third-party license grants broader rights, that license governs the
+third-party material to the extent of its terms.
 
-5. Third-Party Components
+6. FEEDBACK
 
-Where the Software includes third-party libraries, fonts, or assets, those
-components remain subject to their own license terms. Such terms are
-identified in accompanying notices or documentation and take precedence
-over this Agreement for those components only.
+If the User voluntarily submits suggestions or feedback, the copyright
+holder may use the feedback to improve or develop the Project without
+payment or obligation, unless the parties agree otherwise in writing.
+Feedback does not transfer ownership of the User's unrelated work.
 
-6. Feedback
+7. CHANGES AND AVAILABILITY
 
-If You provide suggestions, bug reports, ideas, or other feedback about the
-Software, You grant the Licensor a perpetual, irrevocable, royalty-free
-right to use that feedback for any purpose, without obligation to You.
+The Project may change, be discontinued, or become unavailable at any
+time. The copyright holder is not obligated to provide updates, support,
+maintenance, cloud services, or continued hosting.
 
-7. Updates
+8. DISCLAIMER
 
-The Licensor may release updates, patches, or new versions of the Software.
-This Agreement applies to all updates unless a separate agreement is
-provided with the update.
+The Project Materials are provided "AS IS" and "AS AVAILABLE," to the
+maximum extent permitted by applicable law, without warranties of any
+kind, whether express or implied. This includes warranties of
+merchantability, fitness for a particular purpose, title, and
+non-infringement. The copyright holder does not guarantee that the
+Project will be uninterrupted, error-free, secure, or compatible with
+every device or browser.
 
-8. No Warranty
+9. LIMITATION OF LIABILITY
 
-THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE," WITHOUT WARRANTY OF
-ANY KIND, WHETHER EXPRESS, IMPLIED, OR STATUTORY, INCLUDING BUT NOT LIMITED
-TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
-NON-INFRINGEMENT, TITLE, ACCURACY, OR UNINTERRUPTED OR ERROR-FREE
-OPERATION. THE LICENSOR DOES NOT WARRANT THAT THE SOFTWARE WILL MEET YOUR
-REQUIREMENTS OR THAT IT WILL BE FREE OF BUGS, VIRUSES, OR OTHER HARMFUL
-COMPONENTS.
+To the maximum extent permitted by applicable law, the copyright holder
+will not be liable for indirect, incidental, special, consequential,
+exemplary, or punitive damages, or for loss of data, profits, or use,
+arising from access to or use of the Project. Nothing in this license
+excludes liability that applicable law does not permit to be excluded.
 
-9. Limitation of Liability
+10. TERMINATION
 
-TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL THE
-LICENSOR BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL,
-EXEMPLARY, OR PUNITIVE DAMAGES, INCLUDING LOSS OF DATA, LOSS OF PROFITS,
-OR DAMAGE TO DEVICES, ARISING OUT OF OR RELATED TO THE SOFTWARE OR THIS
-AGREEMENT, EVEN IF THE LICENSOR HAS BEEN ADVISED OF THE POSSIBILITY OF
-SUCH DAMAGES. THE LICENSOR'S TOTAL LIABILITY SHALL NOT EXCEED THE AMOUNT,
-IF ANY, PAID BY YOU FOR THE SOFTWARE.
+Permission under this license automatically ends if the User materially
+violates its terms. After termination, the User must stop the uses that
+are no longer permitted and remove copies they are required to remove.
+Termination does not affect rights or obligations that accrued before it.
 
-10. Termination
+11. GENERAL TERMS
 
-This Agreement terminates automatically if You breach any of its terms. Upon
-termination, You must immediately stop using the Software and destroy all
-copies in Your possession or control. Sections 4, 6, 8, 9, 11, and 12
-survive termination.
+If any provision is unenforceable, the remaining provisions will continue
+to apply to the extent permitted by law. Failure to enforce a provision
+does not waive the right to enforce it later. This license is the entire
+license agreement concerning the Project Materials and may be changed by
+the copyright holder for future versions.
 
-11. Governing Law
+12. PERMISSION REQUESTS
 
-This Agreement is governed by the laws of [Your State/Country], without
-regard to its conflict of law principles. Any dispute arising under this
-Agreement shall be resolved in the courts located in [Your State/Country].
+To request permission for use beyond the limited permission above, contact
+the copyright holder through the GitHub repository's owner profile.
 
-12. General
-
-If any provision of this Agreement is held unenforceable, the remaining
-provisions remain in full effect. The failure of the Licensor to enforce any
-right does not waive that right. This Agreement is the entire agreement
-between You and the Licensor regarding the Software and supersedes any prior
-understandings on that subject.
-
-13. Contact
-
-For questions about this Agreement or to request permission beyond the scope
-of this license, contact: [your email address]
-
-By downloading, installing, or playing Pixeltopia, You agree to be bound by
-this Agreement.
+Nothing in this license is intended to limit rights or exceptions granted
+by applicable law.
