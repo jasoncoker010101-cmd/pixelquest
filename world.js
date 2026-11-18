@@ -598,6 +598,21 @@ const Overworld = (() => {
   const HOUSE_DOOR = { x: HOUSE.x + HOUSE.w / 2, y: HOUSE.y + 67 };
   let insideHouse = false;
   const interiorPlayer = { x: 160, y: 174, facing: 'up', moving: false, walk: 0 };
+  const INTERIOR_WALLS = [
+    // Outer room shell and the single front entrance.
+    [12, 12, 296, 14], [12, 24, 14, 194], [294, 24, 14, 194],
+    [12, 218, 133, 12], [175, 218, 133, 12],
+    // Upper bedroom entrances from the central hallway.
+    [130, 25, 10, 25], [130, 78, 10, 34],
+    [180, 25, 10, 25], [180, 78, 10, 34],
+    // Lower rooms: wide open kitchen entrance, single living-room entrance.
+    [130, 128, 10, 20], [130, 196, 10, 22],
+    [180, 128, 10, 28], [180, 186, 10, 32],
+    // Full cross-walls stop rooms connecting directly to one another.
+    [25, 112, 115, 10], [180, 112, 115, 10],
+    // Bathroom has one doorway, opening from the living room.
+    [190, 175, 30, 10], [240, 175, 55, 10]
+  ];
   const interiorArtSheet = new Image();
   let interiorArtReady = false;
   interiorArtSheet.onload = () => { interiorArtReady = true; };
@@ -618,13 +633,13 @@ const Overworld = (() => {
   interiorSheet.onerror = () => { interiorSheetReady = false; };
   interiorSheet.src = pqAsset('./assets/kenney-interior-tilemap.png');
 
-  function drawInteriorSprite(col, row, cols, rows, x, y) {
+  function drawInteriorSprite(col, row, cols, rows, x, y, drawW = cols * 16, drawH = rows * 16) {
     if (!interiorSheetReady) return;
     const sx = col * 17, sy = row * 17;
     const sw = cols * 17 - 1, sh = rows * 17 - 1;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(interiorSheet, sx, sy, sw, sh, x, y, cols * 16, rows * 16);
+    ctx.drawImage(interiorSheet, sx, sy, sw, sh, x, y, drawW, drawH);
     ctx.restore();
   }
 
@@ -740,31 +755,19 @@ const Overworld = (() => {
     const left = px + 3, right = px + 12;
     const top = py + 9, bottom = py + 15;
 
-    // These rectangles match the visible wall segments drawn below. Door gaps
-    // are intentionally omitted so each room remains connected to the hall.
-    const walls = [
-      [12,12,308,25], [12,25,25,218], [295,25,308,218],
-      [12,218,145,230], [175,218,308,230],
-      [130,25,140,49], [130,78,140,112],
-      [180,25,190,49], [180,78,190,112],
-      [130,128,140,156], [130,186,140,218],
-      [180,128,190,156], [180,186,190,218],
-      [25,112,68,122], [100,112,114,122],
-      [206,112,220,122], [252,112,295,122],
-      // A short partition makes a separate bathroom behind the living room.
-      [190,175,220,185], [240,175,295,185]
-    ];
+    // Convert the shared [x,y,width,height] wall layout into collision edges.
+    const walls = INTERIOR_WALLS.map(([x, y, w, h]) => [x, y, x + w, y + h]);
 
     // Collision footprints follow the furniture's outer shadow / base, not
     // arbitrary oversized boxes. The plant is separate from the coffee table.
     const furniture = [
-      // Two bedrooms: separate beds, dressers and bedside furniture.
-      [36,42,83,91], [88,35,118,69], [91,74,118,97],
-      [200,42,244,91], [248,34,280,68], [244,76,274,99],
+      // Two single beds, dressers and bedside furniture.
+      [41,42,74,81], [88,35,118,69], [91,74,118,97],
+      [204,42,237,81], [248,34,280,68], [244,76,274,99],
       // Kitchen furniture and dining set.
       [32,141,56,172], [55,139,123,171], [64,181,113,210],
-      // Living-room seating and shelf. Bathroom fixtures are in the lower alcove.
-      [196,142,244,178], [264,137,294,171], [242,184,290,214]
+      // Living-room seating and shelf. Keep the bathroom doorway clear.
+      [198,139,241,172], [264,137,294,171], [242,184,269,210], [271,184,295,210]
     ];
 
     return walls.concat(furniture).some(([x1, y1, x2, y2]) =>
@@ -933,9 +936,14 @@ const Overworld = (() => {
         break;
       }
       case 'H':
-      case 'D':
-        // The building is drawn as one complete house above the ground tiles.
+      case 'D': {
+        // Continue the forest ground beneath the house instead of exposing
+        // the canvas background as a dark square around the building.
+        if (!drawAtlasSprite(forestTilesSheet, forestTilesReady, 16, 16, 16, 16, px, py, TILE, TILE)) {
+          drawGrass(px, py, h);
+        }
         break;
+      }
       default:
         drawGrass(px, py, h);
     }
@@ -1478,34 +1486,23 @@ const Overworld = (() => {
       ctx.fillStyle = 'rgba(35,18,25,.35)'; ctx.fillRect(x + w - 1, y, 2, h);
     };
 
-    // Strong, continuous outside walls. The front door is centered at the bottom.
-    wallH(12, 12, 296, 14);
-    wallV(12, 24, 194, 14); wallV(294, 24, 194, 14);
-    wallH(12, 218, 133, 12); wallH(175, 218, 133, 12);
-
-    // Central corridor walls with wide openings into each room.
-    wallV(130, 25, 24, 10); wallV(130, 78, 34, 10);
-    wallV(180, 25, 24, 10); wallV(180, 78, 34, 10);
-    wallV(130, 128, 28, 10); wallV(130, 186, 32, 10);
-    wallV(180, 128, 28, 10); wallV(180, 186, 32, 10);
-
-    // Short cross-walls separate front and back rooms, leaving open doorways.
-    wallH(25, 112, 43, 10); wallH(100, 112, 14, 10);
-    wallH(206, 112, 14, 10); wallH(252, 112, 43, 10);
-    // The bathroom is a separate small room at the back of the living room.
-    // Leave a doorway in the partition so the fixtures remain accessible.
-    wallH(190, 175, 30, 10); wallH(240, 175, 55, 10);
+    // Draw exactly the same wall rectangles used by collision detection.
+    // This keeps the hallway entrances consistent and prevents stray gaps.
+    for (const [wx, wy, ww, wh] of INTERIOR_WALLS) {
+      if (ww >= wh) wallH(wx, wy, ww, wh);
+      else wallV(wx, wy, wh, ww);
+    }
 
     // Furniture is drawn from the pixel-art packs already included in the project.
     // Dad's bedroom (upper-left): bed, dresser, bedside table and wall window.
-    drawInteriorArt(16, 48, 47, 49, 39, 42, 40, 43);
+    drawInteriorArt(16, 48, 47, 49, 42, 43, 31, 37);
     drawInteriorArt(336, 38, 50, 57, 88, 35, 30, 34);
     drawInteriorArt(224, 282, 47, 40, 91, 74, 27, 23);
     ctx.fillStyle = '#4b2b35'; ctx.fillRect(82, 25, 37, 19);
     ctx.fillStyle = '#77aeb5'; ctx.fillRect(86, 29, 29, 12);
 
     // Player's bedroom (upper-right): a separate bed, bookcase and bedside table.
-    drawInteriorArt(111, 48, 48, 49, 203, 42, 40, 43);
+    drawInteriorArt(111, 48, 48, 49, 207, 43, 31, 37);
     drawInteriorArt(398, 61, 49, 36, 250, 34, 29, 27);
     drawInteriorArt(224, 282, 47, 40, 246, 76, 27, 23);
 
@@ -1523,13 +1520,8 @@ const Overworld = (() => {
 
     // Bathroom (small separate room at the far end of the lower-right side).
     // Fixtures use the bathroom pieces from the Kenney interior tile atlas.
-    drawInteriorSprite(21, 7, 2, 2, 245, 185);
-    drawInteriorSprite(23, 7, 2, 2, 273, 185);
-    // Hallway details mounted on the wall edges, not in the walking lane.
-    ctx.fillStyle = '#493039'; ctx.fillRect(132, 91, 7, 16);
-    ctx.fillStyle = '#d7ad78'; ctx.fillRect(134, 93, 3, 12);
-    ctx.fillStyle = '#493039'; ctx.fillRect(181, 91, 7, 16);
-    ctx.fillStyle = '#d7ad78'; ctx.fillRect(183, 93, 3, 12);
+    drawInteriorSprite(21, 7, 2, 2, 245, 188, 24, 24);
+    drawInteriorSprite(23, 7, 2, 2, 271, 188, 24, 24);
 
     // Front entrance door at the end of the central hallway.
     ctx.fillStyle = '#503139'; ctx.fillRect(145, 207, 30, 17);
