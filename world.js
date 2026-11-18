@@ -44,9 +44,14 @@ const Overworld = (() => {
       introSoundChar++;
     } catch (_) {}
   }
+  function pqAsset(path) {
+    const revision = window.PQ_REV || 'latest';
+    const separator = path.includes('?') ? '&' : '?';
+    return path + separator + 'pqrev=' + encodeURIComponent(revision);
+  }
   // Use the user's actual uploaded howl recordings from the assets folder.
-  const introWolfHowlAudioOne = new Audio('./assets/first-wolf-howl.mp3');
-  const introWolfHowlAudioTwo = new Audio('./assets/distant-wolf-howl.mp3');
+  const introWolfHowlAudioOne = new Audio(pqAsset('./assets/first-wolf-howl.mp3'));
+  const introWolfHowlAudioTwo = new Audio(pqAsset('./assets/distant-wolf-howl.mp3'));
   introWolfHowlAudioOne.preload = 'auto';
   introWolfHowlAudioTwo.preload = 'auto';
   function playIntroWolfAudio(audio, volume, rate = 1) {
@@ -319,9 +324,9 @@ const Overworld = (() => {
   battleWolfSprite.src = 'https://opengameart.org/sites/default/files/enemies_081719_zp.png';
   // User-provided free werewolf sprites: idle poses converted to compact 48px images.
   const introBlackWerewolf = new Image();
-  introBlackWerewolf.src = './assets/intro-black-werewolf.png?v=packfix-10';
+  introBlackWerewolf.src = './assets/intro-black-werewolf.png';
   const introRedWerewolf = new Image();
-  introRedWerewolf.src = './assets/intro-red-werewolf.png?v=packfix-10';
+  introRedWerewolf.src = './assets/intro-red-werewolf.png';
 
   let camX = 0, camY = 0;
   let panel = null;
@@ -334,7 +339,7 @@ const Overworld = (() => {
   let playerSheetReady = false;
   playerSheet.onload = () => { playerSheetReady = true; };
   playerSheet.onerror = () => { playerSheetReady = false; };
-  playerSheet.src = './assets/player-character3.png';
+  playerSheet.src = pqAsset('./assets/player-character3.png');
 
   const inventory = { berries: 3, wood: 0, fish: 0 };
   const stats = { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0 };
@@ -360,7 +365,7 @@ const Overworld = (() => {
   let interiorSheetReady = false;
   interiorSheet.onload = () => { interiorSheetReady = true; };
   interiorSheet.onerror = () => { interiorSheetReady = false; };
-  interiorSheet.src = './assets/kenney-interior-tilemap.png';
+  interiorSheet.src = pqAsset('./assets/kenney-interior-tilemap.png');
 
   function drawInteriorSprite(col, row, cols, rows, x, y) {
     if (!interiorSheetReady) return;
