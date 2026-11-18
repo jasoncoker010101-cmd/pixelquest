@@ -1000,74 +1000,153 @@ const Overworld = (() => {
   function drawHouse() {
     const x = Math.round(HOUSE.x - camX);
     const y = Math.round(HOUSE.y - camY);
-    // Soft ground shadow hugs the house instead of leaving a large square patch.
-    ctx.fillStyle = 'rgba(20, 14, 12, 0.25)';
+    const cx = x + HOUSE.w / 2;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+
+    // A small, soft shadow keeps the house grounded in the grass.
+    ctx.fillStyle = 'rgba(24, 20, 18, 0.28)';
     ctx.beginPath();
-    ctx.ellipse(x + HOUSE.w / 2, y + 76, HOUSE.w / 2 + 4, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, y + 78, 63, 6, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#6b4933';
-    ctx.fillRect(x + 3, y + 23, HOUSE.w - 6, 56);
 
-    // Warm timber walls
-    ctx.fillStyle = '#d6a35f';
-    ctx.fillRect(x + 8, y + 28, HOUSE.w - 16, 48);
-    ctx.fillStyle = '#f0c77f';
-    ctx.fillRect(x + 12, y + 31, HOUSE.w - 24, 3);
-    ctx.fillStyle = '#9b633b';
-    ctx.fillRect(x + 8, y + 44, HOUSE.w - 16, 3);
-    ctx.fillRect(x + 8, y + 65, HOUSE.w - 16, 3);
-    ctx.fillStyle = '#70432e';
-    ctx.fillRect(x + 12, y + 29, 4, 47);
-    ctx.fillRect(x + HOUSE.w - 20, y + 29, 4, 47);
+    // Chimney is placed behind the roof so it looks built into the house.
+    ctx.fillStyle = '#352d32';
+    ctx.fillRect(x + 82, y - 20, 15, 35);
+    ctx.fillStyle = '#80534a';
+    ctx.fillRect(x + 85, y - 18, 9, 31);
+    ctx.fillStyle = '#a56e59';
+    ctx.fillRect(x + 83, y - 22, 13, 4);
+    ctx.fillStyle = '#594047';
+    ctx.fillRect(x + 87, y - 13, 2, 3);
+    ctx.fillRect(x + 91, y - 6, 2, 3);
 
-    // Gabled roof with layered shingles
-    ctx.fillStyle = '#38233f';
-    ctx.beginPath();
-    ctx.moveTo(x - 8, y + 31);
-    ctx.lineTo(x + HOUSE.w / 2, y - 15);
-    ctx.lineTo(x + HOUSE.w + 8, y + 31);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#65405e';
-    ctx.beginPath();
-    ctx.moveTo(x - 2, y + 27);
-    ctx.lineTo(x + HOUSE.w / 2, y - 9);
-    ctx.lineTo(x + HOUSE.w + 2, y + 27);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#8b5574';
+    // Dark outline and warm timber wall.
+    ctx.fillStyle = '#49352e';
+    ctx.fillRect(x + 7, y + 27, HOUSE.w - 14, 54);
+    ctx.fillStyle = '#bd8954';
+    ctx.fillRect(x + 11, y + 30, HOUSE.w - 22, 46);
+    ctx.fillStyle = '#d9ad70';
+    ctx.fillRect(x + 14, y + 32, HOUSE.w - 28, 5);
+
+    // Broad wooden boards, with darker seams and sturdy corner beams.
     for (let row = 0; row < 4; row++) {
-      const inset = 14 - row * 3;
-      const yy = y + row * 8;
-      ctx.fillRect(x + inset, yy + 2, HOUSE.w - inset * 2, 2);
+      const boardY = y + 40 + row * 9;
+      ctx.fillStyle = row % 2 ? '#c6955e' : '#d0a06a';
+      ctx.fillRect(x + 13, boardY, HOUSE.w - 26, 7);
+      ctx.fillStyle = '#9a6947';
+      ctx.fillRect(x + 13, boardY + 7, HOUSE.w - 26, 1);
     }
-    ctx.fillStyle = '#302039';
-    ctx.fillRect(x - 7, y + 27, HOUSE.w + 14, 5);
+    ctx.fillStyle = '#704a36';
+    ctx.fillRect(x + 12, y + 31, 5, 45);
+    ctx.fillRect(x + HOUSE.w - 17, y + 31, 5, 45);
+    ctx.fillStyle = '#e0b87b';
+    ctx.fillRect(x + 17, y + 35, 2, 37);
+    ctx.fillRect(x + HOUSE.w - 19, y + 35, 2, 37);
 
-    // Chimney
-    ctx.fillStyle = '#78453b';
-    ctx.fillRect(x + HOUSE.w - 29, y - 14, 10, 23);
-    ctx.fillStyle = '#a96552';
-    ctx.fillRect(x + HOUSE.w - 31, y - 16, 14, 4);
-
-    // Windows with bright trim
-    [[x + 19, y + 43], [x + HOUSE.w - 36, y + 43]].forEach(([wx, wy]) => {
-      ctx.fillStyle = '#70432e'; ctx.fillRect(wx - 2, wy - 2, 18, 17);
-      ctx.fillStyle = '#f4d99a'; ctx.fillRect(wx, wy, 14, 13);
-      ctx.fillStyle = '#76b8c5'; ctx.fillRect(wx + 2, wy + 2, 10, 9);
-      ctx.fillStyle = '#d9f0dc'; ctx.fillRect(wx + 3, wy + 3, 3, 2);
-      ctx.fillStyle = '#70432e'; ctx.fillRect(wx + 6, wy, 2, 13); ctx.fillRect(wx, wy + 5, 14, 2);
+    // Low stone foundation ties the cottage into the forest palette.
+    ctx.fillStyle = '#514743';
+    ctx.fillRect(x + 8, y + 72, HOUSE.w - 16, 10);
+    const stones = [
+      [10, 74, 13], [25, 74, 15], [43, 74, 12],
+      [58, 74, 16], [77, 74, 14], [94, 74, 9]
+    ];
+    stones.forEach(([sx, sy, sw], i) => {
+      ctx.fillStyle = i % 2 ? '#95816b' : '#766454';
+      ctx.fillRect(x + sx, y + sy, sw, 5);
+      ctx.fillStyle = '#b09a7b';
+      ctx.fillRect(x + sx + 2, y + sy, Math.max(3, sw - 5), 1);
     });
 
-    // Front door, step, and brass handle
-    const doorX = x + HOUSE.w / 2 - 8;
-    ctx.fillStyle = '#70432e'; ctx.fillRect(doorX - 2, y + 52, 20, 28);
-    ctx.fillStyle = '#8b4f32'; ctx.fillRect(doorX, y + 54, 16, 26);
-    ctx.fillStyle = '#bd8050'; ctx.fillRect(doorX + 2, y + 56, 12, 2);
-    ctx.fillStyle = '#f4d06a'; ctx.fillRect(doorX + 12, y + 67, 2, 2);
-    ctx.fillStyle = '#b18a61'; ctx.fillRect(doorX - 5, y + 79, 26, 4);
-    // Small porch canopy
-    ctx.fillStyle = '#4b304f'; ctx.fillRect(doorX - 7, y + 49, 30, 4);
-    ctx.fillStyle = '#9c6b45'; ctx.fillRect(doorX - 5, y + 52, 2, 27);
-    ctx.fillRect(doorX + 19, y + 52, 2, 27);
+    // Pixel-stepped roof silhouette: no smooth triangle edges or flat purple fill.
+    const roofRows = [
+      [-16, 4], [-12, 10], [-8, 16], [-4, 22], [0, 28],
+      [4, 34], [8, 40], [12, 46], [16, 52], [20, 58],
+      [24, 63], [28, 66]
+    ];
+    roofRows.forEach(([rowY, half]) => {
+      ctx.fillStyle = '#302b35';
+      ctx.fillRect(cx - half - 4, y + rowY, half * 2 + 8, 5);
+      ctx.fillStyle = '#65434a';
+      ctx.fillRect(cx - half, y + rowY, half * 2, 4);
+    });
+
+    // Shingle bands and staggered seams give the roof texture at game scale.
+    const shingleRows = [
+      { yy: -7, half: 15 }, { yy: 1, half: 27 },
+      { yy: 9, half: 39 }, { yy: 17, half: 51 },
+      { yy: 25, half: 62 }
+    ];
+    shingleRows.forEach((row, index) => {
+      const left = cx - row.half + 3;
+      const width = row.half * 2 - 6;
+      ctx.fillStyle = '#895b58';
+      ctx.fillRect(left, y + row.yy, width, 2);
+      ctx.fillStyle = '#49333e';
+      for (let seam = 0; seam < 8; seam++) {
+        const sx = left + ((seam * 13 + (index % 2) * 6) % Math.max(1, width - 2));
+        ctx.fillRect(sx, y + row.yy + 2, 2, 3);
+      }
+    });
+    ctx.fillStyle = '#a16e61';
+    ctx.fillRect(cx - 3, y - 14, 6, 3);
+    ctx.fillStyle = '#3a2d38';
+    ctx.fillRect(x - 9, y + 27, HOUSE.w + 18, 5);
+
+    // Two small, bright windows with chunky wooden frames.
+    [[x + 22, y + 43], [x + HOUSE.w - 40, y + 43]].forEach(([wx, wy]) => {
+      ctx.fillStyle = '#49332e';
+      ctx.fillRect(wx - 2, wy - 2, 19, 19);
+      ctx.fillStyle = '#d9b77d';
+      ctx.fillRect(wx, wy, 15, 15);
+      ctx.fillStyle = '#47778a';
+      ctx.fillRect(wx + 2, wy + 2, 11, 11);
+      ctx.fillStyle = '#9bc4c0';
+      ctx.fillRect(wx + 3, wy + 3, 4, 3);
+      ctx.fillStyle = '#3f382f';
+      ctx.fillRect(wx + 7, wy + 2, 2, 11);
+      ctx.fillRect(wx + 2, wy + 7, 11, 2);
+      ctx.fillStyle = '#8a563e';
+      ctx.fillRect(wx - 1, wy + 15, 17, 3);
+    });
+
+    // Porch canopy, two support posts, and a short stone step.
+    const porchX = cx - 19;
+    ctx.fillStyle = '#3a2d35';
+    ctx.fillRect(porchX - 2, y + 49, 42, 6);
+    ctx.fillStyle = '#81534a';
+    ctx.fillRect(porchX, y + 49, 38, 3);
+    ctx.fillStyle = '#b47a58';
+    ctx.fillRect(porchX + 3, y + 52, 32, 1);
+    ctx.fillStyle = '#5b3e31';
+    ctx.fillRect(porchX + 2, y + 53, 3, 25);
+    ctx.fillRect(porchX + 33, y + 53, 3, 25);
+    ctx.fillStyle = '#c09260';
+    ctx.fillRect(porchX + 3, y + 55, 1, 20);
+    ctx.fillRect(porchX + 34, y + 55, 1, 20);
+
+    // Front door stays centered on the existing entrance and interaction point.
+    const doorX = cx - 8;
+    ctx.fillStyle = '#49332e';
+    ctx.fillRect(doorX - 2, y + 52, 20, 29);
+    ctx.fillStyle = '#805039';
+    ctx.fillRect(doorX, y + 54, 16, 26);
+    ctx.fillStyle = '#a56e46';
+    ctx.fillRect(doorX + 2, y + 56, 12, 2);
+    ctx.fillStyle = '#5b382c';
+    ctx.fillRect(doorX + 3, y + 61, 10, 15);
+    ctx.fillStyle = '#bd8754';
+    ctx.fillRect(doorX + 4, y + 62, 8, 2);
+    ctx.fillRect(doorX + 4, y + 73, 8, 2);
+    ctx.fillStyle = '#edc66f';
+    ctx.fillRect(doorX + 12, y + 67, 2, 2);
+    ctx.fillStyle = '#a18b73';
+    ctx.fillRect(cx - 14, y + 80, 28, 4);
+    ctx.fillStyle = '#d0baa0';
+    ctx.fillRect(cx - 11, y + 80, 22, 1);
+
+    ctx.restore();
   }
 
   function drawHouseDoorPrompt() {
