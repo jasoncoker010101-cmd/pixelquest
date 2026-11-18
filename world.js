@@ -2502,7 +2502,7 @@ const Overworld = (() => {
       if (['up', 'down', 'left', 'right'].includes(saveData.interiorFacing)) interiorPlayer.facing = saveData.interiorFacing;
       if (Number.isFinite(saveData.interiorWalk)) interiorPlayer.walk = saveData.interiorWalk;
       if (interiorBlocked(interiorPlayer.x, interiorPlayer.y)) {
-        interiorPlayer.x = 160; interiorPlayer.y = 194; interiorPlayer.facing = 'up';
+        interiorPlayer.x = 208; interiorPlayer.y = 184; interiorPlayer.facing = 'up';
       }
     }
   }
