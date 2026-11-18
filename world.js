@@ -11,6 +11,48 @@ const Overworld = (() => {
   let canvas, ctx, onExit, onSave, saveTimer = 0, map = [];
   let time = 0;
 
+  // The opening cinematic remains unchanged; all playable scenes now use side-view platform controls.
+  const SIDE_GROUND_Y = 196;
+  const HOUSE_SIDE_WIDTH = 960;
+  const FOREST_SIDE_WIDTH = 4000;
+  let platformMode = true;
+  let platformScene = 'house';
+  let sideCameraX = 0;
+  let sideJumpQueued = false;
+  let dadNoteRead = false;
+  const sidePlayer = { x: 410, y: SIDE_GROUND_Y, vx: 0, vy: 0, onGround: true, facing: 1, moving: false, walk: 0 };
+  const HOUSE_SIDE_PLATFORMS = [
+    { x: 0, y: SIDE_GROUND_Y, w: HOUSE_SIDE_WIDTH, h: 44 },
+    { x: 24, y: 160, w: 82, h: 10 },
+    { x: 110, y: 151, w: 54, h: 9 },
+    { x: 344, y: 160, w: 82, h: 10 },
+    { x: 532, y: 158, w: 88, h: 10 },
+    { x: 688, y: 158, w: 88, h: 10 }
+  ];
+  const FOREST_SIDE_PLATFORMS = [
+    { x: 0, y: SIDE_GROUND_Y, w: FOREST_SIDE_WIDTH, h: 44 },
+    { x: 276, y: 160, w: 104, h: 10 },
+    { x: 452, y: 139, w: 104, h: 10 },
+    { x: 666, y: 160, w: 116, h: 10 },
+    { x: 884, y: 132, w: 104, h: 10 },
+    { x: 1092, y: 158, w: 116, h: 10 },
+    { x: 1300, y: 120, w: 104, h: 10 },
+    { x: 1510, y: 154, w: 140, h: 10 },
+    { x: 1760, y: 132, w: 110, h: 10 },
+    { x: 1985, y: 160, w: 140, h: 10 },
+    { x: 2230, y: 122, w: 110, h: 10 },
+    { x: 2450, y: 154, w: 150, h: 10 },
+    { x: 2700, y: 132, w: 110, h: 10 },
+    { x: 2910, y: 160, w: 124, h: 10 },
+    { x: 3150, y: 130, w: 110, h: 10 },
+    { x: 3370, y: 154, w: 140, h: 10 },
+    { x: 3670, y: 136, w: 126, h: 10 }
+  ];
+  const sideWolves = [
+    { x: 1370, min: 1280, max: 1470, dir: -1, runUntil: 0, phase: 0, red: false },
+    { x: 2760, min: 2660, max: 2860, dir: 1, runUntil: 0, phase: 2.7, red: true }
+  ];
+
   // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
   let introActive = false, introTime = 0, introAudio = null, introSoundChar = 0, introTextSegment = '', introLastReveal = 0, introWolfHowlOne = false, introWolfHowlTwo = false, introWolfHowlEcho = false;
   const INTRO_DURATION = 45.5;
@@ -23,6 +65,11 @@ const Overworld = (() => {
     interiorPlayer.facing = 'up';
     interiorPlayer.moving = false;
     interiorPlayer.walk = 0;
+    platformMode = true;
+    platformScene = 'house';
+    sidePlayer.x = 410; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
+    sidePlayer.facing = 1; sidePlayer.moving = false; sidePlayer.walk = 0;
+    sideCameraX = 0; sideJumpQueued = false; panel = null;
     keys.clear();
   }
   function introBlip() {
@@ -1604,6 +1651,391 @@ const Overworld = (() => {
     if(battle.phase==='outro') {ctx.fillStyle='rgba(4,7,16,'+(1-battle.fade)+')';ctx.fillRect(0,0,canvas.width,canvas.height);}
   }
 
+
+  function sidePlatforms() {
+    return platformScene === 'house' ? HOUSE_SIDE_PLATFORMS : FOREST_SIDE_PLATFORMS;
+  }
+
+  function sideWorldWidth() {
+    return platformScene === 'house' ? HOUSE_SIDE_WIDTH : FOREST_SIDE_WIDTH;
+  }
+
+  function updateSideCamera(dt) {
+    const target = clamp(sidePlayer.x - canvas.width * 0.43, 0, Math.max(0, sideWorldWidth() - canvas.width));
+    sideCameraX += (target - sideCameraX) * Math.min(1, dt * 7);
+  }
+
+  function updatePlatformer(dt) {
+    time += dt;
+    saveTimer += dt;
+    if (saveTimer >= 5) {
+      saveTimer = 0;
+      if (onSave) onSave(getSaveData());
+    }
+
+    if (!panel) {
+      let direction = 0;
+      if (keys.has('arrowleft') || keys.has('a')) direction -= 1;
+      if (keys.has('arrowright') || keys.has('d')) direction += 1;
+      const sprinting = direction !== 0 && keys.has('shift') && stats.stamina > 0;
+      const targetSpeed = direction * (sprinting ? 154 : 112);
+      const response = Math.min(1, dt * (direction ? 12 : 15));
+      sidePlayer.vx += (targetSpeed - sidePlayer.vx) * response;
+      if (direction) sidePlayer.facing = direction < 0 ? -1 : 1;
+      sidePlayer.moving = Math.abs(sidePlayer.vx) > 8;
+
+      if (sideJumpQueued && sidePlayer.onGround) {
+        sidePlayer.vy = -292;
+        sidePlayer.onGround = false;
+      }
+      if (sprinting) stats.stamina = Math.max(0, stats.stamina - 20 * dt);
+      else stats.stamina = Math.min(stats.maxStamina, stats.stamina + 13 * dt);
+      if (sidePlayer.moving) sidePlayer.walk += dt * (sprinting ? 13 : 9);
+    } else {
+      sidePlayer.vx *= Math.max(0, 1 - dt * 18);
+      sidePlayer.moving = false;
+    }
+    sideJumpQueued = false;
+
+    const oldFeet = sidePlayer.y;
+    const nextX = clamp(sidePlayer.x + sidePlayer.vx * dt, 16, sideWorldWidth() - 16);
+    sidePlayer.x = nextX;
+    sidePlayer.vy += 820 * dt;
+    const nextFeet = sidePlayer.y + sidePlayer.vy * dt;
+    let landing = null;
+    if (sidePlayer.vy >= 0) {
+      for (const platform of sidePlatforms()) {
+        const overlapsX = sidePlayer.x + 10 > platform.x && sidePlayer.x - 10 < platform.x + platform.w;
+        if (overlapsX && oldFeet <= platform.y + 1 && nextFeet >= platform.y) {
+          if (!landing || platform.y < landing.y) landing = platform;
+        }
+      }
+    }
+    if (landing) {
+      sidePlayer.y = landing.y;
+      sidePlayer.vy = 0;
+      sidePlayer.onGround = true;
+    } else {
+      sidePlayer.y = nextFeet;
+      sidePlayer.onGround = false;
+    }
+
+    if (sidePlayer.y > canvas.height + 80) {
+      sidePlayer.x = Math.max(40, sidePlayer.x - 100);
+      sidePlayer.y = SIDE_GROUND_Y;
+      sidePlayer.vx = 0;
+      sidePlayer.vy = 0;
+      sidePlayer.onGround = true;
+      notice = 'You find your footing again.';
+      noticeUntil = time + 2;
+    }
+
+    stats.playTime += dt;
+    const moved = Math.abs(sidePlayer.vx) * dt;
+    stepDistance += moved;
+    while (stepDistance >= 20) { stats.steps++; stepDistance -= 20; }
+
+    if (platformScene === 'forest') {
+      for (const wolf of sideWolves) {
+        const distance = Math.abs(sidePlayer.x - wolf.x);
+        if (distance < 170) {
+          wolf.runUntil = Math.max(wolf.runUntil, time + 0.8);
+          wolf.dir = wolf.x >= sidePlayer.x ? 1 : -1;
+        }
+        const running = time < wolf.runUntil;
+        wolf.x += wolf.dir * (running ? 96 : 18) * dt;
+        if (wolf.x < wolf.min) { wolf.x = wolf.min; wolf.dir = 1; }
+        if (wolf.x > wolf.max) { wolf.x = wolf.max; wolf.dir = -1; }
+      }
+    }
+    updateSideCamera(dt);
+  }
+
+  function drawSidePlatform(platform) {
+    ctx.fillStyle = '#49342f';
+    ctx.fillRect(platform.x, platform.y, platform.w, platform.h);
+    ctx.fillStyle = '#6e8b48';
+    ctx.fillRect(platform.x, platform.y, platform.w, 4);
+    ctx.fillStyle = '#9cac5c';
+    for (let x = platform.x + 5; x < platform.x + platform.w - 3; x += 19) {
+      ctx.fillRect(x, platform.y + 1, 5, 1);
+    }
+    ctx.fillStyle = '#76513b';
+    for (let x = platform.x + 8; x < platform.x + platform.w - 4; x += 28) {
+      ctx.fillRect(x, platform.y + 10, 4, 2);
+      ctx.fillStyle = '#5a4035';
+      ctx.fillRect(x + 10, platform.y + 20, 3, 1);
+      ctx.fillStyle = '#76513b';
+    }
+  }
+
+  function drawSidePlayer() {
+    const x = Math.round(sidePlayer.x - sideCameraX);
+    const y = Math.round(sidePlayer.y);
+    if (!playerSheetReady) {
+      ctx.fillStyle = 'rgba(0,0,0,.25)';
+      ctx.fillRect(x - 9, y - 1, 19, 3);
+      ctx.fillStyle = '#342c39'; ctx.fillRect(x - 7, y - 27, 14, 26);
+      ctx.fillStyle = '#9d513e'; ctx.fillRect(x - 7, y - 19, 14, 12);
+      ctx.fillStyle = '#e0b27a'; ctx.fillRect(x - 6, y - 30, 12, 10);
+      ctx.fillStyle = '#292331'; ctx.fillRect(x - 7, y - 31, 13, 4);
+      return;
+    }
+    const frame = sidePlayer.moving ? Math.floor(sidePlayer.walk * 0.75) % 6 : Math.floor(time * 2) % 2;
+    const row = sidePlayer.moving ? 3 : 2;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = 'rgba(0,0,0,.24)';
+    ctx.fillRect(x - 8, y - 1, 16, 2);
+    if (sidePlayer.facing < 0) {
+      ctx.translate(x + 16, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(playerSheet, frame * 32, row * 32, 32, 32, 0, y - 32, 32, 32);
+    } else {
+      ctx.drawImage(playerSheet, frame * 32, row * 32, 32, 32, x - 16, y - 32, 32, 32);
+    }
+    ctx.restore();
+  }
+
+  function drawSideInterior() {
+    const oldText = ctx.textAlign;
+    const oldFont = ctx.font;
+    ctx.fillStyle = '#251a25';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(-sideCameraX, 0);
+
+    // Side-on cutaway of the same home: Dad's room, the central hall, the player's room,
+    // then the kitchen, living room and bathroom in one connected horizontal layout.
+    ctx.fillStyle = '#54372f'; ctx.fillRect(0, 0, HOUSE_SIDE_WIDTH, 196);
+    ctx.fillStyle = '#76503a'; ctx.fillRect(0, 24, HOUSE_SIDE_WIDTH, 166);
+    for (let y = 30; y < 188; y += 14) {
+      ctx.fillStyle = '#916342'; ctx.fillRect(0, y, HOUSE_SIDE_WIDTH, 2);
+      ctx.fillStyle = 'rgba(37,21,27,.24)'; ctx.fillRect(0, y + 9, HOUSE_SIDE_WIDTH, 1);
+    }
+    // Windows keep each room readable without adding clutter.
+    for (const wx of [58, 372, 566, 714]) {
+      ctx.fillStyle = '#392831'; ctx.fillRect(wx, 48, 52, 42);
+      ctx.fillStyle = '#91b4b2'; ctx.fillRect(wx + 4, 52, 44, 34);
+      ctx.fillStyle = '#d8c18c'; ctx.fillRect(wx + 24, 52, 3, 34);
+      ctx.fillRect(wx + 4, 67, 44, 3);
+    }
+    // Doorway posts and labels preserve the room identities from the old house layout.
+    const dividers = [205, 315, 500, 650, 810];
+    for (const x of dividers) {
+      ctx.fillStyle = '#39252c'; ctx.fillRect(x - 4, 30, 8, 142);
+      ctx.fillStyle = '#94603f'; ctx.fillRect(x - 2, 30, 4, 140);
+      ctx.fillStyle = '#d6a36a'; ctx.fillRect(x - 1, 31, 1, 136);
+    }
+    ctx.textAlign = 'center';
+    ctx.font = '7px monospace';
+    ctx.fillStyle = '#f2d8a9';
+    ctx.fillText("DAD'S ROOM", 101, 116);
+    ctx.fillText('HALLWAY', 260, 116);
+    ctx.fillText('YOUR ROOM', 407, 116);
+    ctx.fillText('KITCHEN', 575, 116);
+    ctx.fillText('LIVING ROOM', 730, 116);
+    ctx.fillText('BATH', 875, 116);
+
+    // Existing furniture sheets are reused in the new side-view house.
+    drawInteriorArt(16, 48, 47, 49, 22, 151, 82, 43);
+    drawInteriorArt(336, 38, 50, 57, 111, 151, 54, 43);
+    drawInteriorArt(111, 48, 48, 49, 345, 151, 82, 43);
+    drawInteriorArt(16, 253, 88, 62, 535, 153, 88, 41);
+    drawInteriorArt(140, 263, 66, 50, 688, 150, 85, 45);
+    drawInteriorSprite(21, 7, 2, 2, 839, 164, 28, 28);
+    drawInteriorSprite(23, 7, 2, 2, 878, 164, 28, 28);
+
+    // The handwritten note remains on the dresser in Dad's room.
+    ctx.fillStyle = '#4b302b'; ctx.fillRect(133, 145, 22, 3);
+    ctx.fillStyle = '#eadbb3'; ctx.fillRect(135, 136, 18, 10);
+    ctx.fillStyle = '#fff0ce'; ctx.fillRect(136, 137, 15, 1);
+    ctx.fillStyle = '#b59a70'; ctx.fillRect(137, 140, 11, 1); ctx.fillRect(137, 143, 8, 1);
+    ctx.fillStyle = '#f2e5c5'; ctx.fillRect(150, 137, 3, 3);
+
+    // The front door is the right-hand exit to the forest.
+    ctx.fillStyle = '#3e2930'; ctx.fillRect(916, 112, 31, 84);
+    ctx.fillStyle = '#80513c'; ctx.fillRect(920, 116, 23, 80);
+    ctx.fillStyle = '#b67c50'; ctx.fillRect(923, 120, 17, 72);
+    ctx.fillStyle = '#f0ce86'; ctx.fillRect(936, 158, 3, 3);
+
+    drawSidePlayer();
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(10,10,18,.72)';
+    ctx.fillRect(4, 4, 130, 17);
+    ctx.fillStyle = '#f5e6c8'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
+    ctx.fillText('HOME  /  FIND DAD\'S NOTE', 9, 15);
+    ctx.fillStyle = 'rgba(8,9,16,.72)';
+    ctx.fillRect(0, 226, canvas.width, 14);
+    ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace';
+    ctx.fillText('A / D MOVE    SPACE OR ↑ JUMP    E INTERACT', 5, 236);
+
+    if (Math.abs(sidePlayer.x - 144) < 48) {
+      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(95 - sideCameraX, 180, 98, 13);
+      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(95.5 - sideCameraX, 180.5, 97, 12);
+      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('[ E ] READ NOTE', 144 - sideCameraX, 189);
+    } else if (Math.abs(sidePlayer.x - 930) < 55) {
+      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(875 - sideCameraX, 180, 110, 13);
+      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(875.5 - sideCameraX, 180.5, 109, 12);
+      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('[ E ] ENTER FOREST', 930 - sideCameraX, 189);
+    }
+    ctx.textAlign = oldText;
+    ctx.font = oldFont;
+  }
+
+  function drawSideForest() {
+    const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    sky.addColorStop(0, '#18263d');
+    sky.addColorStop(0.58, '#39495a');
+    sky.addColorStop(1, '#8a684e');
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#d3b17b'; ctx.fillRect(248, 40, 12, 12);
+    ctx.fillStyle = '#e5cc98'; ctx.fillRect(251, 37, 6, 18);
+
+    // Distant ridge layers use fixed shapes; the tree sprites below come from the uploaded forest atlas.
+    ctx.save();
+    ctx.translate(-sideCameraX * 0.18, 0);
+    for (let i = 0; i < 18; i++) {
+      const x = i * 250 - 80;
+      ctx.fillStyle = i % 2 ? '#253d3b' : '#2d4641';
+      ctx.beginPath();
+      ctx.moveTo(x, 194); ctx.lineTo(x + 85, 92 + (i % 3) * 12);
+      ctx.lineTo(x + 170, 194); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+
+    const variants = forestTreeSprites();
+    if (forestDecorReady) {
+      ctx.save();
+      ctx.translate(-sideCameraX * 0.46, 0);
+      const farTrees = [10, 130, 280, 430, 610, 790, 970, 1160, 1340, 1530, 1710, 1900, 2090, 2280, 2470, 2650, 2840, 3030, 3220, 3410, 3600, 3790, 3950];
+      farTrees.forEach((wx, i) => {
+        const tree = variants[(i + 1) % variants.length];
+        const w = 45 + (i % 3) * 8;
+        const h = Math.round(w * tree.sh / tree.sw);
+        drawAtlasSprite(forestDecorSheet, forestDecorReady, tree.sx, tree.sy, tree.sw, tree.sh,
+          wx, SIDE_GROUND_Y - h + (i % 2) * 5, w, h);
+      });
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.translate(-sideCameraX, 0);
+    // A continuous grassy floor with an earthy cutaway side.
+    ctx.fillStyle = '#4c382f'; ctx.fillRect(0, SIDE_GROUND_Y, FOREST_SIDE_WIDTH, 44);
+    ctx.fillStyle = '#704b36'; ctx.fillRect(0, SIDE_GROUND_Y + 10, FOREST_SIDE_WIDTH, 34);
+    for (let x = 0; x < FOREST_SIDE_WIDTH; x += 16) {
+      if (!drawAtlasSprite(forestTilesSheet, forestTilesReady, 16, 16, 16, 16, x, SIDE_GROUND_Y, 16, 16)) {
+        ctx.fillStyle = '#688b45'; ctx.fillRect(x, SIDE_GROUND_Y, 16, 5);
+      }
+    }
+    FOREST_SIDE_PLATFORMS.slice(1).forEach(drawSidePlatform);
+
+    // The supplied werewolf walk/run sheets are used as roaming forest creatures, not static stand-ins.
+    const creatures = [
+      { x: 1370, walk: introBlackWalk, run: introBlackRun, phase: 0, framesWalk: 11, framesRun: 9 },
+      { x: 2760, walk: introRedWalk, run: introRedRun, phase: 2.7, framesWalk: 11, framesRun: 9 }
+    ];
+    creatures.forEach((creature, i) => {
+      const wolfState = sideWolves[i];
+      const running = time < wolfState.runUntil;
+      const sheet = running ? creature.run : creature.walk;
+      if (!sheet || !sheet.complete || !sheet.naturalWidth) return;
+      const frames = running ? creature.framesRun : creature.framesWalk;
+      const frame = Math.floor(time * (running ? 10 : 6) + creature.phase) % frames;
+      const w = 72, h = 72;
+      ctx.save();
+      if (wolfState.dir < 0) {
+        ctx.translate(wolfState.x + w / 2, 0); ctx.scale(-1, 1);
+        ctx.drawImage(sheet, frame * 128, 0, 128, 128, 0, SIDE_GROUND_Y - h + 4, w, h);
+      } else {
+        ctx.drawImage(sheet, frame * 128, 0, 128, 128, wolfState.x - w / 2, SIDE_GROUND_Y - h + 4, w, h);
+      }
+      ctx.restore();
+    });
+
+    // A quiet trail marker signals the far side without abruptly ending the level.
+    ctx.fillStyle = '#4c443b'; ctx.fillRect(3852, 126, 7, 70);
+    ctx.fillRect(3918, 126, 7, 70);
+    ctx.fillStyle = '#957451'; ctx.fillRect(3858, 133, 61, 26);
+    ctx.fillStyle = '#f0d7a5'; ctx.font = '7px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('FAR SIDE', 3888, 149);
+
+    drawSidePlayer();
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(10,10,18,.72)';
+    ctx.fillRect(4, 4, 116, 17);
+    ctx.fillStyle = '#f5e6c8'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
+    ctx.fillText('THE WOODLAND', 9, 15);
+    ctx.fillStyle = 'rgba(8,9,16,.72)';
+    ctx.fillRect(0, 226, canvas.width, 14);
+    ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace';
+    ctx.fillText('A / D MOVE    SPACE OR ↑ JUMP    E INTERACT', 5, 236);
+
+    if (sidePlayer.x < 100) {
+      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(6, 180, 102, 13);
+      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(6.5, 180.5, 101, 12);
+      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('[ E ] RETURN HOME', 57, 189);
+    } else if (sidePlayer.x > FOREST_SIDE_WIDTH - 170) {
+      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(100, 180, 120, 13);
+      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(100.5, 180.5, 119, 12);
+      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('[ E ] FAR SIDE', 160, 189);
+    }
+  }
+
+  function drawPlatformer() {
+    if (platformScene === 'house') drawSideInterior();
+    else drawSideForest();
+    drawHUD();
+    drawPanel();
+    if (paused) drawPauseMenu();
+  }
+
+  function interactPlatformer() {
+    if (platformScene === 'house') {
+      if (Math.abs(sidePlayer.x - 144) < 54 && Math.abs(sidePlayer.y - 164) < 48) {
+        panel = 'dad-note';
+        dadNoteRead = true;
+        return;
+      }
+      if (Math.abs(sidePlayer.x - 930) < 58) {
+        platformScene = 'forest';
+        insideHouse = false;
+        sidePlayer.x = 72; sidePlayer.y = SIDE_GROUND_Y;
+        sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
+        sideCameraX = 0;
+        notice = 'The forest path begins here.';
+        noticeUntil = time + 2.5;
+        return;
+      }
+      notice = 'Nothing nearby to interact with.';
+      noticeUntil = time + 1.8;
+      return;
+    }
+
+    if (sidePlayer.x < 112) {
+      platformScene = 'house';
+      insideHouse = true;
+      sidePlayer.x = 880; sidePlayer.y = SIDE_GROUND_Y;
+      sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
+      sideCameraX = Math.max(0, HOUSE_SIDE_WIDTH - canvas.width);
+      notice = 'You return home.';
+      noticeUntil = time + 2;
+    } else if (sidePlayer.x > FOREST_SIDE_WIDTH - 170) {
+      notice = 'You have reached the far side of the forest.';
+      noticeUntil = time + 3;
+    } else {
+      notice = 'The path continues through the trees.';
+      noticeUntil = time + 2;
+    }
+  }
+
   function update(dt) {
     if (paused) return;
     if (introActive) {
@@ -1614,6 +2046,7 @@ const Overworld = (() => {
       if (introTime >= INTRO_DURATION) finishIntro();
       return;
     }
+    if (platformMode) { updatePlatformer(dt); return; }
     time += dt;
     saveTimer += dt;
     if (saveTimer >= 5) {
@@ -1862,6 +2295,7 @@ const Overworld = (() => {
 
   function draw() {
     if (introActive) { drawIntro(); return; }
+    if (platformMode) { drawPlatformer(); return; }
     if (battle) { drawBattle(); if (paused) drawPauseMenu(); return; }
     if (insideHouse) { drawHouseInterior(); if (paused) drawPauseMenu(); return; }
     ctx.fillStyle = '#1b1f3a';
@@ -1906,6 +2340,7 @@ const Overworld = (() => {
   }
 
   function interact() {
+    if (platformMode) { interactPlatformer(); return; }
     if (insideHouse) {
       if (Math.hypot(interiorPlayer.x - DAD_NOTE.x, interiorPlayer.y - DAD_NOTE.y) < 35) {
         panel = 'dad-note';
@@ -1946,7 +2381,10 @@ const Overworld = (() => {
 
   function getSaveData() {
     return {
-      version: 3,
+      version: 4,
+      platformScene,
+      sideX: sidePlayer.x,
+      sideNoteRead: dadNoteRead,
       houseSpawnMigrated: true,
       x: player.x,
       y: player.y,
@@ -2099,9 +2537,10 @@ const Overworld = (() => {
       if (k === 'i' || k === 'c') panel = null;
       return;
     }
-    if (GAME_KEYS.includes(k) || k === 'shift') {
+    if (GAME_KEYS.includes(k) || k === 'shift' || k === ' ') {
       keys.add(k);
-      if (GAME_KEYS.includes(k)) e.preventDefault();
+      if (GAME_KEYS.includes(k) || k === ' ') e.preventDefault();
+      if (platformMode && (k === 'arrowup' || k === 'w' || k === ' ') && !e.repeat) sideJumpQueued = true;
     }
   }
 
@@ -2130,6 +2569,14 @@ const Overworld = (() => {
       b.vx = 0; b.vy = 0; b.flee = 0;
     });
     applySave(saveData);
+    platformMode = true;
+    platformScene = saveData && saveData.platformScene === 'forest' ? 'forest' : 'house';
+    sidePlayer.x = saveData && Number.isFinite(saveData.sideX) ? clamp(saveData.sideX, 20, platformScene === 'house' ? HOUSE_SIDE_WIDTH - 20 : FOREST_SIDE_WIDTH - 20) : (platformScene === 'house' ? 410 : 72);
+    sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
+    sidePlayer.facing = 1; sidePlayer.moving = false; sidePlayer.walk = 0;
+    dadNoteRead = !!(saveData && saveData.sideNoteRead);
+    sideJumpQueued = false; sideCameraX = 0;
+    insideHouse = platformScene === 'house';
     introActive = !saveData || typeof saveData !== 'object';
     introTime = 0; introSoundChar = 0; introTextSegment = ''; introLastReveal = 0;
     introWolfFleePaths = null;
