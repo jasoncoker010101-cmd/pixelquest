@@ -882,6 +882,10 @@ const Overworld = (() => {
       case 'D':
         // The building is drawn as one complete house above the ground tiles.
         break;
+      case 'G': {
+        if (!drawAtlasSprite(forestTilesSheet, forestTilesReady, 16, 16, 16, 16, px, py, TILE, TILE)) drawGrass(px, py, h);
+        break;
+      }
       default:
         drawGrass(px, py, h);
     }
