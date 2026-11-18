@@ -1989,10 +1989,26 @@ const Overworld = (() => {
     }
   }
 
+  function drawSideHUD() {
+    ctx.fillStyle = 'rgba(9,10,20,.78)';
+    ctx.fillRect(4, 4, 132, 27);
+    ctx.fillStyle = '#f7e9c7'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
+    ctx.fillText('LV ' + stats.level + '   HP ' + stats.health + '/' + stats.maxHealth, 9, 14);
+    ctx.fillText('SP', 9, 25);
+    drawBar(25, 18, 105, 7, stats.stamina, stats.maxStamina, '#71b86c');
+    if (notice && time < noticeUntil) {
+      ctx.fillStyle = 'rgba(12,10,20,.9)';
+      ctx.fillRect(48, 205, 224, 17);
+      ctx.strokeStyle = '#d9b56b'; ctx.strokeRect(48.5, 205.5, 223, 16);
+      ctx.fillStyle = '#fff0c8'; ctx.textAlign = 'center'; ctx.font = '7px monospace';
+      ctx.fillText(notice, 160, 216);
+    }
+  }
+
   function drawPlatformer() {
     if (platformScene === 'house') drawSideInterior();
     else drawSideForest();
-    drawHUD();
+    drawSideHUD();
     drawPanel();
     if (paused) drawPauseMenu();
   }
