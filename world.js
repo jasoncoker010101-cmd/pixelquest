@@ -636,6 +636,8 @@ const Overworld = (() => {
   sideForestBackground.src = pqAsset('./assets/free_forest/Free Pixel Art Forest/Preview/Background.png');
 
   const inventory = { berries: 3, wood: 0, fish: 0 };
+  // Dad's armor is a cosmetic outfit set. It is saved with the player and shown in the world and inventory.
+  const equipment = { armor: false };
   const stats = { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0 };
 
   const bunnies = [
@@ -1816,6 +1818,49 @@ const Overworld = (() => {
     }
   }
 
+  // A non-weapon armor overlay that follows the player's existing side-view frames.
+  // The same pixels are enlarged for the inventory character preview.
+  function drawKnightArmorOverlay(px, py, scale = 1) {
+    const pixel = (x, y, w, h, color) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(
+        Math.round(px + x * scale),
+        Math.round(py + y * scale),
+        Math.max(1, Math.round(w * scale)),
+        Math.max(1, Math.round(h * scale))
+      );
+    };
+    const outline = '#26313b', steel = '#718493', light = '#c5d0d3';
+    const shade = '#435665', gold = '#c49a55';
+    pixel(9, 2, 14, 3, outline);
+    pixel(7, 5, 18, 9, outline);
+    pixel(9, 6, 14, 6, steel);
+    pixel(10, 6, 7, 2, light);
+    pixel(8, 10, 16, 3, shade);
+    pixel(11, 10, 10, 1, outline);
+    pixel(13, 13, 5, 1, gold);
+    pixel(5, 14, 7, 6, outline);
+    pixel(20, 14, 7, 6, outline);
+    pixel(6, 15, 5, 4, steel);
+    pixel(21, 15, 5, 4, steel);
+    pixel(8, 14, 16, 11, outline);
+    pixel(10, 15, 12, 8, steel);
+    pixel(11, 16, 5, 2, light);
+    pixel(17, 16, 4, 6, shade);
+    pixel(15, 18, 2, 3, gold);
+    pixel(6, 20, 5, 5, shade);
+    pixel(21, 20, 5, 5, shade);
+    pixel(7, 21, 3, 3, light);
+    pixel(22, 21, 3, 3, light);
+    pixel(9, 24, 14, 3, outline);
+    pixel(10, 24, 12, 2, shade);
+    pixel(11, 25, 3, 1, gold);
+    pixel(10, 27, 5, 4, outline);
+    pixel(17, 27, 5, 4, outline);
+    pixel(11, 28, 3, 2, steel);
+    pixel(18, 28, 3, 2, steel);
+  }
+
   function drawSidePlayer() {
     const x = Math.round(sidePlayer.x);
     const y = Math.round(sidePlayer.y);
@@ -1826,6 +1871,7 @@ const Overworld = (() => {
       ctx.fillStyle = '#9d513e'; ctx.fillRect(x - 7, y - 19, 14, 12);
       ctx.fillStyle = '#e0b27a'; ctx.fillRect(x - 6, y - 30, 12, 10);
       ctx.fillStyle = '#292331'; ctx.fillRect(x - 7, y - 31, 13, 4);
+      if (equipment.armor) drawKnightArmorOverlay(x - 16, y - 32);
       return;
     }
     const frame = sidePlayer.moving ? Math.floor(sidePlayer.walk * 0.75) % 6 : Math.floor(time * 2) % 2;
@@ -1838,9 +1884,57 @@ const Overworld = (() => {
       ctx.translate(x + 16, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(playerSheet, frame * 32, row * 32, 32, 32, 0, y - 32, 32, 32);
+      if (equipment.armor) drawKnightArmorOverlay(0, y - 32);
     } else {
       ctx.drawImage(playerSheet, frame * 32, row * 32, 32, 32, x - 16, y - 32, 32, 32);
+      if (equipment.armor) drawKnightArmorOverlay(x - 16, y - 32);
     }
+    ctx.restore();
+  }
+
+  function drawInventoryCharacterPreview() {
+    const x = 62, y = 79;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    if (playerSheetReady) {
+      ctx.drawImage(playerSheet, 0, 2 * 32, 32, 32, x, y, 64, 64);
+    } else {
+      ctx.fillStyle = '#342c39'; ctx.fillRect(x + 18, y + 18, 28, 42);
+      ctx.fillStyle = '#e0b27a'; ctx.fillRect(x + 21, y + 5, 22, 17);
+      ctx.fillStyle = '#292331'; ctx.fillRect(x + 18, y + 3, 28, 7);
+    }
+    if (equipment.armor) drawKnightArmorOverlay(x, y, 2);
+    ctx.restore();
+  }
+
+  function drawDadArmorStand(x, groundY) {
+    // This is a display stand, not another NPC. It remains in Dad's room when equipped.
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(x - 15, groundY - 1, 30, 3);
+    ctx.fillStyle = '#4b3027';
+    ctx.fillRect(x - 2, groundY - 39, 4, 38);
+    ctx.fillRect(x - 11, groundY - 3, 22, 3);
+    ctx.fillRect(x - 7, groundY - 6, 14, 3);
+    ctx.fillStyle = '#26313b'; ctx.fillRect(x - 9, groundY - 55, 18, 16);
+    ctx.fillStyle = '#718493'; ctx.fillRect(x - 7, groundY - 53, 14, 12);
+    ctx.fillStyle = '#c5d0d3'; ctx.fillRect(x - 5, groundY - 52, 5, 3);
+    ctx.fillStyle = '#26313b'; ctx.fillRect(x - 6, groundY - 45, 12, 2);
+    ctx.fillStyle = '#c49a55'; ctx.fillRect(x - 2, groundY - 42, 4, 2);
+    ctx.fillStyle = '#26313b'; ctx.fillRect(x - 12, groundY - 40, 24, 23);
+    ctx.fillStyle = '#718493'; ctx.fillRect(x - 10, groundY - 38, 20, 18);
+    ctx.fillStyle = '#c5d0d3'; ctx.fillRect(x - 8, groundY - 37, 6, 4);
+    ctx.fillStyle = '#435665'; ctx.fillRect(x + 2, groundY - 35, 6, 12);
+    ctx.fillStyle = '#c49a55'; ctx.fillRect(x - 1, groundY - 30, 3, 4);
+    ctx.fillStyle = '#26313b';
+    ctx.fillRect(x - 15, groundY - 38, 6, 11); ctx.fillRect(x + 9, groundY - 38, 6, 11);
+    ctx.fillStyle = '#718493';
+    ctx.fillRect(x - 14, groundY - 37, 4, 8); ctx.fillRect(x + 10, groundY - 37, 4, 8);
+    ctx.fillStyle = '#26313b'; ctx.fillRect(x - 9, groundY - 18, 8, 17); ctx.fillRect(x + 1, groundY - 18, 8, 17);
+    ctx.fillStyle = '#718493'; ctx.fillRect(x - 7, groundY - 16, 4, 13); ctx.fillRect(x + 3, groundY - 16, 4, 13);
+    ctx.fillStyle = '#3b2c2b'; ctx.fillRect(x - 22, groundY - 66, 44, 8);
+    ctx.strokeStyle = '#c49a55'; ctx.strokeRect(x - 21.5, groundY - 65.5, 43, 7);
+    ctx.fillStyle = '#f3dfb7'; ctx.font = '5px monospace'; ctx.textAlign = 'center';
+    ctx.fillText("DAD'S ARMOR", x, groundY - 60);
     ctx.restore();
   }
 
@@ -1908,6 +2002,9 @@ const Overworld = (() => {
     ctx.fillStyle = '#f2e5c5'; ctx.fillRect(151, 136, 3, 3);
     ctx.strokeStyle = '#fff0c5'; ctx.strokeRect(133.5, 134.5, 20, 12);
 
+    // Dad's armor stays on display after the player equips the set.
+    drawDadArmorStand(181, 196);
+
     // The front door is the right-hand exit to the forest.
     ctx.fillStyle = '#3e2930'; ctx.fillRect(916, 112, 31, 84);
     ctx.fillStyle = '#80513c'; ctx.fillRect(920, 116, 23, 80);
@@ -1926,11 +2023,16 @@ const Overworld = (() => {
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
     ctx.fillText('A / D MOVE    SPACE OR ↑ JUMP    E INTERACT', 5, 236);
 
-    if (Math.abs(sidePlayer.x - 144) < 58 && Math.abs(sidePlayer.y - 164) < 52) {
+    if (Math.abs(sidePlayer.x - 144) < 18 && Math.abs(sidePlayer.y - 164) < 52) {
       ctx.fillStyle = 'rgba(15,12,24,.97)'; ctx.fillRect(82 - sideCameraX, 176, 124, 16);
       ctx.strokeStyle = '#f4d27b'; ctx.lineWidth = 1; ctx.strokeRect(82.5 - sideCameraX, 176.5, 123, 15);
       ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
       ctx.fillText('[ E / X ] READ DAD\'S NOTE', 144 - sideCameraX, 187);
+    } else if (Math.abs(sidePlayer.x - 181) < 17 && Math.abs(sidePlayer.y - 164) < 52) {
+      ctx.fillStyle = 'rgba(15,12,24,.97)'; ctx.fillRect(119 - sideCameraX, 176, 125, 16);
+      ctx.strokeStyle = '#f4d27b'; ctx.lineWidth = 1; ctx.strokeRect(119.5 - sideCameraX, 176.5, 124, 15);
+      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+      ctx.fillText(equipment.armor ? 'ARMOR EQUIPPED' : '[ E / X ] EQUIP ARMOR', 181 - sideCameraX, 187);
     } else if (Math.abs(sidePlayer.x - 930) < 55) {
       ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(875 - sideCameraX, 180, 110, 13);
       ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(875.5 - sideCameraX, 180.5, 109, 12);
@@ -2048,9 +2150,21 @@ const Overworld = (() => {
 
   function interactPlatformer() {
     if (platformScene === 'house') {
-      if (Math.abs(sidePlayer.x - 144) < 54 && Math.abs(sidePlayer.y - 164) < 48) {
+      if (Math.abs(sidePlayer.x - 144) < 18 && Math.abs(sidePlayer.y - 164) < 48) {
         panel = 'dad-note';
         dadNoteRead = true;
+        return;
+      }
+      if (Math.abs(sidePlayer.x - 181) < 17 && Math.abs(sidePlayer.y - 164) < 52) {
+        if (!equipment.armor) {
+          equipment.armor = true;
+          notice = "You equipped Dad's armor.";
+          noticeUntil = time + 2.5;
+          if (onSave) onSave(getSaveData());
+        } else {
+          notice = "Dad's armor is already equipped.";
+          noticeUntil = time + 2;
+        }
         return;
       }
       if (Math.abs(sidePlayer.x - 930) < 58) {
@@ -2230,25 +2344,35 @@ const Overworld = (() => {
       ctx.fillStyle = '#8b6a48'; ctx.font = '7px monospace';
       ctx.fillText('- Dad', 224, 157);
     } else if (panel === 'inventory') {
-      const items = [
-        { name: 'Berries', count: inventory.berries, color: '#c94e73', icon: '●' },
-        { name: 'Wood', count: inventory.wood, color: '#a66a3d', icon: '▰' },
-        { name: 'Fish', count: inventory.fish, color: '#e5c75d', icon: '◆' }
+      ctx.fillStyle = '#242333'; ctx.fillRect(55, 72, 78, 87);
+      ctx.strokeStyle = '#76657a'; ctx.strokeRect(55.5, 72.5, 77, 86);
+      drawInventoryCharacterPreview();
+      ctx.fillStyle = '#f3e7c9'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+      ctx.fillText(equipment.armor ? 'KNIGHT ARMOR' : 'ROWAN', 94, 153);
+
+      ctx.fillStyle = '#242333'; ctx.fillRect(140, 72, 123, 87);
+      ctx.strokeStyle = '#76657a'; ctx.strokeRect(140.5, 72.5, 122, 86);
+      ctx.fillStyle = '#f5dca6'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('EQUIPMENT', 201, 84);
+      const slots = [
+        { label: 'HEAD', value: equipment.armor ? 'STEEL HELM' : 'EMPTY' },
+        { label: 'BODY', value: equipment.armor ? "DAD'S ARMOR" : 'EMPTY' },
+        { label: 'LEGS', value: equipment.armor ? 'GREAVES' : 'EMPTY' }
       ];
-      items.forEach((item, i) => {
-        const col = i % 2, row = Math.floor(i / 2);
-        const x = 61 + col * 112, y = 72 + row * 46;
-        ctx.fillStyle = '#282638'; ctx.fillRect(x, y, 98, 36);
-        ctx.strokeStyle = '#62516d'; ctx.strokeRect(x + 0.5, y + 0.5, 97, 35);
-        ctx.fillStyle = item.color; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
-        ctx.fillText(item.icon, x + 17, y + 23);
-        ctx.fillStyle = '#f3e7c9'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
-        ctx.fillText(item.name, x + 31, y + 15);
-        ctx.fillStyle = '#f5dca6'; ctx.font = 'bold 10px monospace';
-        ctx.fillText('x ' + item.count, x + 31, y + 28);
+      slots.forEach((slot, i) => {
+        const y = 91 + i * 20;
+        ctx.fillStyle = '#332f40'; ctx.fillRect(147, y, 109, 16);
+        ctx.strokeStyle = '#5e536e'; ctx.strokeRect(147.5, y + 0.5, 108, 15);
+        ctx.textAlign = 'left'; ctx.font = '7px monospace'; ctx.fillStyle = '#b9b1a5';
+        ctx.fillText(slot.label, 153, y + 10);
+        ctx.textAlign = 'right'; ctx.font = '7px monospace';
+        ctx.fillStyle = equipment.armor ? '#c5d0d3' : '#a79eaa';
+        ctx.fillText(slot.value, 250, y + 10);
       });
-      ctx.fillStyle = '#a9c8a0'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('More item slots will unlock as you explore.', 160, 169);
+      ctx.fillStyle = '#f3e7c9'; ctx.font = '7px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('BERRIES x' + inventory.berries + '   WOOD x' + inventory.wood + '   FISH x' + inventory.fish, 160, 174);
+      ctx.fillStyle = '#a9c8a0'; ctx.font = '7px monospace';
+      ctx.fillText(equipment.armor ? 'Dad’s display stand remains in his room.' : 'Find Dad’s armor stand in his room to equip it.', 160, 184);
     } else {
       ctx.textAlign = 'left';
       ctx.font = '9px monospace';
@@ -2393,7 +2517,7 @@ const Overworld = (() => {
   }
 
   function interact() {
-    if (platformMode && platformScene === 'forest') { interactPlatformer(); return; }
+    if (platformMode) { interactPlatformer(); return; }
     if (insideHouse) {
       if (Math.hypot(interiorPlayer.x - DAD_NOTE.x, interiorPlayer.y - DAD_NOTE.y) < 35) {
         panel = 'dad-note';
@@ -2445,7 +2569,8 @@ const Overworld = (() => {
 
   function getSaveData() {
     return {
-      version: 4,
+      version: 5,
+      equipment: { ...equipment },
       platformScene,
       sideX: sidePlayer.x,
       sideNoteRead: dadNoteRead,
@@ -2471,6 +2596,7 @@ const Overworld = (() => {
     insideHouse = false;
     interiorPlayer.x = 160; interiorPlayer.y = 194; interiorPlayer.facing = 'up'; interiorPlayer.moving = false; interiorPlayer.walk = 0;
     inventory.berries = 3; inventory.wood = 0; inventory.fish = 0;
+    equipment.armor = false;
     Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0 });
     stepDistance = 0;
     worldClock = 0.28;
@@ -2486,6 +2612,9 @@ const Overworld = (() => {
       if (!blocked(sx, sy)) { player.x = sx; player.y = sy; }
     }
     if (['up', 'down', 'left', 'right'].includes(saveData.facing)) player.facing = saveData.facing;
+    if (saveData.equipment && typeof saveData.equipment === 'object') {
+      equipment.armor = saveData.equipment.armor === true;
+    }
     if (saveData.inventory && typeof saveData.inventory === 'object') {
       ['berries', 'wood', 'fish'].forEach(k => {
         if (Number.isFinite(saveData.inventory[k])) inventory[k] = Math.max(0, Math.floor(saveData.inventory[k]));
