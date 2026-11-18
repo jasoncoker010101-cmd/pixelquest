@@ -46,6 +46,34 @@ jobs:
               for i,im in enumerate(thumbs): sheet.paste(im,((i%cols)*340,(i//cols)*280))
               sheet.save("forest-preview.jpg")
           PY
+      - name: Create coordinate atlas preview
+        run: |
+          python - <<'PY'
+          from PIL import Image, ImageDraw, ImageFont
+          from pathlib import Path
+          root = Path("assets/forest_pack/TopDownFantasy-Forest")
+          decor = Image.open(root / "Decorations/Decorations.png").convert("RGBA")
+          tiles = Image.open(root / "Tiles/Tileset.png").convert("RGBA")
+          scale = 2
+          margin = 24
+          canvas = Image.new("RGBA", (decor.width*scale + margin*2, decor.height*scale + tiles.height*scale + 100), (28, 28, 34, 255))
+          draw = ImageDraw.Draw(canvas)
+          def place(im, y, label):
+              draw.text((margin, y-18), label, fill=(255,255,255,255))
+              big = im.resize((im.width*scale, im.height*scale), Image.Resampling.NEAREST)
+              canvas.alpha_composite(big, (margin, y))
+              for x in range(0, im.width+1, 16):
+                  xx = margin + x*scale
+                  draw.line((xx,y,xx,y+im.height*scale), fill=(255,0,255,180), width=1)
+                  if x < im.width: draw.text((xx+2,y+2), str(x), fill=(255,255,255,255), stroke_width=2, stroke_fill=(0,0,0,255))
+              for yy in range(0, im.height+1, 16):
+                  py = y + yy*scale
+                  draw.line((margin,py,margin+im.width*scale,py), fill=(255,0,255,180), width=1)
+                  if yy < im.height: draw.text((margin+2,py+2), str(yy), fill=(255,255,255,255), stroke_width=2, stroke_fill=(0,0,0,255))
+          place(decor, 44, "Decorations.png - pixel coordinates, 16px grid")
+          place(tiles, 44 + decor.height*scale + 24, "Tileset.png - pixel coordinates, 16px grid")
+          canvas.convert("RGB").save("assets/forest_pack/atlas-grid.jpg", quality=95)
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: forest-pack-preview
