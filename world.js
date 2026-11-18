@@ -163,9 +163,9 @@ const Overworld = (() => {
     drawFish();
     bunnies.forEach(drawBunny);
     // A pair of wild wolves can be seen moving through the distant tree line.
-    if (introTime >= 15 && introTime < 29) {
-      const firstHowl = (introTime >= 17.2 && introTime < 20.1) || (introTime >= 24.7 && introTime < 26.8);
-      const secondHowl = introTime >= 18.1 && introTime < 21.0;
+    if (introTime >= 15 && introTime < 25.5) {
+      const firstHowl = introTime >= 17.2 && introTime < 20.0;
+      const secondHowl = introTime >= 21.4 && introTime < 24.8;
       drawIntroWolf(24 * TILE, 18 * TILE, false, firstHowl);
       drawIntroWolf(29 * TILE, 20 * TILE, true, secondHowl);
     }
@@ -201,7 +201,8 @@ const Overworld = (() => {
       ctx.save();
       ctx.strokeStyle = 'rgba(230,239,255,' + (0.32 + howlPulse * 0.42) + ')';
       ctx.lineWidth = 1.5;
-      const side = flip ? -1 : 1;
+      // The battle sprite faces left by default; the flipped wolf faces right.
+      const side = flip ? 1 : -1;
       for (let wave = 0; wave < 3; wave++) {
         const radius = 8 + wave * 5 + howlPulse * 2;
         ctx.beginPath();
@@ -232,18 +233,34 @@ const Overworld = (() => {
       }
     } else if (t < 38.5) {
       let zoom, cx, cy;
-      if (t < 22.5) {
-        const p = (t - 8.5) / 14;
+      if (t < 14.5) {
+        // Slow establishing pan across the fields.
+        const p = Math.max(0, (t - 8.5) / 6);
         const e = p * p * (3 - 2 * p);
-        zoom = .48 + e * .20;
-        cx = 490 - e * 210;
-        cy = 252 - e * 20;
+        zoom = .48 + e * .12;
+        cx = 490 - e * 150;
+        cy = 252 - e * 12;
+      } else if (t < 25.5) {
+        // Hold a deliberate, closer shot on the wolves while their howls play.
+        const p = (t - 14.5) / 11;
+        const e = p * p * (3 - 2 * p);
+        zoom = .60 + e * .62;
+        cx = 340 + e * 84;
+        cy = 240 + e * 60;
+      } else if (t < 30.5) {
+        // Leave the wolves slowly and travel toward the house.
+        const p = (t - 25.5) / 5;
+        const e = p * p * (3 - 2 * p);
+        zoom = 1.22 + e * .20;
+        cx = 424 - e * 240;
+        cy = 300 - e * 132;
       } else {
-        const p = Math.min(1, (t - 22.5) / 16);
+        // Gentle final push toward the house before entering the bedroom.
+        const p = Math.min(1, (t - 30.5) / 8);
         const e = p * p * (3 - 2 * p);
-        zoom = .68 + e * .92;
-        cx = 280 - e * 96;
-        cy = 232 - e * 64;
+        zoom = 1.42 + e * .18;
+        cx = 184;
+        cy = 168;
       }
       drawIntroWorld(zoom, cx, cy);
       if (t > 9.0 && t < 14.3) {
@@ -588,9 +605,11 @@ const Overworld = (() => {
   function drawHouse() {
     const x = Math.round(HOUSE.x - camX);
     const y = Math.round(HOUSE.y - camY);
-    // Ground shadow and foundation
-    ctx.fillStyle = 'rgba(20, 14, 12, 0.28)';
-    ctx.fillRect(x - 5, y + 67, HOUSE.w + 10, 15);
+    // Soft ground shadow hugs the house instead of leaving a large square patch.
+    ctx.fillStyle = 'rgba(20, 14, 12, 0.25)';
+    ctx.beginPath();
+    ctx.ellipse(x + HOUSE.w / 2, y + 76, HOUSE.w / 2 + 4, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = '#6b4933';
     ctx.fillRect(x + 3, y + 23, HOUSE.w - 6, 56);
 
@@ -1187,8 +1206,8 @@ const Overworld = (() => {
     if (introActive) {
       introTime += dt;
       if (introTime >= 17.2 && !introWolfHowlOne) { introWolfHowlOne = true; playWolfHowl(0.052, 2.35); }
-      if (introTime >= 18.1 && !introWolfHowlTwo) { introWolfHowlTwo = true; playWolfHowl(0.038, 2.15); }
-      if (introTime >= 24.7 && !introWolfHowlEcho) { introWolfHowlEcho = true; playWolfHowl(0.032, 1.9); }
+      // The second call is the distant wolf: later, quieter, and longer so it reads as far away.
+      if (introTime >= 21.4 && !introWolfHowlTwo) { introWolfHowlTwo = true; playWolfHowl(0.021, 2.9); }
       if (introTime >= INTRO_DURATION) finishIntro();
       return;
     }
