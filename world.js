@@ -814,7 +814,12 @@ const Overworld = (() => {
     const top = py + 9, bottom = py + 15;
 
     // Convert the shared [x,y,width,height] wall layout into collision edges.
-    const walls = INTERIOR_WALLS.map(([x, y, w, h]) => [x, y, x + w, y + h]);
+    const roomScale = 1.0304; // 1.12 room expansion combined with 0.92 camera zoom.
+    const walls = INTERIOR_WALLS.map(([x, y, w, h]) => {
+      const x1 = 160 + (x - 160) * roomScale;
+      const y1 = 120 + (y - 120) * roomScale;
+      return [x1, y1, x1 + w * roomScale, y1 + h * roomScale];
+    });
 
     // Collision footprints follow the furniture's outer shadow / base, not
     // arbitrary oversized boxes. The plant is separate from the coffee table.
@@ -1500,6 +1505,13 @@ const Overworld = (() => {
     ctx.fillStyle = '#160d20';
     ctx.fillRect(0, 0, 320, 240);
 
+    // Give every room and the central hallway a little more usable floor area.
+    // The outer 0.92 camera scale keeps the complete house visible on screen.
+    ctx.save();
+    ctx.translate(160, 120);
+    ctx.scale(1.12, 1.12);
+    ctx.translate(-160, -120);
+
     // Warm timber floor throughout the house.
     ctx.fillStyle = '#704333'; ctx.fillRect(18, 18, 284, 208);
     ctx.fillStyle = '#c58a57'; ctx.fillRect(25, 25, 270, 193);
@@ -1564,6 +1576,10 @@ const Overworld = (() => {
       if (ww >= wh) wallH(wx, wy, ww, wh);
       else wallV(wx, wy, wh, ww);
     }
+    ctx.restore();
+
+    // Furniture remains slightly smaller than the expanded rooms, leaving
+    // more clear floor around each item and keeping the player easy to move.
 
     // Kitchen: counter, dining table and small kitchen pieces.
     drawInteriorArt(16, 387, 39, 48, 34, 38, 22, 29);
