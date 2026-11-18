@@ -701,7 +701,7 @@ const Overworld = (() => {
 
   const MAILBOX = { x: 15.4 * TILE, y: 12.4 * TILE };
   // The note rests on the dresser in Dad's bedroom.
-  const DAD_NOTE = { x: 103, y: 183 };
+  const DAD_NOTE = { x: 100, y: 184 };
 
   function rng(seed) {
     let s = seed >>> 0;
@@ -825,10 +825,8 @@ const Overworld = (() => {
       [198,39,241,72], [230,70,258,94], [266,34,293,67], [270,72,292,91],
       // Separate bathroom fixtures opening onto the hallway.
       [210,111,237,136], [254,111,282,136],
-      // Dad's bedroom: bed, bedside table, bookcase and dresser.
-      [39,128,74,171], [76,131,92,148], [92,131,118,164], [91,180,118,203],
-      // Player's bedroom: bed, bedside table, wall shelf and dresser.
-      [203,162,239,206], [242,164,258,181], [263,164,289,187], [263,189,289,212]
+      [38,138,76,178], [78,145,91,160], [89,139,115,172], [87,180,113,202],
+      [244,164,282,204], [224,165,239,180], [224,185,248,205], [257,185,283,205]
     ];
 
     return walls.concat(furniture).some(([x1, y1, x2, y2]) =>
@@ -1573,35 +1571,48 @@ const Overworld = (() => {
     drawInteriorArt(336, 38, 50, 57, 266, 34, 24, 31);
     drawInteriorArt(337, 432, 48, 42, 270, 72, 17, 17);
 
-    // Bathroom: two clear fixtures in a separate room off the hallway.
-    drawInteriorSprite(21, 7, 2, 2, 210, 112, 24, 24);
-    drawInteriorSprite(23, 7, 2, 2, 254, 112, 24, 24);
+    // Bathroom: pale tile floor, toilet, sink, and a curtained shower.
+    ctx.fillStyle = '#d6e0d7'; ctx.fillRect(202, 112, 83, 31);
+    ctx.fillStyle = '#a9c0b8';
+    for (let x = 204; x < 285; x += 10) ctx.fillRect(x, 112, 1, 31);
+    for (let y = 114; y < 143; y += 8) ctx.fillRect(202, y, 83, 1);
+    ctx.fillStyle = '#8faeb0'; ctx.fillRect(258, 115, 23, 25);
+    ctx.fillStyle = '#d9e9e5'; ctx.fillRect(260, 117, 19, 21);
+    ctx.fillStyle = '#6f9c9b'; ctx.fillRect(260, 117, 19, 2);
+    for (let x = 262; x < 279; x += 5) { ctx.fillStyle = '#b5d0ca'; ctx.fillRect(x, 119, 2, 18); }
+    // Toilet.
+    ctx.fillStyle = '#718b88'; ctx.fillRect(209, 115, 13, 7);
+    ctx.fillStyle = '#f2eee0'; ctx.fillRect(210, 116, 11, 6);
+    ctx.fillStyle = '#718b88'; ctx.fillRect(208, 122, 16, 13);
+    ctx.fillStyle = '#f7f3e8'; ctx.fillRect(209, 123, 14, 10);
+    ctx.fillStyle = '#c5d3cb'; ctx.fillRect(212, 125, 8, 6);
+    // Pedestal sink.
+    ctx.fillStyle = '#718b88'; ctx.fillRect(235, 116, 15, 9);
+    ctx.fillStyle = '#f4f0e4'; ctx.fillRect(236, 117, 13, 7);
+    ctx.fillStyle = '#b4c6bd'; ctx.fillRect(240, 124, 5, 13);
+    ctx.fillStyle = '#879e96'; ctx.fillRect(241, 116, 3, 2);
 
-    // Dad's bedroom, bottom-left. Use the actual blue bed and blue rug sprites.
-    // The headboard sits close to the upper wall; the rug extends around the bed.
-    drawInteriorArt(544, 545, 78, 78, 32, 135, 50, 55);
-    drawInteriorArt(16, 48, 47, 49, 39, 127, 35, 44);
-    drawInteriorArt(224, 282, 47, 40, 76, 131, 16, 17);
-    drawInteriorArt(336, 38, 50, 57, 92, 131, 26, 33);
-    drawInteriorArt(224, 282, 47, 40, 91, 180, 27, 23);
+    // Blue bed sprites only: remove the oversized rug layer that made each
+    // bed spill into the walking route. Both headboards sit against upper walls.
+    drawInteriorArt(16, 48, 47, 49, 38, 138, 38, 40);
+    drawInteriorArt(224, 282, 47, 40, 78, 145, 13, 15);
+    drawInteriorArt(336, 38, 50, 57, 89, 139, 26, 33);
+    drawInteriorArt(224, 282, 47, 40, 87, 180, 26, 22);
 
-    // Player's bedroom, bottom-right. Match the blue bed and place its furniture
-    // along the right wall so the doorway and floor space remain clear.
-    drawInteriorArt(544, 545, 78, 78, 199, 164, 55, 48);
-    drawInteriorArt(16, 48, 47, 49, 203, 162, 36, 44);
-    drawInteriorArt(224, 282, 47, 40, 242, 164, 16, 17);
-    drawInteriorArt(398, 61, 49, 36, 263, 164, 26, 23);
-    drawInteriorArt(224, 282, 47, 40, 263, 189, 26, 21);
+    drawInteriorArt(16, 48, 47, 49, 244, 164, 38, 40);
+    drawInteriorArt(224, 282, 47, 40, 224, 165, 14, 15);
+    drawInteriorArt(336, 38, 50, 57, 224, 185, 24, 20);
+    drawInteriorArt(224, 282, 47, 40, 257, 185, 26, 20);
 
     // A folded paper note on Dad's dresser.
     ctx.save();
-    ctx.fillStyle = 'rgba(35,18,24,.35)'; ctx.fillRect(96, 181, 17, 13);
-    ctx.fillStyle = '#77513c'; ctx.fillRect(95, 178, 17, 13);
-    ctx.fillStyle = '#eadbb3'; ctx.fillRect(96, 178, 15, 11);
-    ctx.fillStyle = '#fff0cc'; ctx.fillRect(97, 179, 12, 1);
-    ctx.fillStyle = '#b59a70'; ctx.fillRect(98, 182, 9, 1); ctx.fillRect(98, 185, 7, 1);
-    ctx.fillStyle = '#d1bd91'; ctx.fillRect(107, 178, 4, 4);
-    ctx.fillStyle = '#f7ebca'; ctx.fillRect(107, 179, 2, 2);
+    ctx.fillStyle = 'rgba(35,18,24,.35)'; ctx.fillRect(92, 181, 17, 13);
+    ctx.fillStyle = '#77513c'; ctx.fillRect(91, 178, 17, 13);
+    ctx.fillStyle = '#eadbb3'; ctx.fillRect(92, 178, 15, 11);
+    ctx.fillStyle = '#fff0cc'; ctx.fillRect(93, 179, 12, 1);
+    ctx.fillStyle = '#b59a70'; ctx.fillRect(94, 182, 9, 1); ctx.fillRect(94, 185, 7, 1);
+    ctx.fillStyle = '#d1bd91'; ctx.fillRect(103, 178, 4, 4);
+    ctx.fillStyle = '#f7ebca'; ctx.fillRect(103, 179, 2, 2);
     ctx.restore();
 
     // Draw the player in the same top-down view used by the rest of the house.
