@@ -2625,6 +2625,12 @@ const Overworld = (() => {
   function controllerAction(action) {
     if (introActive) { finishIntro(); return; }
 
+    // Back closes an open panel before it can pause the game.
+    if (panel && action === 'back') {
+      panel = null;
+      return;
+    }
+
     if (paused) {
       if (action === 'back') {
         paused = false;
@@ -2642,7 +2648,7 @@ const Overworld = (() => {
       }
       return;
     }
-    if (action === 'back') {
+    if (action === 'back' || action === 'pause') {
       paused = true;
       pauseSelection = 0;
       panel = null;
@@ -2657,12 +2663,7 @@ const Overworld = (() => {
     if (action === 'primary') { if (panel) panel = null; else interact(); }
     else if (action === 'inventory') panel = panel === 'inventory' ? null : 'inventory';
     else if (action === 'stats') panel = panel === 'stats' ? null : 'stats';
-    else if (action === 'night') {
-      const alreadyNight = isNight();
-      worldClock = 0.80;
-      if (!alreadyNight) { wolves.length = 0; wolfSpawned = false; }
-      notice = 'Night has fallen...'; noticeUntil = time + 2.5;
-    }
+    // No unsupported night-toggle action is assigned to a controller button.
   }
   return { init, update, draw, stop, controllerAction };
 })();
