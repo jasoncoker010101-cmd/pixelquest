@@ -12,7 +12,7 @@ const Overworld = (() => {
   let time = 0;
 
   // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
-  let introActive = false, introTime = 0, introAudio = null, introSoundChar = 0, introTextSegment = '', introLastReveal = 0;
+  let introActive = false, introTime = 0, introAudio = null, introSoundChar = 0, introTextSegment = '', introLastReveal = 0, introWolfHowlOne = false, introWolfHowlTwo = false, introWolfHowlEcho = false;
   const INTRO_DURATION = 45.5;
   function finishIntro() {
     introActive = false;
@@ -42,6 +42,45 @@ const Overworld = (() => {
       osc.connect(gain); gain.connect(introAudio.destination);
       osc.start(now); osc.stop(now + 0.02);
       introSoundChar++;
+    } catch (_) {}
+  }
+  function playWolfHowl(volume = 0.045, duration = 2.25) {
+    try {
+      const AudioCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtor) return;
+      if (!introAudio) introAudio = new AudioCtor();
+      if (introAudio.state === 'suspended') introAudio.resume();
+      const now = introAudio.currentTime;
+      const master = introAudio.createGain();
+      const filter = introAudio.createBiquadFilter();
+      filter.type = 'lowpass'; filter.frequency.setValueAtTime(1150, now);
+      master.gain.setValueAtTime(0.0001, now);
+      master.gain.exponentialRampToValueAtTime(volume, now + 0.28);
+      master.gain.setValueAtTime(volume * 0.82, now + duration * 0.58);
+      master.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      filter.connect(master); master.connect(introAudio.destination);
+      const lfo = introAudio.createOscillator();
+      const lfoGain = introAudio.createGain();
+      lfo.frequency.setValueAtTime(5.2, now);
+      lfoGain.gain.setValueAtTime(19, now);
+      lfo.connect(lfoGain);
+      const voices = [
+        { ratio: 1, gain: 0.78, start: 370, peak: 535, end: 285 },
+        { ratio: 2.01, gain: 0.16, start: 742, peak: 1060, end: 570 }
+      ];
+      voices.forEach(v => {
+        const osc = introAudio.createOscillator();
+        const voiceGain = introAudio.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(v.start, now);
+        osc.frequency.linearRampToValueAtTime(v.peak, now + 0.62);
+        osc.frequency.linearRampToValueAtTime(v.end, now + duration);
+        if (v.ratio === 1) lfoGain.connect(osc.frequency);
+        voiceGain.gain.setValueAtTime(v.gain, now);
+        osc.connect(voiceGain); voiceGain.connect(filter);
+        osc.start(now); osc.stop(now + duration + 0.03);
+      });
+      lfo.start(now); lfo.stop(now + duration + 0.03);
     } catch (_) {}
   }
   function introTextBox(lines, reveal, segment) {
@@ -125,31 +164,52 @@ const Overworld = (() => {
     bunnies.forEach(drawBunny);
     // A pair of wild wolves can be seen moving through the distant tree line.
     if (introTime >= 15 && introTime < 29) {
-      drawIntroWolf(24 * TILE, 18 * TILE, false);
-      drawIntroWolf(29 * TILE, 20 * TILE, true);
+      const firstHowl = (introTime >= 17.2 && introTime < 20.1) || (introTime >= 24.7 && introTime < 26.8);
+      const secondHowl = introTime >= 18.1 && introTime < 21.0;
+      drawIntroWolf(24 * TILE, 18 * TILE, false, firstHowl);
+      drawIntroWolf(29 * TILE, 20 * TILE, true, secondHowl);
     }
     camX = oldX; camY = oldY;
     ctx.restore();
   }
-  function drawIntroWolf(x, y, flip) {
-    const px = Math.round(x), py = Math.round(y + Math.sin(introTime * 3 + x) * 1.2);
+  function drawIntroWolf(x, y, flip, howling) {
+    const px = Math.round(x);
+    const howlPulse = howling ? (Math.sin(introTime * 13) + 1) * 0.5 : 0;
+    const py = Math.round(y + Math.sin(introTime * 3 + x) * 1.1 - howlPulse * 1.5);
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,.32)';
-    ctx.fillRect(px - 10, py + 7, 21, 3);
+    ctx.fillStyle = 'rgba(0,0,0,.34)';
+    ctx.fillRect(px - 19, py + 17, 39, 5);
+    // Use the exact same grey wolf sprite-sheet cell as the battle scene.
     if (battleWolfSprite.complete && battleWolfSprite.naturalWidth && battleWolfSprite.naturalHeight) {
       const cellW = battleWolfSprite.naturalWidth / 3;
       const cellH = battleWolfSprite.naturalHeight / 4;
       ctx.imageSmoothingEnabled = false;
-      if (flip) {
-        ctx.translate(px, 0); ctx.scale(-1, 1);
-        ctx.drawImage(battleWolfSprite, cellW, cellH, cellW, cellH, -12, py - 14, 24, 24);
-      } else {
-        ctx.drawImage(battleWolfSprite, cellW, cellH, cellW, cellH, px - 12, py - 14, 24, 24);
-      }
+      ctx.translate(px, py);
+      if (flip) ctx.scale(-1, 1);
+      if (howling) ctx.rotate(-0.035 - howlPulse * 0.025);
+      ctx.drawImage(
+        battleWolfSprite,
+        cellW, cellH, cellW, cellH,
+        -21, -24, 42, 42
+      );
+      ctx.restore();
     } else {
-      drawWolf({ x: px, y: py, howl: flip ? 1.2 : 0 });
+      ctx.restore();
+      return;
     }
-    ctx.restore();
+    if (howling) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(230,239,255,' + (0.32 + howlPulse * 0.42) + ')';
+      ctx.lineWidth = 1.5;
+      const side = flip ? -1 : 1;
+      for (let wave = 0; wave < 3; wave++) {
+        const radius = 8 + wave * 5 + howlPulse * 2;
+        ctx.beginPath();
+        ctx.arc(px + side * 15, py - 12, radius, -0.78, 0.78);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
   }
   function drawIntro() {
     const t = introTime;
@@ -1126,6 +1186,9 @@ const Overworld = (() => {
   function update(dt) {
     if (introActive) {
       introTime += dt;
+      if (introTime >= 17.2 && !introWolfHowlOne) { introWolfHowlOne = true; playWolfHowl(0.052, 2.35); }
+      if (introTime >= 18.1 && !introWolfHowlTwo) { introWolfHowlTwo = true; playWolfHowl(0.038, 2.15); }
+      if (introTime >= 24.7 && !introWolfHowlEcho) { introWolfHowlEcho = true; playWolfHowl(0.032, 1.9); }
       if (introTime >= INTRO_DURATION) finishIntro();
       return;
     }
@@ -1545,6 +1608,7 @@ const Overworld = (() => {
     applySave(saveData);
     introActive = !saveData || typeof saveData !== 'object';
     introTime = 0; introSoundChar = 0; introTextSegment = ''; introLastReveal = 0;
+    introWolfHowlOne = false; introWolfHowlTwo = false; introWolfHowlEcho = false;
     if (introActive) {
       try {
         const AudioCtor = window.AudioContext || window.webkitAudioContext;
