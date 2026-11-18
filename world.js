@@ -202,8 +202,9 @@ const Overworld = (() => {
       const wolfOneY = 18 * TILE + wanderY + fleeY;
       const wolfTwoX = 29 * TILE - wanderX * 0.72 - fleeX * 0.8;
       const wolfTwoY = 20 * TILE - wanderY * 0.65 + fleeY * 0.8;
-      const wolfOneVX = Math.cos(introTime * 0.85) * 13 * 0.85 + Math.cos(introTime * 1.7) * 4 * 1.7 + fleeProgress * 70;
-      const wolfTwoVX = -wolfOneVX * 0.72 + fleeProgress * 56;
+      // During the flee beat both scripted paths move toward decreasing X.
+      const wolfOneVX = Math.cos(introTime * 0.85) * 13 * 0.85 + Math.cos(introTime * 1.7) * 4 * 1.7 - fleeProgress * 70;
+      const wolfTwoVX = -wolfOneVX * 0.72 - fleeProgress * 56;
       drawIntroWolf(wolfOneX, wolfOneY, false, wolfOneVX >= 0, walk, fleeProgress);
       drawIntroWolf(wolfTwoX, wolfTwoY, true, wolfTwoVX >= 0, walk, fleeProgress);
       if (introTime >= 21.4 && introTime < 24.8) {
@@ -269,10 +270,12 @@ const Overworld = (() => {
         const trunkX = tx * TILE + 8, trunkY = ty * TILE + 13;
         const dx = px - trunkX, dy = py - trunkY;
         const d = Math.hypot(dx, dy);
-        if (d < 13) {
+        // Leave a wider gap around the trunk/canopy; cinematic sprites are
+        // larger than their tile-sized map collision.
+        if (d < 19) {
           const angle = d > 0.01 ? Math.atan2(dy, dx) : Math.PI / 2;
-          px = trunkX + Math.cos(angle) * 13;
-          py = trunkY + Math.sin(angle) * 13;
+          px = trunkX + Math.cos(angle) * 19;
+          py = trunkY + Math.sin(angle) * 19;
         }
       }
     }
@@ -697,9 +700,12 @@ const Overworld = (() => {
         // Draw the uploaded nature-pack tree sprite, with its trunk aligned to the tile.
         if (natureTreeSheet.complete && natureTreeSheet.naturalWidth >= 48 && natureTreeSheet.naturalHeight >= 32) {
           ctx.imageSmoothingEnabled = false;
-          const treeVariant = h % 2;
-          const sx = treeVariant * 16, sy = 0;
-          ctx.drawImage(natureTreeSheet, sx, sy, 16, 16, px - 4, py - 8, 24, 24);
+          // The pack is a 3-by-2 atlas: pick a cell consistently per tile,
+          // rather than repeatedly drawing just the first two cells.
+          const treeCell = h % 6;
+          const sx = (treeCell % 3) * 16;
+          const sy = Math.floor(treeCell / 3) * 16;
+          ctx.drawImage(natureTreeSheet, sx, sy, 16, 16, px - 6, py - 12, 28, 28);
         } else {
           ctx.fillStyle = '#6b4423';
           ctx.fillRect(px + 6, py + 10, 4, 6);
