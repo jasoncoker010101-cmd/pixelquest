@@ -2017,6 +2017,12 @@ const Overworld = (() => {
       return;
     }
 
+    if (k === 'escape' && panel) {
+      panel = null;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     if (k === 'escape' || k === 'p') {
       paused = true;
       pauseSelection = 0;
