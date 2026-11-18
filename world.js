@@ -627,6 +627,14 @@ const Overworld = (() => {
   forestDecorSheet.onerror = () => { forestDecorReady = false; };
   forestDecorSheet.src = pqAsset('./assets/forest_pack/TopDownFantasy-Forest/Decorations/Decorations.png');
 
+  
+  // Supplied side-scrolling forest background by Eder Muniz.
+  const sideForestBackground = new Image();
+  let sideForestBackgroundReady = false;
+  sideForestBackground.onload = () => { sideForestBackgroundReady = true; };
+  sideForestBackground.onerror = () => { sideForestBackgroundReady = false; };
+  sideForestBackground.src = pqAsset('./assets/free_forest/Free Pixel Art Forest/Preview/Background.png');
+
   const inventory = { berries: 3, wood: 0, fish: 0 };
   const stats = { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0 };
 
@@ -1893,54 +1901,32 @@ const Overworld = (() => {
   }
 
   function drawSideForest() {
-    const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    sky.addColorStop(0, '#18263d');
-    sky.addColorStop(0.58, '#39495a');
-    sky.addColorStop(1, '#8a684e');
-    ctx.fillStyle = sky; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#d3b17b'; ctx.fillRect(248, 40, 12, 12);
-    ctx.fillStyle = '#e5cc98'; ctx.fillRect(251, 37, 6, 18);
-
-    // Distant ridge layers use fixed shapes; the tree sprites below come from the uploaded forest atlas.
+    // The background is the flattened preview from the supplied layered forest pack.
+    // It includes its own canopy, trunks, undergrowth and ground, so do not paint
+    // the old gradient, geometric hills, or top-down tree-atlas scenery over it.
     ctx.save();
-    ctx.translate(-sideCameraX * 0.18, 0);
-    for (let i = 0; i < 18; i++) {
-      const x = i * 250 - 80;
-      ctx.fillStyle = i % 2 ? '#253d3b' : '#2d4641';
-      ctx.beginPath();
-      ctx.moveTo(x, 194); ctx.lineTo(x + 85, 92 + (i % 3) * 12);
-      ctx.lineTo(x + 170, 194); ctx.closePath(); ctx.fill();
+    ctx.imageSmoothingEnabled = false;
+    if (sideForestBackgroundReady && sideForestBackground.naturalWidth) {
+      const bgWidth = canvas.width;
+      const bgHeight = canvas.height;
+      const bgY = SIDE_GROUND_Y - bgHeight * 0.95;
+      const offset = sideCameraX % bgWidth;
+      for (let x = -offset - bgWidth; x < canvas.width + bgWidth; x += bgWidth) {
+        ctx.drawImage(sideForestBackground, x, bgY, bgWidth, bgHeight);
+      }
+    } else {
+      ctx.fillStyle = '#536b80';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
     ctx.restore();
 
-    const variants = forestTreeSprites();
-    if (forestDecorReady) {
-      ctx.save();
-      ctx.translate(-sideCameraX * 0.46, 0);
-      const farTrees = [10, 130, 280, 430, 610, 790, 970, 1160, 1340, 1530, 1710, 1900, 2090, 2280, 2470, 2650, 2840, 3030, 3220, 3410, 3600, 3790, 3950];
-      farTrees.forEach((wx, i) => {
-        const tree = variants[(i + 1) % variants.length];
-        const w = 45 + (i % 3) * 8;
-        const h = Math.round(w * tree.sh / tree.sw);
-        drawAtlasSprite(forestDecorSheet, forestDecorReady, tree.sx, tree.sy, tree.sw, tree.sh,
-          wx, SIDE_GROUND_Y - h + (i % 2) * 5, w, h);
-      });
-      ctx.restore();
-    }
-
     ctx.save();
     ctx.translate(-sideCameraX, 0);
-    // A continuous grassy floor with an earthy cutaway side.
-    ctx.fillStyle = '#4c382f'; ctx.fillRect(0, SIDE_GROUND_Y, FOREST_SIDE_WIDTH, 44);
-    ctx.fillStyle = '#704b36'; ctx.fillRect(0, SIDE_GROUND_Y + 10, FOREST_SIDE_WIDTH, 34);
-    for (let x = 0; x < FOREST_SIDE_WIDTH; x += 16) {
-      if (!drawAtlasSprite(forestTilesSheet, forestTilesReady, 16, 16, 16, 16, x, SIDE_GROUND_Y, 16, 16)) {
-        ctx.fillStyle = '#688b45'; ctx.fillRect(x, SIDE_GROUND_Y, 16, 5);
-      }
-    }
+    // The supplied background already contains the forest floor. Only draw
+    // the separate raised platforms here; keep the continuous ground invisible.
     FOREST_SIDE_PLATFORMS.slice(1).forEach(drawSidePlatform);
 
-    // The supplied werewolf walk/run sheets are used as roaming forest creatures, not static stand-ins.
+    // The supplied werewolf walk/run sheets are used as roaming forest creatures.
     const creatures = [
       { x: 1370, walk: introBlackWalk, run: introBlackRun, phase: 0, framesWalk: 11, framesRun: 9 },
       { x: 2760, walk: introRedWalk, run: introRedRun, phase: 2.7, framesWalk: 11, framesRun: 9 }
