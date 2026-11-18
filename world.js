@@ -442,8 +442,8 @@ const Overworld = (() => {
     // Interior player coordinates are the character CENTER. drawPlayer is
     // rendered at center - 8, so convert its lower-body hitbox back to world
     // coordinates here. This keeps collision aligned with the visible sprite.
-    const left = px - 5, right = px + 4;
-    const top = py + 1, bottom = py + 7;
+    const left = px + 3, right = px + 12;
+    const top = py + 9, bottom = py + 15;
 
     // These rectangles match the visible wall segments drawn below. Door gaps
     // are intentionally omitted so each room remains connected to the hall.
@@ -810,9 +810,9 @@ const Overworld = (() => {
     if (direction === 'up') {
       idleRow = 4; walkRow = 5;
     } else if (direction === 'left') {
-      idleRow = 2; walkRow = 3;
-    } else if (direction === 'right') {
       idleRow = 2; walkRow = 3; flip = true;
+    } else if (direction === 'right') {
+      idleRow = 2; walkRow = 3; flip = false;
     } else {
       idleRow = 0; walkRow = 1;
     }
@@ -1153,7 +1153,7 @@ const Overworld = (() => {
     player.facing = interiorPlayer.facing;
     player.moving = interiorPlayer.moving;
     player.walk = interiorPlayer.walk;
-    drawPlayer(Math.round(interiorPlayer.x - 8), Math.round(interiorPlayer.y - 8));
+    drawPlayer(Math.round(interiorPlayer.x), Math.round(interiorPlayer.y));
     player.facing = oldFacing; player.moving = oldMoving; player.walk = oldWalk;
 
     if (Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 25) {
