@@ -140,12 +140,20 @@ const Overworld = (() => {
     drawMailbox();
     drawFish();
     bunnies.forEach(drawBunny);
-    // A pair of wild wolves can be seen moving through the distant tree line.
-    if (introTime >= 15 && introTime < 25.5) {
-      const firstHowl = introTime >= 17.2 && introTime < 20.0;
-      // The second wolf is only visible. The later howl is environmental, from far off.
-      drawIntroWolf(24 * TILE, 18 * TILE, false, firstHowl);
-      drawIntroWolf(29 * TILE, 20 * TILE, true, false);
+    // Two werewolves wander before reacting to the distant howl, then flee.
+    if (introTime >= 15 && introTime < 27.2) {
+      const wander = Math.max(0, Math.min(1, (introTime - 15) / 6.4));
+      const howlAt = 21.4;
+      const fleeStart = 22.15;
+      const fleeProgress = Math.max(0, Math.min(1, (introTime - fleeStart) / 3.25));
+      const wanderX = Math.sin(introTime * 0.85) * 13 + Math.sin(introTime * 1.7) * 4;
+      const wanderY = Math.sin(introTime * 1.15 + 1) * 7;
+      const fleeX = fleeProgress * fleeProgress * 105;
+      const fleeY = fleeProgress * 70;
+      const pause = introTime >= howlAt && introTime < fleeStart;
+      const walk = introTime < howlAt;
+      drawIntroWolf(24 * TILE + wanderX - fleeX, 18 * TILE + wanderY - fleeY, false, false, walk, fleeProgress);
+      drawIntroWolf(29 * TILE - wanderX * 0.72 + fleeX, 20 * TILE - wanderY * 0.65 - fleeY * 0.8, true, false, walk, fleeProgress);
       if (introTime >= 21.4 && introTime < 24.8) {
         drawDistantHowlGlitch(37 * TILE, 8 * TILE, (introTime - 21.4) / 3.4);
       }
@@ -197,32 +205,25 @@ const Overworld = (() => {
     }
     ctx.restore();
   }
-  function drawIntroWolf(x, y, flip, howling) {
+  function drawIntroWolf(x, y, flip, howling, walking, fleeing) {
     const px = Math.round(x);
-    const howlPulse = howling ? (Math.sin(introTime * 13) + 1) * 0.5 : 0;
-    const py = Math.round(y + Math.sin(introTime * 3 + x) * 1.1 - howlPulse * 1.5);
+    const gait = walking ? Math.sin(introTime * 10 + (flip ? 1.8 : 0)) : 0;
+    const py = Math.round(y + gait * 2.2 + Math.sin(introTime * 3 + x) * 0.8);
     const sprite = flip ? introRedWerewolf : introBlackWerewolf;
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,.4)';
-    ctx.beginPath(); ctx.ellipse(px, py + 18, 23, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(px, py + 18, Math.max(8, 23 - fleeing * 7), 4, 0, 0, Math.PI * 2); ctx.fill();
     if (sprite.complete && sprite.naturalWidth) {
       ctx.imageSmoothingEnabled = false;
       ctx.translate(px, py);
       if (flip) ctx.scale(-1, 1);
-      if (howling) ctx.rotate(-0.04 - howlPulse * 0.035);
-      // The new Craftpix werewolf pack is used for the cinematic only.
-      // These are individual 48px sprites, not sheets. Enlarge for readability;
-      // trim the red sprite's stray palette pixels at its bottom edge.
+      // Lean and bob during the flee reaction; idle sprite is reused with pixel-stepped movement.
+      ctx.rotate(fleeing * (flip ? -0.12 : 0.12));
+      const bob = walking || fleeing > 0 ? Math.round(Math.sin(introTime * (fleeing > 0 ? 17 : 10) + (flip ? 2 : 0)) * (fleeing > 0 ? 3 : 1.5)) : 0;
       const sourceHeight = sprite === introRedWerewolf ? Math.min(42, sprite.naturalHeight) : sprite.naturalHeight;
-      ctx.drawImage(sprite, 0, 0, sprite.naturalWidth, sourceHeight, -32, -32, 64, 64);
+      ctx.drawImage(sprite, 0, 0, sprite.naturalWidth, sourceHeight, -32, -32 + bob, 64, 64);
       ctx.restore();
     } else { ctx.restore(); return; }
-    if (howling) {
-      // Eye flicker and the intentionally broken sound-wave distortion.
-      ctx.fillStyle = '#f1b6a9';
-      ctx.fillRect(px + (flip ? 10 : -10), py - 10, 2, 1);
-      drawGlitchHowl(px + (flip ? 14 : -14), py - 13, howlPulse, 2);
-    }
   }
   function drawIntro() {
     const t = introTime;
@@ -1222,9 +1223,9 @@ const Overworld = (() => {
   function update(dt) {
     if (introActive) {
       introTime += dt;
-      if (introTime >= 17.2 && !introWolfHowlOne) { introWolfHowlOne = true; playIntroWolfAudio(introWolfHowlAudioOne, 0.52, 1.0); }
+      if (introTime >= 17.2 && !introWolfHowlOne) { introWolfHowlOne = true; introWolfHowlAudioOne.pause(); introWolfHowlAudioOne.currentTime = 0; }
       // This recording is an environmental howl from beyond the visible wolves, not from the wolf on the right.
-      if (introTime >= 21.4 && !introWolfHowlTwo) { introWolfHowlTwo = true; playIntroWolfAudio(introWolfHowlAudioTwo, 0.16, 0.92); }
+      if (introTime >= 21.4 && !introWolfHowlTwo) { introWolfHowlTwo = true; playIntroWolfAudio(introWolfHowlAudioTwo, 0.18, 0.92); }
       if (introTime >= INTRO_DURATION) finishIntro();
       return;
     }
