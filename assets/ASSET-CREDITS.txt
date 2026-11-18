@@ -16,3 +16,8 @@ Main character sprite:
 Pixel planet opening cinematic:
 - PixelPlanets by Deep-Fold (MIT License), supplied by the project owner and used as a visual/technical reference for the procedural pixel-shaded planet effect.
 - Original browser-side Earth rendering in world.js; no Godot runtime files are required by Pixel Quest.
+
+Werewolf sprites used in the opening cinematic:
+- Pack: Free Werewolf Sprite Sheets (Black and Red Werewolf idle sprites), supplied by the project owner.
+- Source/license reference included in the pack: https://craftpix.net/file-licenses/DigitalDisco
+- Original pack files are not included; the two idle poses used in Pixel Quest were resized for the cinematic.
