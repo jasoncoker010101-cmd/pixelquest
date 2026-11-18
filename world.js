@@ -554,6 +554,8 @@ const Overworld = (() => {
 
   let camX = 0, camY = 0;
   let panel = null;
+  let paused = false;
+  let pauseSelection = 0;
   let notice = '';
   let noticeUntil = 0;
   let stepDistance = 0;
@@ -1584,6 +1586,7 @@ const Overworld = (() => {
   }
 
   function update(dt) {
+    if (paused) return;
     if (introActive) {
       introTime += dt;
       if (introTime >= 17.2 && !introWolfHowlOne) { introWolfHowlOne = true; introWolfHowlAudioOne.pause(); introWolfHowlAudioOne.currentTime = 0; }
@@ -1756,6 +1759,54 @@ const Overworld = (() => {
     }
   }
 
+  function drawPauseMenu() {
+    ctx.save();
+    ctx.fillStyle = 'rgba(5, 8, 16, 0.76)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // A layered wooden-and-gold frame that matches the game's existing menus.
+    ctx.fillStyle = '#211a27';
+    ctx.fillRect(48, 48, 224, 144);
+    ctx.fillStyle = '#563c3b';
+    ctx.fillRect(52, 52, 216, 136);
+    ctx.fillStyle = '#171723';
+    ctx.fillRect(56, 56, 208, 128);
+    ctx.strokeStyle = '#d6b477';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(56, 56, 208, 128);
+    ctx.strokeStyle = '#80604a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(61.5, 61.5, 197, 117);
+
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 17px monospace';
+    ctx.fillStyle = '#ffe4ae';
+    ctx.fillText('PAUSED', 160, 83);
+    ctx.fillStyle = '#a9b6ae';
+    ctx.font = '7px monospace';
+    ctx.fillText('THE WOODS CAN WAIT', 160, 96);
+
+    const options = ['RESUME', 'SAVE & EXIT TO TITLE'];
+    options.forEach((label, i) => {
+      const y = 108 + i * 25;
+      const selected = i === pauseSelection;
+      ctx.fillStyle = selected ? '#d3a56b' : '#302a35';
+      ctx.fillRect(78, y, 164, 19);
+      ctx.strokeStyle = selected ? '#fff0bf' : '#80604a';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(78.5, y + 0.5, 163, 18);
+      ctx.font = selected ? 'bold 9px monospace' : '9px monospace';
+      ctx.fillStyle = selected ? '#241a25' : '#ead9bb';
+      ctx.fillText((selected ? '> ' : '') + label, 160, y + 13);
+    });
+
+    ctx.fillStyle = '#b7b3ad';
+    ctx.font = '6px monospace';
+    ctx.fillText('↑ / ↓ SELECT     ENTER CHOOSE', 160, 165);
+    ctx.fillText('ESC OR P TO RESUME', 160, 175);
+    ctx.restore();
+  }
+
   function drawHUD() {
     ctx.fillStyle = 'rgba(9, 10, 20, 0.78)';
     ctx.fillRect(3, 3, 126, 25);
@@ -1782,8 +1833,8 @@ const Overworld = (() => {
 
   function draw() {
     if (introActive) { drawIntro(); return; }
-    if (battle) { drawBattle(); return; }
-    if (insideHouse) { drawHouseInterior(); return; }
+    if (battle) { drawBattle(); if (paused) drawPauseMenu(); return; }
+    if (insideHouse) { drawHouseInterior(); if (paused) drawPauseMenu(); return; }
     ctx.fillStyle = '#1b1f3a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     const x0 = Math.max(0, Math.floor(camX / TILE));
@@ -1822,6 +1873,7 @@ const Overworld = (() => {
     ctx.fillStyle=isNight()?'#c8d7ff':'#ffe5a1';ctx.textAlign='right';ctx.font='8px monospace';
     ctx.fillText(clockLabel(),canvas.width-7,13);
     drawPanel();
+    if (paused) drawPauseMenu();
   }
 
   function interact() {
@@ -1939,6 +1991,41 @@ const Overworld = (() => {
   function onKeyDown(e) {
     const k = e.key.toLowerCase();
     if (introActive) { finishIntro(); e.preventDefault(); e.stopPropagation(); return; }
+
+    if (paused) {
+      if (k === 'escape' || k === 'p') {
+        paused = false;
+        pauseSelection = 0;
+        keys.clear();
+      } else if (k === 'arrowup' || k === 'w') {
+        pauseSelection = (pauseSelection + 1) % 2;
+      } else if (k === 'arrowdown' || k === 's') {
+        pauseSelection = (pauseSelection + 1) % 2;
+      } else if (k === 'enter' || k === ' ' || k === 'e') {
+        if (pauseSelection === 0) {
+          paused = false;
+          pauseSelection = 0;
+        } else {
+          const saveData = getSaveData();
+          paused = false;
+          stop();
+          if (onExit) onExit(saveData);
+        }
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
+    if (k === 'escape' || k === 'p') {
+      paused = true;
+      pauseSelection = 0;
+      panel = null;
+      keys.clear();
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     if (battle) {
       if (k === '1' || k === 'enter' || k === ' ') { battleAction('fight'); e.preventDefault(); }
       else if (k === '2' || k === 'escape') { battleAction('run'); e.preventDefault(); }
@@ -1956,13 +2043,6 @@ const Overworld = (() => {
       noticeUntil = time + 2.5;
       e.preventDefault();
       e.stopPropagation();
-      return;
-    }
-    if (k === 'escape') {
-      e.preventDefault();
-      if (panel) { panel = null; return; }
-      stop();
-      if (onExit) onExit(getSaveData());
       return;
     }
     if (k === 'i' || k === 'c') {
@@ -1997,6 +2077,8 @@ const Overworld = (() => {
     map = buildMap();
     keys.clear();
     panel = null;
+    paused = false;
+    pauseSelection = 0;
     notice = '';
     time = 0;
     wolves.length=0; wolfSpawned=false; wolfNoticeCooldown=0; battle=null; insideHouse=false;
@@ -2036,16 +2118,38 @@ const Overworld = (() => {
 
   function controllerAction(action) {
     if (introActive) { finishIntro(); return; }
+
+    if (paused) {
+      if (action === 'back') {
+        paused = false;
+        pauseSelection = 0;
+      } else if (action === 'primary') {
+        if (pauseSelection === 0) {
+          paused = false;
+          pauseSelection = 0;
+        } else {
+          const saveData = getSaveData();
+          paused = false;
+          stop();
+          if (onExit) onExit(saveData);
+        }
+      }
+      return;
+    }
+    if (action === 'back') {
+      paused = true;
+      pauseSelection = 0;
+      panel = null;
+      keys.clear();
+      return;
+    }
     if (battle) {
       if (action === 'primary') battleAction('fight');
       else if (action === 'back') battleAction('run');
       return;
     }
     if (action === 'primary') { if (panel) panel = null; else interact(); }
-    else if (action === 'back') {
-      if (panel) panel = null;
-      else { stop(); if (onExit) onExit(getSaveData()); }
-    } else if (action === 'inventory') panel = panel === 'inventory' ? null : 'inventory';
+    else if (action === 'inventory') panel = panel === 'inventory' ? null : 'inventory';
     else if (action === 'stats') panel = panel === 'stats' ? null : 'stats';
     else if (action === 'night') {
       const alreadyNight = isNight();
