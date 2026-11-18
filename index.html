@@ -143,7 +143,7 @@
         next.searchParams.set('pqrev', newer);
         location.replace(next.toString());
       }
-    }, 60000);
+    }, 120000);
   };
   gameScript.onerror = () => {
     // If GitHub's API is unavailable, still bypass the browser's cached script.
