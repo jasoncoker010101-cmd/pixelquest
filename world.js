@@ -138,11 +138,58 @@ const Overworld = (() => {
     // A pair of wild wolves can be seen moving through the distant tree line.
     if (introTime >= 15 && introTime < 25.5) {
       const firstHowl = introTime >= 17.2 && introTime < 20.0;
-      const secondHowl = introTime >= 21.4 && introTime < 24.8;
+      // The second wolf is only visible. The later howl is environmental, from far off.
       drawIntroWolf(24 * TILE, 18 * TILE, false, firstHowl);
-      drawIntroWolf(29 * TILE, 20 * TILE, true, secondHowl);
+      drawIntroWolf(29 * TILE, 20 * TILE, true, false);
+      if (introTime >= 21.4 && introTime < 24.8) {
+        drawDistantHowlGlitch(37 * TILE, 8 * TILE, (introTime - 21.4) / 3.4);
+      }
     }
     camX = oldX; camY = oldY;
+    ctx.restore();
+  }
+  // Broken, pixel-stepped sound distortions. These are intentionally not smooth circles.
+  function drawGlitchHowl(x, y, intensity, seed = 0) {
+    ctx.save();
+    const colors = ['rgba(210,225,255,', 'rgba(150,190,255,', 'rgba(245,245,255,'];
+    for (let band = 0; band < 4; band++) {
+      const reach = 17 + band * 7 + intensity * 5;
+      const start = x + (band % 2 ? -1 : 1) * 8;
+      ctx.strokeStyle = colors[band % colors.length] + (0.12 + intensity * 0.28) + ')';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      let begun = false;
+      for (let n = 0; n < 18; n++) {
+        const px = start + n * (reach / 17);
+        const jitter = Math.sin((n + seed * 2 + band) * 2.7) * 3 + ((n + band) % 3 - 1) * 2;
+        const py = y + jitter + band * 2.2;
+        // Deliberately skip chunks and use short stepped segments for a glitchy look.
+        if ((n + band + seed) % 5 === 1 || (n + band) % 7 === 0) { begun = false; continue; }
+        if (!begun) { ctx.moveTo(Math.round(px), Math.round(py)); begun = true; }
+        else ctx.lineTo(Math.round(px), Math.round(py));
+      }
+      ctx.stroke();
+    }
+    // Tiny displaced pixel fragments flicker around the sound.
+    for (let p = 0; p < 8; p++) {
+      if ((p + Math.floor(intensity * 6)) % 3 === 0) continue;
+      ctx.fillStyle = 'rgba(205,225,255,' + (0.12 + intensity * 0.25) + ')';
+      ctx.fillRect(Math.round(x + ((p * 19 + seed * 13) % 53) - 25), Math.round(y + ((p * 11) % 23) - 11), 2 + (p % 2), 1);
+    }
+    ctx.restore();
+  }
+  function drawDistantHowlGlitch(x, y, progress) {
+    // Source is beyond the visible tree line, away from either wolf.
+    const pulse = 0.35 + 0.65 * Math.abs(Math.sin(introTime * 5.1));
+    drawGlitchHowl(x, y, pulse, Math.floor(introTime * 7));
+    // A few faint horizontal image tears sell the sound as distant/otherworldly.
+    ctx.save();
+    for (let n = 0; n < 4; n++) {
+      const yy = Math.round(y + Math.sin(introTime * 9 + n * 2) * (5 + n * 2));
+      const xx = Math.round(x - 25 + ((introTime * 17 + n * 21) % 28));
+      ctx.fillStyle = 'rgba(175,205,255,' + (0.04 + pulse * 0.1) + ')';
+      ctx.fillRect(xx, yy, 12 + n * 3, 1);
+    }
     ctx.restore();
   }
   function drawIntroWolf(x, y, flip, howling) {
@@ -150,40 +197,28 @@ const Overworld = (() => {
     const howlPulse = howling ? (Math.sin(introTime * 13) + 1) * 0.5 : 0;
     const py = Math.round(y + Math.sin(introTime * 3 + x) * 1.1 - howlPulse * 1.5);
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,.34)';
-    ctx.fillRect(px - 19, py + 17, 39, 5);
-    // Use the exact same grey wolf sprite-sheet cell as the battle scene.
+    ctx.fillStyle = 'rgba(0,0,0,.38)';
+    ctx.beginPath(); ctx.ellipse(px, py + 17, 23, 4, 0, 0, Math.PI * 2); ctx.fill();
     if (battleWolfSprite.complete && battleWolfSprite.naturalWidth && battleWolfSprite.naturalHeight) {
       const cellW = battleWolfSprite.naturalWidth / 3;
       const cellH = battleWolfSprite.naturalHeight / 4;
       ctx.imageSmoothingEnabled = false;
       ctx.translate(px, py);
       if (flip) ctx.scale(-1, 1);
-      if (howling) ctx.rotate(-0.035 - howlPulse * 0.025);
-      ctx.drawImage(
-        battleWolfSprite,
-        cellW, cellH, cellW, cellH,
-        -21, -24, 42, 42
-      );
+      if (howling) ctx.rotate(-0.04 - howlPulse * 0.035);
+      // Larger framing, sharper pixels, and a little darker contrast to feel more threatening.
+      ctx.drawImage(battleWolfSprite, cellW, cellH, cellW, cellH, -24, -25, 48, 46);
       ctx.restore();
-    } else {
-      ctx.restore();
-      return;
-    }
-    if (howling) {
-      ctx.save();
-      ctx.strokeStyle = 'rgba(230,239,255,' + (0.32 + howlPulse * 0.42) + ')';
-      ctx.lineWidth = 1.5;
-      // The battle sprite faces left by default; the flipped wolf faces right.
-      const side = flip ? 1 : -1;
-      for (let wave = 0; wave < 3; wave++) {
-        const radius = 8 + wave * 5 + howlPulse * 2;
-        ctx.beginPath();
-        ctx.arc(px + side * 15, py - 12, radius, -0.78, 0.78);
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
+    } else { ctx.restore(); return; }
+    // Small eye glints and rough silhouette accents, kept restrained so the source sprite stays readable.
+    ctx.save();
+    ctx.fillStyle = howling ? '#e7b7a8' : '#d5b5a0';
+    const eyeX = px + (flip ? 11 : -11);
+    ctx.fillRect(eyeX, py - 9, 2, 1);
+    ctx.fillStyle = 'rgba(15,12,20,.35)';
+    ctx.fillRect(px - (flip ? 18 : -14), py - 20, 4, 2);
+    ctx.restore();
+    if (howling) drawGlitchHowl(px + (flip ? 14 : -14), py - 13, howlPulse, 2);
   }
   function drawIntro() {
     const t = introTime;
@@ -1179,7 +1214,7 @@ const Overworld = (() => {
     if (introActive) {
       introTime += dt;
       if (introTime >= 17.2 && !introWolfHowlOne) { introWolfHowlOne = true; playIntroWolfAudio(introWolfHowlAudioOne, 0.72, 1.0); }
-      // The second call is the distant wolf: later, quieter, and longer so it reads as far away.
+      // This recording is an environmental howl from beyond the visible wolves, not from the wolf on the right.
       if (introTime >= 21.4 && !introWolfHowlTwo) { introWolfHowlTwo = true; playIntroWolfAudio(introWolfHowlAudioTwo, 0.24, 0.92); }
       if (introTime >= INTRO_DURATION) finishIntro();
       return;
