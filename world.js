@@ -60,8 +60,8 @@ const Overworld = (() => {
     introActive = false;
     introTime = INTRO_DURATION;
     insideHouse = true;
-    interiorPlayer.x = 240;
-    interiorPlayer.y = 180;
+    interiorPlayer.x = 208;
+    interiorPlayer.y = 184;
     interiorPlayer.facing = 'up';
     interiorPlayer.moving = false;
     interiorPlayer.walk = 0;
@@ -2055,7 +2055,7 @@ const Overworld = (() => {
     if (sidePlayer.x < 112) {
       platformScene = 'house';
       insideHouse = true;
-      interiorPlayer.x = 160; interiorPlayer.y = 194;
+      interiorPlayer.x = 208; interiorPlayer.y = 184;
       interiorPlayer.facing = 'up'; interiorPlayer.moving = false; interiorPlayer.walk = 0;
       sidePlayer.x = 880; sidePlayer.y = SIDE_GROUND_Y;
       sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
@@ -2490,8 +2490,8 @@ const Overworld = (() => {
     // must begin in the kid's bedroom. Later saves preserve the real location.
     if (saveData.houseSpawnMigrated !== true) {
       insideHouse = true;
-      interiorPlayer.x = 240;
-      interiorPlayer.y = 180;
+      interiorPlayer.x = 208;
+      interiorPlayer.y = 184;
       interiorPlayer.facing = 'down';
       return;
     }
