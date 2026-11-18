@@ -1,0 +1,36 @@
+name: Extract nature sprites
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "assets/nature free.zip"
+      - ".github/workflows/extract-nature.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract nature pack
+        run: |
+          mkdir -p assets/nature
+          unzip -o "assets/nature free.zip" -d assets/nature
+          find assets/nature -type f -print
+      - name: Commit extracted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/nature
+          if git diff --cached --quiet; then
+            echo "No extracted files changed."
+          else
+            git commit -m "Extract nature sprite pack"
+            git push
+          fi
