@@ -253,23 +253,32 @@ const Overworld = (() => {
   }
   function drawIntroWolf(x, y, flip, howling, walking, fleeing) {
     const px = Math.round(x);
-    const gait = walking ? Math.sin(introTime * 10 + (flip ? 1.8 : 0)) : 0;
-    const py = Math.round(y + gait * 2.2 + Math.sin(introTime * 3 + x) * 0.8);
-    const sprite = flip ? introRedWerewolf : introBlackWerewolf;
+    const moving = walking || fleeing > 0;
+    const running = fleeing > 0;
+    const phase = introTime * (running ? 12 : 8) + (flip ? 2 : 0);
+    const gait = moving ? Math.sin(phase) : 0;
+    const py = Math.round(y + gait * (running ? 1.7 : 1) + Math.sin(introTime * 3 + x) * 0.5);
+    const idle = flip ? introRedWerewolf : introBlackWerewolf;
+    const walkSheet = flip ? introRedWalk : introBlackWalk;
+    const runSheet = flip ? introRedRun : introBlackRun;
+    const sheet = running ? runSheet : walking ? walkSheet : null;
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,.4)';
     ctx.beginPath(); ctx.ellipse(px, py + 18, Math.max(8, 23 - fleeing * 7), 4, 0, 0, Math.PI * 2); ctx.fill();
-    if (sprite.complete && sprite.naturalWidth) {
-      ctx.imageSmoothingEnabled = false;
-      ctx.translate(px, py);
-      if (flip) ctx.scale(-1, 1);
-      // Lean and bob during the flee reaction; idle sprite is reused with pixel-stepped movement.
-      ctx.rotate(fleeing * (flip ? -0.12 : 0.12));
-      const bob = walking || fleeing > 0 ? Math.round(Math.sin(introTime * (fleeing > 0 ? 17 : 10) + (flip ? 2 : 0)) * (fleeing > 0 ? 3 : 1.5)) : 0;
-      const sourceHeight = sprite === introRedWerewolf ? Math.min(42, sprite.naturalHeight) : sprite.naturalHeight;
-      ctx.drawImage(sprite, 0, 0, sprite.naturalWidth, sourceHeight, -32, -32 + bob, 64, 64);
-      ctx.restore();
-    } else { ctx.restore(); return; }
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(px, py);
+    if (flip) ctx.scale(-1, 1);
+    ctx.rotate(fleeing * (flip ? -0.12 : 0.12));
+    const bob = moving ? Math.round(Math.sin(phase * 2) * (running ? 2 : 1)) : 0;
+    if (sheet && sheet.complete && sheet.naturalWidth && sheet.naturalHeight) {
+      const frameW = sheet.naturalHeight;
+      const frameCount = Math.max(1, Math.floor(sheet.naturalWidth / frameW));
+      const frame = Math.floor(introTime * (running ? 12 : 8) + (flip ? 2 : 0)) % frameCount;
+      ctx.drawImage(sheet, frame * frameW, 0, frameW, sheet.naturalHeight, -32, -32 + bob, 64, 64);
+    } else if (idle.complete && idle.naturalWidth) {
+      ctx.drawImage(idle, 0, 0, idle.naturalWidth, idle.naturalHeight, -32, -32 + bob, 64, 64);
+    }
+    ctx.restore();
   }
   function drawIntro() {
     const t = introTime;
@@ -368,6 +377,15 @@ const Overworld = (() => {
   introBlackWerewolf.src = pqAsset('./assets/intro-black-werewolf.png');
   const introRedWerewolf = new Image();
   introRedWerewolf.src = pqAsset('./assets/intro-red-werewolf.png');
+  // Real 9-frame sprite sheets from the uploaded werewolf pack.
+  const introBlackWalk = new Image();
+  introBlackWalk.src = pqAsset('./assets/werewolves/Black_Werewolf/walk.png');
+  const introBlackRun = new Image();
+  introBlackRun.src = pqAsset('./assets/werewolves/Black_Werewolf/Run.png');
+  const introRedWalk = new Image();
+  introRedWalk.src = pqAsset('./assets/werewolves/Red_Werewolf/Walk.png');
+  const introRedRun = new Image();
+  introRedRun.src = pqAsset('./assets/werewolves/Red_Werewolf/Run.png');
 
   let camX = 0, camY = 0;
   let panel = null;
