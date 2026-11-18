@@ -2191,7 +2191,7 @@ const Overworld = (() => {
     ctx.fillText(panelTitle, 160, 57);
     ctx.font = '8px monospace';
     ctx.fillStyle = '#b9b1a5';
-    ctx.fillText(panel === 'inventory' ? 'Press I or ESC to close' : panel === 'stats' ? 'Press C or ESC to close' : 'Press ESC to close', 160, 190);
+    ctx.fillText(panel === 'inventory' ? 'Press I, E, or ESC to close' : panel === 'stats' ? 'Press C, E, or ESC to close' : 'Press E, ENTER, or ESC to close', 160, 190);
 
     if (panel === 'dad-note') {
       ctx.fillStyle = '#eadbb3'; ctx.fillRect(69, 72, 182, 92);
@@ -2565,9 +2565,13 @@ const Overworld = (() => {
       e.preventDefault();
       return;
     }
-    if (k === 'e') {
-      if (!panel && !e.repeat) interact();
+    if (k === 'e' || k === 'enter') {
+      if (!e.repeat) {
+        if (panel) panel = null;
+        else interact();
+      }
       e.preventDefault();
+      e.stopPropagation();
       return;
     }
     if (panel) {
