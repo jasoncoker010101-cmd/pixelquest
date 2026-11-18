@@ -44,43 +44,16 @@ const Overworld = (() => {
       introSoundChar++;
     } catch (_) {}
   }
-  function playWolfHowl(volume = 0.045, duration = 2.25) {
+  // Use the user's actual uploaded howl recordings from the assets folder.
+  const introWolfHowlAudioOne = new Audio('./assets/first-wolf-howl.mp3');
+  const introWolfHowlAudioTwo = new Audio('./assets/distant-wolf-howl.mp3');
+  introWolfHowlAudioOne.preload = 'auto';
+  introWolfHowlAudioTwo.preload = 'auto';
+  function playIntroWolfAudio(audio, volume, rate = 1) {
     try {
-      const AudioCtor = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtor) return;
-      if (!introAudio) introAudio = new AudioCtor();
-      if (introAudio.state === 'suspended') introAudio.resume();
-      const now = introAudio.currentTime;
-      const master = introAudio.createGain();
-      const filter = introAudio.createBiquadFilter();
-      filter.type = 'lowpass'; filter.frequency.setValueAtTime(1150, now);
-      master.gain.setValueAtTime(0.0001, now);
-      master.gain.exponentialRampToValueAtTime(volume, now + 0.28);
-      master.gain.setValueAtTime(volume * 0.82, now + duration * 0.58);
-      master.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-      filter.connect(master); master.connect(introAudio.destination);
-      const lfo = introAudio.createOscillator();
-      const lfoGain = introAudio.createGain();
-      lfo.frequency.setValueAtTime(5.2, now);
-      lfoGain.gain.setValueAtTime(19, now);
-      lfo.connect(lfoGain);
-      const voices = [
-        { ratio: 1, gain: 0.78, start: 370, peak: 535, end: 285 },
-        { ratio: 2.01, gain: 0.16, start: 742, peak: 1060, end: 570 }
-      ];
-      voices.forEach(v => {
-        const osc = introAudio.createOscillator();
-        const voiceGain = introAudio.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(v.start, now);
-        osc.frequency.linearRampToValueAtTime(v.peak, now + 0.62);
-        osc.frequency.linearRampToValueAtTime(v.end, now + duration);
-        if (v.ratio === 1) lfoGain.connect(osc.frequency);
-        voiceGain.gain.setValueAtTime(v.gain, now);
-        osc.connect(voiceGain); voiceGain.connect(filter);
-        osc.start(now); osc.stop(now + duration + 0.03);
-      });
-      lfo.start(now); lfo.stop(now + duration + 0.03);
+      audio.pause(); audio.currentTime = 0; audio.volume = volume; audio.playbackRate = rate;
+      const playback = audio.play();
+      if (playback && playback.catch) playback.catch(() => {});
     } catch (_) {}
   }
   function introTextBox(lines, reveal, segment) {
@@ -1205,9 +1178,9 @@ const Overworld = (() => {
   function update(dt) {
     if (introActive) {
       introTime += dt;
-      if (introTime >= 17.2 && !introWolfHowlOne) { introWolfHowlOne = true; playWolfHowl(0.052, 2.35); }
+      if (introTime >= 17.2 && !introWolfHowlOne) { introWolfHowlOne = true; playIntroWolfAudio(introWolfHowlAudioOne, 0.72, 1.0); }
       // The second call is the distant wolf: later, quieter, and longer so it reads as far away.
-      if (introTime >= 21.4 && !introWolfHowlTwo) { introWolfHowlTwo = true; playWolfHowl(0.021, 2.9); }
+      if (introTime >= 21.4 && !introWolfHowlTwo) { introWolfHowlTwo = true; playIntroWolfAudio(introWolfHowlAudioTwo, 0.24, 0.92); }
       if (introTime >= INTRO_DURATION) finishIntro();
       return;
     }
