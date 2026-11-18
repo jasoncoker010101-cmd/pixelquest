@@ -186,27 +186,43 @@ const Overworld = (() => {
     drawMailbox();
     drawFish();
     bunnies.forEach(drawBunny);
-    // Two werewolves wander before reacting to the distant howl, then flee.
+    // Two wolves pace, freeze at the distant howl, then follow clear routes away.
     if (introTime >= 15 && introTime < 27.2) {
-      const wander = Math.max(0, Math.min(1, (introTime - 15) / 6.4));
       const howlAt = 21.4;
       const fleeStart = 22.15;
-      const fleeProgress = Math.max(0, Math.min(1, (introTime - fleeStart) / 3.25));
-      const wanderX = Math.sin(introTime * 0.85) * 13 + Math.sin(introTime * 1.7) * 4;
-      const wanderY = Math.sin(introTime * 1.15 + 1) * 7;
-      const fleeX = fleeProgress * fleeProgress * 105;
-      const fleeY = fleeProgress * 70;
-      const pause = introTime >= howlAt && introTime < fleeStart;
-      const walk = introTime < howlAt;
-      const wolfOneX = 24 * TILE + wanderX - fleeX;
-      const wolfOneY = 18 * TILE + wanderY + fleeY;
-      const wolfTwoX = 29 * TILE - wanderX * 0.72 - fleeX * 0.8;
-      const wolfTwoY = 20 * TILE - wanderY * 0.65 + fleeY * 0.8;
-      // During the flee beat both scripted paths move toward decreasing X.
-      const wolfOneVX = Math.cos(introTime * 0.85) * 13 * 0.85 + Math.cos(introTime * 1.7) * 4 * 1.7 - fleeProgress * 70;
-      const wolfTwoVX = -wolfOneVX * 0.72 - fleeProgress * 56;
-      drawIntroWolf(wolfOneX, wolfOneY, false, wolfOneVX >= 0, walk, fleeProgress);
-      drawIntroWolf(wolfTwoX, wolfTwoY, true, wolfTwoVX >= 0, walk, fleeProgress);
+      const routeTime = Math.min(introTime, howlAt);
+      const wanderX = Math.sin(routeTime * 0.85) * 13 + Math.sin(routeTime * 1.7) * 4;
+      const wanderY = Math.sin(routeTime * 1.15 + 1) * 7;
+      const wanderVX = Math.cos(routeTime * 0.85) * 13 * 0.85 + Math.cos(routeTime * 1.7) * 4 * 1.7;
+      const wanderVY = Math.cos(routeTime * 1.15 + 1) * 7 * 1.15;
+      const walking = introTime < howlAt;
+      const running = introTime >= fleeStart;
+
+      let wolfOne = { x: 24 * TILE + wanderX, y: 18 * TILE + wanderY, vx: walking ? wanderVX : 0, vy: walking ? wanderVY : 0 };
+      let wolfTwo = { x: 29 * TILE - wanderX * 0.72, y: 20 * TILE - wanderY * 0.65, vx: walking ? -wanderVX * 0.72 : 0, vy: walking ? -wanderVY * 0.65 : 0 };
+
+      if (running) {
+        if (!introWolfFleePaths) {
+          const startOneX = 24 * TILE + Math.sin(howlAt * 0.85) * 13 + Math.sin(howlAt * 1.7) * 4;
+          const startOneY = 18 * TILE + Math.sin(howlAt * 1.15 + 1) * 7;
+          const startTwoX = 29 * TILE - (startOneX - 24 * TILE) * 0.72;
+          const startTwoY = 20 * TILE - (startOneY - 18 * TILE) * 0.65;
+          introWolfFleePaths = [
+            introWolfFindPath(startOneX, startOneY, 280, 352),
+            introWolfFindPath(startTwoX, startTwoY, 376, 376)
+          ];
+        }
+        const rawProgress = Math.max(0, Math.min(1, (introTime - fleeStart) / 3.25));
+        const travelProgress = rawProgress * rawProgress;
+        const one = introWolfPathPoint(introWolfFleePaths[0], travelProgress);
+        const two = introWolfPathPoint(introWolfFleePaths[1], travelProgress);
+        if (one) wolfOne = one;
+        if (two) wolfTwo = two;
+      }
+
+      // Keep the walk loop moving before the howl; use the run loop only after it.
+      drawIntroWolf(wolfOne.x, wolfOne.y, false, wolfOne.vx, running ? 'run' : 'walk', walking || running && (wolfOne.vx !== 0 || wolfOne.vy !== 0));
+      drawIntroWolf(wolfTwo.x, wolfTwo.y, true, wolfTwo.vx, running ? 'run' : 'walk', walking || running && (wolfTwo.vx !== 0 || wolfTwo.vy !== 0));
       if (introTime >= 21.4 && introTime < 24.8) {
         drawDistantHowlGlitch(37 * TILE, 8 * TILE, (introTime - 21.4) / 3.4);
       }
@@ -258,64 +274,176 @@ const Overworld = (() => {
     }
     ctx.restore();
   }
-  function introWolfAvoidTrees(x, y) {
-    // Trees are solid for the cinematic wolves too. Push their ground point away
-    // from nearby trunks rather than letting the scripted path clip through them.
-    let px = x, py = y;
-    for (let pass = 0; pass < 3; pass++) {
-      const tx0 = Math.floor((px - 14) / TILE), tx1 = Math.floor((px + 14) / TILE);
-      const ty0 = Math.floor((py - 8) / TILE), ty1 = Math.floor((py + 8) / TILE);
-      for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
-        if (tileAt(tx, ty) !== 'T') continue;
-        const trunkX = tx * TILE + 8, trunkY = ty * TILE + 13;
-        const dx = px - trunkX, dy = py - trunkY;
-        const d = Math.hypot(dx, dy);
-        // Leave a wider gap around the trunk/canopy; cinematic sprites are
-        // larger than their tile-sized map collision.
-        if (d < 19) {
-          const angle = d > 0.01 ? Math.atan2(dy, dx) : Math.PI / 2;
-          px = trunkX + Math.cos(angle) * 19;
-          py = trunkY + Math.sin(angle) * 19;
-        }
+  function introWolfPointBlocked(px, py) {
+    const worldW = MAP_W * TILE, worldH = MAP_H * TILE;
+    if (px < TILE || py < TILE || px > worldW - TILE || py > worldH - TILE) return true;
+    const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
+    const tile = tileAt(tx, ty);
+    if (tile === 'W' || tile === 'H' || tile === 'R' || tile === 'D') return true;
+
+    // Trees have a small trunk collision area, not a full-tile wall.
+    for (let y = Math.max(0, ty - 1); y <= Math.min(MAP_H - 1, ty + 1); y++) {
+      for (let x = Math.max(0, tx - 1); x <= Math.min(MAP_W - 1, tx + 1); x++) {
+        if (tileAt(x, y) !== 'T') continue;
+        const trunkX = x * TILE + 8;
+        const trunkY = y * TILE + 13;
+        if (Math.hypot(px - trunkX, py - trunkY) < 14) return true;
       }
     }
-    return { x: px, y: py };
+    return false;
   }
-  function drawIntroWolf(x, y, isRed, facingRight, walking, fleeing) {
-    const safe = introWolfAvoidTrees(x, y);
-    const px = Math.round(safe.x), groundY = Math.round(safe.y);
-    const moving = walking || fleeing > 0;
-    const running = fleeing > 0;
-    const phase = introTime * (running ? 12 : 8) + (isRed ? 2 : 0);
-    const py = Math.round(groundY + (moving ? Math.sin(phase) * (running ? 1.2 : 0.7) : 0));
-    const walkSheet = isRed ? introRedWalk : introBlackWalk;
-    const runSheet = isRed ? introRedRun : introBlackRun;
-    const sheet = running ? runSheet : walking ? walkSheet : null;
+
+  function introWolfFindPath(startX, startY, endX, endY) {
+    // Plan on an 8px grid so wolves can take a route around solid tiles and
+    // tree trunks instead of being pushed sideways after they hit an obstacle.
+    const STEP = 8;
+    const COLS = MAP_W * TILE / STEP;
+    const ROWS = MAP_H * TILE / STEP;
+    const clampCell = (v, max) => Math.max(1, Math.min(max - 2, Math.round(v / STEP)));
+    const sx = clampCell(startX, COLS), sy = clampCell(startY, ROWS);
+    const ex = clampCell(endX, COLS), ey = clampCell(endY, ROWS);
+    const start = sy * COLS + sx, goal = ey * COLS + ex;
+    const toX = id => (id % COLS) * STEP;
+    const toY = id => Math.floor(id / COLS) * STEP;
+    const total = COLS * ROWS;
+    const scores = new Float64Array(total);
+    scores.fill(Infinity);
+    const parents = new Int32Array(total);
+    parents.fill(-1);
+    const closed = new Uint8Array(total);
+    const heap = [];
+
+    const push = (id, priority) => {
+      let i = heap.length;
+      heap.push({ id, priority });
+      while (i > 0) {
+        const parent = (i - 1) >> 1;
+        if (heap[parent].priority <= priority) break;
+        heap[i] = heap[parent];
+        i = parent;
+      }
+      heap[i] = { id, priority };
+    };
+    const pop = () => {
+      const first = heap[0];
+      const last = heap.pop();
+      if (heap.length) {
+        let i = 0;
+        while (true) {
+          const left = i * 2 + 1, right = left + 1;
+          if (left >= heap.length) break;
+          let child = left;
+          if (right < heap.length && heap[right].priority < heap[left].priority) child = right;
+          if (heap[child].priority >= last.priority) break;
+          heap[i] = heap[child];
+          i = child;
+        }
+        heap[i] = last;
+      }
+      return first;
+    };
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+    const startXGrid = toX(start), startYGrid = toY(start);
+    const goalXGrid = toX(goal), goalYGrid = toY(goal);
+    if (introWolfPointBlocked(startXGrid, startYGrid) || introWolfPointBlocked(goalXGrid, goalYGrid)) return null;
+
+    scores[start] = 0;
+    push(start, Math.hypot(ex - sx, ey - sy) * STEP);
+    while (heap.length) {
+      const current = pop().id;
+      if (closed[current]) continue;
+      if (current === goal) break;
+      closed[current] = 1;
+      const x = current % COLS, y = Math.floor(current / COLS);
+      for (const [dx, dy] of dirs) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 1 || ny < 1 || nx >= COLS - 1 || ny >= ROWS - 1) continue;
+        const px = nx * STEP, py = ny * STEP;
+        if (introWolfPointBlocked(px, py)) continue;
+        // Do not cut diagonally through the corners of trees, rocks, or walls.
+        if (dx && dy && (
+          introWolfPointBlocked((x + dx) * STEP, y * STEP) ||
+          introWolfPointBlocked(x * STEP, (y + dy) * STEP)
+        )) continue;
+        const next = ny * COLS + nx;
+        if (closed[next]) continue;
+        const nextScore = scores[current] + (dx && dy ? STEP * Math.SQRT2 : STEP);
+        if (nextScore >= scores[next]) continue;
+        scores[next] = nextScore;
+        parents[next] = current;
+        const heuristic = Math.hypot(ex - nx, ey - ny) * STEP;
+        push(next, nextScore + heuristic);
+      }
+    }
+    if (start !== goal && parents[goal] === -1) return null;
+
+    const path = [];
+    let node = goal;
+    while (node !== -1) {
+      path.push({ x: toX(node), y: toY(node) });
+      if (node === start) break;
+      node = parents[node];
+    }
+    if (!path.length || path[path.length - 1].x !== startXGrid || path[path.length - 1].y !== startYGrid) return null;
+    path.reverse();
+    // Preserve the exact scripted start and destination so the route has no snap.
+    path[0] = { x: startX, y: startY };
+    path[path.length - 1] = { x: endX, y: endY };
+    return path;
+  }
+
+  function introWolfPathPoint(path, progress) {
+    if (!path || !path.length) return null;
+    if (path.length === 1) return { x: path[0].x, y: path[0].y, vx: 0, vy: 0 };
+    let totalLength = 0;
+    for (let i = 1; i < path.length; i++) {
+      totalLength += Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y);
+    }
+    let remaining = totalLength * Math.max(0, Math.min(1, progress));
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1], b = path[i];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const length = Math.hypot(dx, dy);
+      if (remaining <= length || i === path.length - 1) {
+        const t = length > 0 ? Math.max(0, Math.min(1, remaining / length)) : 0;
+        return { x: a.x + dx * t, y: a.y + dy * t, vx: dx, vy: dy };
+      }
+      remaining -= length;
+    }
+    return { x: path[path.length - 1].x, y: path[path.length - 1].y, vx: 0, vy: 0 };
+  }
+
+  function drawIntroWolf(x, y, isRed, vx, animation, moving) {
+    const px = Math.round(x), groundY = Math.round(y);
+    const running = animation === 'run';
+    const sheet = running
+      ? (isRed ? introRedRun : introBlackRun)
+      : (isRed ? introRedWalk : introBlackWalk);
     ctx.save();
-    // Shadow stays anchored to the ground, independent of body bob and frame.
-    ctx.fillStyle = 'rgba(0,0,0,.34)';
-    ctx.beginPath(); ctx.ellipse(px, groundY + 3, running ? 11 : 12, 3, 0, 0, Math.PI * 2); ctx.fill();
-    if (sheet && sheet.complete && sheet.naturalWidth && sheet.naturalHeight) {
+    // The shadow is attached to the ground point, not the animated body frame.
+    ctx.fillStyle = 'rgba(0,0,0,.38)';
+    ctx.beginPath();
+    ctx.ellipse(px, groundY + 3, running ? 15 : 13, 3.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Never substitute the old standing PNG. If a sheet is not ready, wait for it.
+    if (sheet.complete && sheet.naturalWidth && sheet.naturalHeight) {
       ctx.imageSmoothingEnabled = false;
-      ctx.translate(px, py);
-      if (!facingRight) ctx.scale(-1, 1);
+      ctx.translate(px, groundY);
+      if (vx < 0) ctx.scale(-1, 1);
       const frameW = sheet.naturalHeight;
       const frameCount = Math.max(1, Math.floor(sheet.naturalWidth / frameW));
-      const frame = Math.floor(introTime * (running ? 12 : 8) + (isRed ? 2 : 0)) % frameCount;
-      // Smaller footprint, centered over the ground point. Never flash the old static art.
-      ctx.drawImage(sheet, frame * frameW, 0, frameW, sheet.naturalHeight, -22, -29, 44, 44);
-    } else if (!moving) {
-      // Only show the matching idle artwork when stationary; never substitute it for a moving sheet.
-      const idle = isRed ? introRedWerewolf : introBlackWerewolf;
-      if (idle.complete && idle.naturalWidth) {
-        ctx.imageSmoothingEnabled = false;
-        ctx.translate(px, py);
-        if (!facingRight) ctx.scale(-1, 1);
-        ctx.drawImage(idle, 0, 0, idle.naturalWidth, idle.naturalHeight, -22, -29, 44, 44);
-      }
+      const fps = running ? 14 : 9;
+      const phaseOffset = isRed ? 2 : 0;
+      // Hold a real walk-sheet frame at the howl; use every frame while moving.
+      const frame = moving
+        ? Math.floor(introTime * fps + phaseOffset) % frameCount
+        : Math.min(frameCount - 1, Math.floor(frameCount * 0.45));
+      ctx.drawImage(sheet, frame * frameW, 0, frameW, sheet.naturalHeight, -24, -32, 48, 48);
     }
     ctx.restore();
   }
+
   function drawIntro() {
     const t = introTime;
     ctx.fillStyle = '#070b19'; ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -409,11 +537,7 @@ const Overworld = (() => {
   const battleWolfSprite = new Image();
   battleWolfSprite.src = 'https://opengameart.org/sites/default/files/enemies_081719_zp.png';
   // User-provided free werewolf sprites: idle poses converted to compact 48px images.
-  const introBlackWerewolf = new Image();
-  introBlackWerewolf.src = pqAsset('./assets/intro-black-werewolf.png');
-  const introRedWerewolf = new Image();
-  introRedWerewolf.src = pqAsset('./assets/intro-red-werewolf.png');
-  // Real 9-frame sprite sheets from the uploaded werewolf pack.
+  // Use only the supplied animated sheets in the intro; no legacy standing sprites.
   const introBlackWalk = new Image();
   introBlackWalk.src = pqAsset('./assets/werewolves/Black_Werewolf/walk.png');
   const introBlackRun = new Image();
@@ -422,6 +546,8 @@ const Overworld = (() => {
   introRedWalk.src = pqAsset('./assets/werewolves/Red_Werewolf/Walk.png');
   const introRedRun = new Image();
   introRedRun.src = pqAsset('./assets/werewolves/Red_Werewolf/Run.png');
+  let introWolfFleePaths = null;
+
   let camX = 0, camY = 0;
   let panel = null;
   let notice = '';
@@ -1745,6 +1871,7 @@ const Overworld = (() => {
     applySave(saveData);
     introActive = !saveData || typeof saveData !== 'object';
     introTime = 0; introSoundChar = 0; introTextSegment = ''; introLastReveal = 0;
+    introWolfFleePaths = null;
     introWolfHowlOne = false; introWolfHowlTwo = false; introWolfHowlEcho = false;
     if (introActive) {
       try {
