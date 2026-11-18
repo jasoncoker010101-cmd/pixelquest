@@ -598,6 +598,20 @@ const Overworld = (() => {
   const HOUSE_DOOR = { x: HOUSE.x + HOUSE.w / 2, y: HOUSE.y + 67 };
   let insideHouse = false;
   const interiorPlayer = { x: 160, y: 174, facing: 'up', moving: false, walk: 0 };
+  const interiorArtSheet = new Image();
+  let interiorArtReady = false;
+  interiorArtSheet.onload = () => { interiorArtReady = true; };
+  interiorArtSheet.onerror = () => { interiorArtReady = false; };
+  interiorArtSheet.src = pqAsset('./assets/interiors/Pixel_Interiors/Interior.png');
+
+  function drawInteriorArt(sx, sy, sw, sh, x, y, w, h) {
+    if (!interiorArtReady) return;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(interiorArtSheet, sx, sy, sw, sh, x, y, w, h);
+    ctx.restore();
+  }
+
   const interiorSheet = new Image();
   let interiorSheetReady = false;
   interiorSheet.onload = () => { interiorSheetReady = true; };
@@ -1363,123 +1377,35 @@ const Overworld = (() => {
     wallH(25, 112, 43, 10); wallH(100, 112, 14, 10);
     wallH(206, 112, 14, 10); wallH(252, 112, 43, 10);
 
-    // Bedroom: large bed, dresser, bedside chest and window.
-    const bed = (x, y, w, h, blanket, pillow) => {
-      ctx.fillStyle = '#39242d'; ctx.fillRect(x - 3, y + 3, w + 6, h + 5);
-      ctx.fillStyle = '#8b553e'; ctx.fillRect(x - 1, y, w + 2, h + 2);
-      ctx.fillStyle = '#e3bd83'; ctx.fillRect(x + 2, y + 2, w - 4, h - 2);
-      ctx.fillStyle = blanket; ctx.fillRect(x + 3, y + 13, w - 6, h - 17);
-      ctx.fillStyle = '#f7e7c6'; ctx.fillRect(x + 4, y + 4, w - 8, 8);
-      ctx.fillStyle = pillow; ctx.fillRect(x + 9, y + 5, w - 18, 5);
-      ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.fillRect(x + 5, y + 14, 2, h - 20);
-      ctx.fillStyle = '#5b3935'; ctx.fillRect(x, y + h - 1, 4, 4); ctx.fillRect(x + w - 4, y + h - 1, 4, 4);
-    };
-    bed(39, 42, 38, 43, '#557d62', '#f4d8b4');
-    ctx.fillStyle = '#493039'; ctx.fillRect(94, 37, 30, 28);
-    ctx.fillStyle = '#b77b57'; ctx.fillRect(96, 39, 26, 24);
-    ctx.fillStyle = '#e2b77c'; ctx.fillRect(99, 42, 20, 7);
-    ctx.fillStyle = '#70443a'; ctx.fillRect(99, 52, 20, 8);
-    ctx.fillStyle = '#f0d092'; ctx.fillRect(108, 55, 3, 3);
-    ctx.fillStyle = '#51343a'; ctx.fillRect(96, 73, 23, 12);
-    ctx.fillStyle = '#c58a5d'; ctx.fillRect(98, 74, 19, 9);
-    // Bedroom window.
+    // Furniture is drawn from the pixel-art packs already included in the project.
+    // Dad's bedroom (upper-left): bed, dresser, bedside table and wall window.
+    drawInteriorArt(16, 48, 47, 49, 39, 42, 40, 43);
+    drawInteriorArt(336, 38, 50, 57, 88, 35, 30, 34);
+    drawInteriorArt(224, 282, 47, 40, 91, 74, 27, 23);
     ctx.fillStyle = '#4b2b35'; ctx.fillRect(82, 25, 37, 19);
-    ctx.fillStyle = '#f0cf91'; ctx.fillRect(85, 28, 31, 13);
-    ctx.fillStyle = '#77aeb5'; ctx.fillRect(88, 30, 25, 9);
-    ctx.fillStyle = '#d9e9d7'; ctx.fillRect(90, 31, 8, 3);
-    ctx.fillStyle = '#704333'; ctx.fillRect(100, 28, 2, 13);
-    ctx.fillStyle = '#9b5b54'; ctx.fillRect(82, 25, 4, 19); ctx.fillRect(115, 25, 4, 19);
+    ctx.fillStyle = '#77aeb5'; ctx.fillRect(86, 29, 29, 12);
 
-    // Living room: sofa, table, shelves and plant arranged around open floor.
-    ctx.fillStyle = '#39242d'; ctx.fillRect(194, 43, 44, 34);
-    ctx.fillStyle = '#74434a'; ctx.fillRect(196, 45, 40, 30);
-    ctx.fillStyle = '#b96e68'; ctx.fillRect(198, 47, 36, 8);
-    ctx.fillStyle = '#d99a83'; ctx.fillRect(200, 48, 14, 6); ctx.fillRect(218, 48, 14, 6);
-    ctx.fillStyle = '#92545a'; ctx.fillRect(199, 57, 34, 15);
-    ctx.fillStyle = '#c98276'; ctx.fillRect(201, 59, 14, 11); ctx.fillRect(217, 59, 14, 11);
-    ctx.fillStyle = 'rgba(255,225,205,.2)'; ctx.fillRect(202, 60, 11, 2); ctx.fillRect(218, 60, 11, 2);
-    ctx.fillStyle = '#513039'; ctx.fillRect(242, 75, 29, 16);
-    ctx.fillStyle = '#9a6143'; ctx.fillRect(240, 72, 29, 15);
-    ctx.fillStyle = '#e0b577'; ctx.fillRect(243, 75, 23, 9);
-    ctx.fillStyle = '#f2d59b'; ctx.fillRect(251, 78, 7, 3);
-    const bookshelf = (x, y) => {
-      // From above: one low wooden case with book covers visible on its top,
-      // rather than three horizontal shelf rows facing the camera.
-      ctx.fillStyle = '#39242d'; ctx.fillRect(x - 2, y + 2, 20, 35);
-      ctx.fillStyle = '#70452f'; ctx.fillRect(x, y, 16, 32);
-      ctx.fillStyle = '#bd8956'; ctx.fillRect(x + 1, y + 1, 14, 30);
-      ctx.fillStyle = '#4b302b'; ctx.fillRect(x + 2, y + 3, 12, 25);
-      const colors = ['#bd6253','#5d7f9e','#d3a34f','#66875d','#a77aab','#d49a55'];
-      for (let k = 0; k < colors.length; k++) {
-        const bx = x + 3 + k * 1.7;
-        ctx.fillStyle = colors[k];
-        ctx.fillRect(bx, y + 5, 1.5, 20);
-        ctx.fillStyle = 'rgba(255,235,195,.32)';
-        ctx.fillRect(bx, y + 6, 1, 3);
-      }
-      ctx.fillStyle = '#d5a36a'; ctx.fillRect(x + 1, y + 29, 14, 2);
-    };
-    bookshelf(255, 30); bookshelf(278, 30);
-    // Potted plant in the living-room corner, clear of the coffee table.
-    ctx.fillStyle = '#56383a'; ctx.fillRect(279, 78, 12, 10);
-    ctx.fillStyle = '#b97858'; ctx.fillRect(281, 76, 8, 10);
-    ctx.fillStyle = '#5d884c'; ctx.fillRect(284, 68, 3, 10);
-    ctx.fillStyle = '#83ae5e'; ctx.fillRect(278, 69, 7, 4); ctx.fillRect(285, 65, 7, 5);
+    // Player's bedroom (upper-right): a separate bed, bookcase and bedside table.
+    drawInteriorArt(111, 48, 48, 49, 203, 42, 40, 43);
+    drawInteriorArt(398, 61, 49, 36, 250, 34, 29, 27);
+    drawInteriorArt(224, 282, 47, 40, 246, 76, 27, 23);
 
-    // Kitchen: refrigerator, counter, sink, stove and a compact dining set.
-    // Overhead refrigerator cabinet: compact footprint, visible top panel,
-    // a narrow freezer seam and a small handle along the near edge.
-    ctx.fillStyle = '#493039'; ctx.fillRect(32, 141, 24, 31);
-    ctx.fillStyle = '#879b94'; ctx.fillRect(34, 143, 20, 27);
-    ctx.fillStyle = '#cbd5c9'; ctx.fillRect(36, 145, 16, 23);
-    ctx.fillStyle = '#e4e7d8'; ctx.fillRect(38, 147, 12, 18);
-    ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(39, 148, 2, 15);
-    ctx.fillStyle = '#8a9d91'; ctx.fillRect(36, 151, 16, 2);
-    ctx.fillStyle = '#5c716a'; ctx.fillRect(47, 153, 2, 5);
-    ctx.fillStyle = '#5b4038'; ctx.fillRect(34, 168, 20, 2);
-    ctx.fillStyle = '#503139'; ctx.fillRect(57, 142, 64, 27);
-    ctx.fillStyle = '#a36a49'; ctx.fillRect(59, 144, 60, 23);
-    ctx.fillStyle = '#e0ad70'; ctx.fillRect(60, 144, 58, 3);
-    ctx.fillStyle = '#704638'; ctx.fillRect(62, 149, 24, 14);
-    ctx.fillStyle = '#b5c7bc'; ctx.fillRect(64, 151, 20, 10);
-    ctx.fillStyle = '#79a3a5'; ctx.fillRect(66, 153, 16, 6);
-    ctx.fillStyle = '#f2d28c'; ctx.fillRect(72, 150, 4, 2);
-    ctx.fillStyle = '#44333a'; ctx.fillRect(91, 150, 10, 10); ctx.fillRect(105, 150, 10, 10);
-    ctx.fillStyle = '#9a7d65'; ctx.fillRect(93, 152, 6, 6); ctx.fillRect(107, 152, 6, 6);
-    ctx.fillStyle = '#d7b47e'; ctx.fillRect(90, 147, 26, 2);
-    // Dining table with chairs, kept away from the hallway doorway.
-    for (const [cx,cy] of [[69,178],[69,205],[108,178],[108,205]]) {
-      ctx.fillStyle = '#493039'; ctx.fillRect(cx, cy, 9, 9);
-      ctx.fillStyle = '#b77a50'; ctx.fillRect(cx + 1, cy + 1, 7, 7);
-      ctx.fillStyle = '#d7a66b'; ctx.fillRect(cx + 2, cy + 2, 5, 2);
-    }
-    ctx.fillStyle = '#503139'; ctx.fillRect(67, 184, 43, 23);
-    ctx.fillStyle = '#b77a50'; ctx.fillRect(69, 186, 39, 19);
-    ctx.fillStyle = '#e0b879'; ctx.fillRect(71, 188, 35, 2);
-    ctx.fillStyle = '#a36a49'; ctx.fillRect(72, 192, 33, 10);
-    ctx.fillStyle = 'rgba(255,235,190,.18)'; ctx.fillRect(73, 193, 30, 2);
+    // Kitchen (lower-left): use the matching pixel-art table, chairs and kitchen props.
+    drawInteriorArt(16, 253, 88, 62, 65, 164, 48, 38);
+    drawInteriorArt(16, 387, 39, 48, 34, 142, 22, 29);
+    drawInteriorArt(240, 405, 31, 34, 95, 143, 20, 23);
+    drawInteriorArt(51, 395, 32, 34, 37, 179, 18, 18);
 
-    // Bathroom: tiled floor, full tub, sink, toilet and towel rail.
-    for (let y = 137; y < 216; y += 12) for (let x = 194; x < 292; x += 13) {
-      ctx.fillStyle = ((x + y) / 13) % 2 < 1 ? '#82968b' : '#91a398';
-      ctx.fillRect(x, y, 12, 11);
-      ctx.fillStyle = 'rgba(54,70,64,.28)'; ctx.fillRect(x, y + 10, 12, 1);
-    }
-    ctx.fillStyle = '#493039'; ctx.fillRect(198, 145, 82, 31);
-    ctx.fillStyle = '#d8d9ca'; ctx.fillRect(201, 148, 76, 25);
-    ctx.fillStyle = '#9fc3bd'; ctx.fillRect(205, 151, 68, 19);
-    ctx.fillStyle = '#e7eee1'; ctx.fillRect(209, 153, 60, 13);
-    ctx.fillStyle = '#78a7a4'; ctx.fillRect(213, 156, 52, 7);
-    ctx.fillStyle = '#f0d28a'; ctx.fillRect(210, 149, 4, 3); ctx.fillRect(269, 149, 4, 3);
-    ctx.fillStyle = '#493039'; ctx.fillRect(211, 184, 25, 22);
-    ctx.fillStyle = '#e0e3d5'; ctx.fillRect(213, 185, 21, 17);
-    ctx.fillStyle = '#9fc4bf'; ctx.fillRect(216, 188, 15, 10);
-    ctx.fillStyle = '#493039'; ctx.fillRect(253, 183, 29, 27);
-    ctx.fillStyle = '#dedfd0'; ctx.fillRect(256, 186, 23, 21);
-    ctx.fillStyle = '#f0eee0'; ctx.fillRect(259, 189, 17, 14);
-    ctx.fillStyle = '#8eb5b3'; ctx.fillRect(262, 192, 11, 8);
-    ctx.fillStyle = '#b3c9be'; ctx.fillRect(259, 183, 17, 4);
+    // Living room (lower-right): sofa seating, coffee table, shelves and decor.
+    drawInteriorArt(140, 263, 66, 50, 198, 143, 43, 33);
+    drawInteriorArt(224, 282, 47, 40, 237, 178, 31, 26);
+    drawInteriorArt(336, 38, 50, 57, 267, 139, 24, 31);
+    drawInteriorArt(337, 432, 48, 42, 274, 181, 17, 17);
 
+    // Bathroom (small separate room at the far end of the lower-right side).
+    // Fixtures use the bathroom pieces from the Kenney interior tile atlas.
+    drawInteriorSprite(21, 7, 2, 2, 245, 186);
+    drawInteriorSprite(23, 7, 2, 2, 273, 186);
     // Hallway details mounted on the wall edges, not in the walking lane.
     ctx.fillStyle = '#493039'; ctx.fillRect(132, 91, 7, 16);
     ctx.fillStyle = '#d7ad78'; ctx.fillRect(134, 93, 3, 12);
