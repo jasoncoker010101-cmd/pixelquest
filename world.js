@@ -828,7 +828,7 @@ const Overworld = (() => {
       // Dad's bedroom (lower-left).
       [41,152,74,190], [88,132,118,168], [91,180,118,202],
       // Player's bedroom (lower-right).
-      [204,161,237,199], [248,155,280,182], [244,194,274,215]
+      [204,161,237,199], [248,155,280,182], [263,187,290,214]
     ];
 
     return walls.concat(furniture).some(([x1, y1, x2, y2]) =>
@@ -1585,7 +1585,7 @@ const Overworld = (() => {
     // Player's bedroom, bottom-right.
     drawInteriorArt(111, 48, 48, 49, 207, 161, 31, 37);
     drawInteriorArt(398, 61, 49, 36, 250, 155, 29, 27);
-    drawInteriorArt(224, 282, 47, 40, 246, 194, 27, 23);
+    drawInteriorArt(224, 282, 47, 40, 263, 187, 27, 23);
 
     // A folded paper note on Dad's dresser.
     ctx.save();
