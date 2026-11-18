@@ -211,7 +211,10 @@ const Overworld = (() => {
       if (flip) ctx.scale(-1, 1);
       if (howling) ctx.rotate(-0.04 - howlPulse * 0.035);
       // The new Craftpix werewolf pack is used for the cinematic only.
-      ctx.drawImage(sprite, 0, 0, sprite.naturalWidth, sprite.naturalHeight, -24, -24, 48, 48);
+      // These are individual 48px sprites, not sheets. Enlarge for readability;
+      // trim the red sprite's stray palette pixels at its bottom edge.
+      const sourceHeight = sprite === introRedWerewolf ? Math.min(42, sprite.naturalHeight) : sprite.naturalHeight;
+      ctx.drawImage(sprite, 0, 0, sprite.naturalWidth, sourceHeight, -32, -32, 64, 64);
       ctx.restore();
     } else { ctx.restore(); return; }
     if (howling) {
@@ -315,9 +318,9 @@ const Overworld = (() => {
   battleWolfSprite.src = 'https://opengameart.org/sites/default/files/enemies_081719_zp.png';
   // User-provided free werewolf sprites: idle poses converted to compact 48px images.
   const introBlackWerewolf = new Image();
-  introBlackWerewolf.src = './assets/intro-black-werewolf.png';
+  introBlackWerewolf.src = './assets/intro-black-werewolf.png?v=packfix-10';
   const introRedWerewolf = new Image();
-  introRedWerewolf.src = './assets/intro-red-werewolf.png';
+  introRedWerewolf.src = './assets/intro-red-werewolf.png?v=packfix-10';
 
   let camX = 0, camY = 0;
   let panel = null;
