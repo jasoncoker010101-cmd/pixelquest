@@ -93,6 +93,30 @@
 </style>
 </head>
 <body>
+ <div id="lock" style="position:fixed;inset:0;background:#111;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:sans-serif;z-index:9999;">
+  <h1>🚧 This site is in pre-alpha</h1>
+  <p>Enter the access code to continue.</p>
+  <input id="code" type="password" placeholder="Access code" style="padding:10px;font-size:16px;border-radius:6px;border:none;text-align:center;">
+  <button id="unlock" style="margin-top:10px;padding:10px 20px;font-size:16px;border:none;border-radius:6px;cursor:pointer;">Unlock</button>
+  <p id="error" style="color:#ff6b6b;min-height:1.2em;"></p>
+</div>
+<script>
+  const SECRET_CODE = "letmein"; // change this to your code
+
+  function tryUnlock() {
+    const input = document.getElementById("code").value;
+    if (input === SECRET_CODE) {
+      document.getElementById("lock").remove();
+    } else {
+      document.getElementById("error").textContent = "Wrong code, try again.";
+    }
+  }
+
+  document.getElementById("unlock").addEventListener("click", tryUnlock);
+  document.getElementById("code").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") tryUnlock();
+  });
+</script>
 <div class="tv-shell" id="tvShell">
   <canvas id="game" width="320" height="240"></canvas>
   <button type="button" class="tv-fullscreen-btn" id="tvFullscreen" aria-label="Enter TV fullscreen">⛶ TV FULLSCREEN</button>
