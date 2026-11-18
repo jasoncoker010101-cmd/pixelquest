@@ -1770,7 +1770,7 @@ const Overworld = (() => {
   }
 
   function drawSidePlayer() {
-    const x = Math.round(sidePlayer.x - sideCameraX);
+    const x = Math.round(sidePlayer.x);
     const y = Math.round(sidePlayer.y);
     if (!playerSheetReady) {
       ctx.fillStyle = 'rgba(0,0,0,.25)';
@@ -1812,6 +1812,12 @@ const Overworld = (() => {
     for (let y = 30; y < 188; y += 14) {
       ctx.fillStyle = '#916342'; ctx.fillRect(0, y, HOUSE_SIDE_WIDTH, 2);
       ctx.fillStyle = 'rgba(37,21,27,.24)'; ctx.fillRect(0, y + 9, HOUSE_SIDE_WIDTH, 1);
+    }
+    ctx.fillStyle = '#4b3029'; ctx.fillRect(0, 188, HOUSE_SIDE_WIDTH, 52);
+    ctx.fillStyle = '#956342'; ctx.fillRect(0, 190, HOUSE_SIDE_WIDTH, 5);
+    for (let x = 0; x < HOUSE_SIDE_WIDTH; x += 32) {
+      ctx.fillStyle = '#b47b50'; ctx.fillRect(x + 4, 202, 20, 2);
+      ctx.fillStyle = 'rgba(40,22,24,.32)'; ctx.fillRect(x + 27, 197, 2, 18);
     }
     // Windows keep each room readable without adding clutter.
     for (const wx of [58, 372, 566, 714]) {
@@ -1863,9 +1869,9 @@ const Overworld = (() => {
     ctx.restore();
 
     ctx.fillStyle = 'rgba(10,10,18,.72)';
-    ctx.fillRect(4, 4, 130, 17);
-    ctx.fillStyle = '#f5e6c8'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-    ctx.fillText('HOME  /  FIND DAD\'S NOTE', 9, 15);
+    ctx.fillRect(218, 4, 98, 17);
+    ctx.fillStyle = '#f5e6c8'; ctx.font = '7px monospace'; ctx.textAlign = 'right';
+    ctx.fillText('HOME / NOTE', 311, 15);
     ctx.fillStyle = 'rgba(8,9,16,.72)';
     ctx.fillRect(0, 226, canvas.width, 14);
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace';
@@ -1968,9 +1974,9 @@ const Overworld = (() => {
     ctx.restore();
 
     ctx.fillStyle = 'rgba(10,10,18,.72)';
-    ctx.fillRect(4, 4, 116, 17);
-    ctx.fillStyle = '#f5e6c8'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-    ctx.fillText('THE WOODLAND', 9, 15);
+    ctx.fillRect(218, 4, 98, 17);
+    ctx.fillStyle = '#f5e6c8'; ctx.font = '7px monospace'; ctx.textAlign = 'right';
+    ctx.fillText('WOODLAND', 311, 15);
     ctx.fillStyle = 'rgba(8,9,16,.72)';
     ctx.fillRect(0, 226, canvas.width, 14);
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace';
