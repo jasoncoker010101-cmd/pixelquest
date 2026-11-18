@@ -13,7 +13,7 @@ const Overworld = (() => {
 
   // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
   let introActive = false, introTime = 0, introAudio = null, introSoundChar = 0, introTextSegment = '', introLastReveal = 0;
-  const INTRO_DURATION = 31.5;
+  const INTRO_DURATION = 45.5;
   function finishIntro() {
     introActive = false;
     introTime = INTRO_DURATION;
@@ -35,20 +35,25 @@ const Overworld = (() => {
       const gain = introAudio.createGain();
       const now = introAudio.currentTime;
       osc.type = 'square';
-      osc.frequency.setValueAtTime(690 + (introSoundChar % 3) * 55, now);
-      gain.gain.setValueAtTime(0.018, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.026);
+      const notes = [690, 760, 720, 820];
+      osc.frequency.setValueAtTime(notes[introSoundChar % notes.length], now);
+      gain.gain.setValueAtTime(0.012, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.019);
       osc.connect(gain); gain.connect(introAudio.destination);
-      osc.start(now); osc.stop(now + 0.027);
+      osc.start(now); osc.stop(now + 0.02);
       introSoundChar++;
     } catch (_) {}
   }
   function introTextBox(lines, reveal, segment) {
     if (introTextSegment !== segment) { introTextSegment = segment; introLastReveal = 0; }
-    const targetReveal = Math.max(0, Math.floor(reveal));
-    if (targetReveal >= introLastReveal + 2) { introBlip(); introLastReveal = targetReveal; }
     const full = lines.join(' ');
-    const shown = full.slice(0, Math.max(0, Math.floor(reveal)));
+    const targetReveal = Math.min(full.length, Math.max(0, Math.floor(reveal)));
+    // Play exactly once for each newly revealed letter or number. Spaces and punctuation stay silent.
+    for (let i = introLastReveal; i < targetReveal; i++) {
+      if (/[A-Za-z0-9]/.test(full[i])) introBlip();
+    }
+    introLastReveal = Math.max(introLastReveal, targetReveal);
+    const shown = full.slice(0, targetReveal);
     const words = shown.split(' ');
     const output = [];
     let line = '';
@@ -118,13 +123,38 @@ const Overworld = (() => {
     drawMailbox();
     drawFish();
     bunnies.forEach(drawBunny);
+    // A pair of wild wolves can be seen moving through the distant tree line.
+    if (introTime >= 15 && introTime < 29) {
+      drawIntroWolf(24 * TILE, 18 * TILE, false);
+      drawIntroWolf(29 * TILE, 20 * TILE, true);
+    }
     camX = oldX; camY = oldY;
+    ctx.restore();
+  }
+  function drawIntroWolf(x, y, flip) {
+    const px = Math.round(x), py = Math.round(y + Math.sin(introTime * 3 + x) * 1.2);
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,.32)';
+    ctx.fillRect(px - 10, py + 7, 21, 3);
+    if (battleWolfSprite.complete && battleWolfSprite.naturalWidth && battleWolfSprite.naturalHeight) {
+      const cellW = battleWolfSprite.naturalWidth / 3;
+      const cellH = battleWolfSprite.naturalHeight / 4;
+      ctx.imageSmoothingEnabled = false;
+      if (flip) {
+        ctx.translate(px, 0); ctx.scale(-1, 1);
+        ctx.drawImage(battleWolfSprite, cellW, cellH, cellW, cellH, -12, py - 14, 24, 24);
+      } else {
+        ctx.drawImage(battleWolfSprite, cellW, cellH, cellW, cellH, px - 12, py - 14, 24, 24);
+      }
+    } else {
+      drawWolf({ x: px, y: py, howl: flip ? 1.2 : 0 });
+    }
     ctx.restore();
   }
   function drawIntro() {
     const t = introTime;
     ctx.fillStyle = '#070b19'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    if (t < 10.5) {
+    if (t < 8.5) {
       for (let i = 0; i < 52; i++) {
         const x = (i * 73 + 19) % 320, y = (i * 47 + 11) % 178;
         const twinkle = .45 + .45 * Math.sin(t * 2 + i);
@@ -135,45 +165,52 @@ const Overworld = (() => {
       ctx.textAlign = 'center'; ctx.font = 'bold 14px monospace';
       ctx.fillStyle = '#f4e8c5'; ctx.fillText('EARTH', 160, 25);
       ctx.fillStyle = '#8294b7'; ctx.fillRect(123, 32, 74, 1);
-      if (t > 2.1) introTextBox(['A quiet world, shaped by open fields, old forests, and clear water.'], (t - 2.1) * 18, 'earth');
+      if (t > 1.6) introTextBox(['EARTH. A familiar world of oceans, forests, and endless skies.'], (t - 1.6) * 17, 'earth');
       if (t > 6.0) {
-        const a = Math.min(1, (t - 6.0) / 2.0);
+        const a = Math.min(1, (t - 6.0) / 2.5);
         ctx.fillStyle = 'rgba(0,0,0,' + a + ')'; ctx.fillRect(0, 0, 320, 240);
       }
-    } else if (t < 27.5) {
+    } else if (t < 38.5) {
       let zoom, cx, cy;
-      if (t < 20.5) {
-        const p = (t - 10.5) / 10;
+      if (t < 22.5) {
+        const p = (t - 8.5) / 14;
         const e = p * p * (3 - 2 * p);
-        zoom = .53 + e * .15;
-        cx = 485 - e * 185;
-        cy = 250 - e * 12;
+        zoom = .48 + e * .20;
+        cx = 490 - e * 210;
+        cy = 252 - e * 20;
       } else {
-        const p = Math.min(1, (t - 20.5) / 7);
+        const p = Math.min(1, (t - 22.5) / 16);
         const e = p * p * (3 - 2 * p);
         zoom = .68 + e * .92;
-        cx = 300 - e * 116;
-        cy = 238 - e * 70;
+        cx = 280 - e * 96;
+        cy = 232 - e * 64;
       }
       drawIntroWorld(zoom, cx, cy);
-      if (t < 14.5) introTextBox(['Fields, forests and a quiet lake are home to wildlife.'], (t - 10.5) * 14, 'countryside');
-      if (t > 25.8) {
-        const a = Math.min(1, (t - 25.8) / 1.7);
+      if (t > 9.0 && t < 14.3) {
+        introTextBox(['For generations, people lived alongside the land, building small homes between fields and forests.'], (t - 9.0) * 17, 'settled-world');
+      } else if (t >= 14.8 && t < 20.0) {
+        introTextBox(['Then strange energy stirred in forgotten places, and the wilderness began to change.'], (t - 14.8) * 17, 'awakening');
+      } else if (t >= 20.5 && t < 25.7) {
+        introTextBox(['Unfamiliar creatures appeared. Some were gentle. Others became fierce and territorial.'], (t - 20.5) * 17, 'creatures');
+      } else if (t >= 26.2 && t < 32.0) {
+        introTextBox(['At night, the wilds grow restless. Even a familiar path can become dangerous.'], (t - 26.2) * 17, 'nightfall');
+      } else if (t >= 32.2 && t < 37.4) {
+        introTextBox(['Still, people make a life here, one small home at the edge of a much bigger world.'], (t - 32.2) * 17, 'frontier');
+      }
+      if (t > 36.8) {
+        const a = Math.min(1, (t - 36.8) / 1.7);
         ctx.fillStyle = 'rgba(0,0,0,' + a + ')'; ctx.fillRect(0, 0, 320, 240);
       }
     } else {
-      const p = Math.min(1, (t - 27.5) / 1.4);
+      const p = Math.min(1, (t - 38.5) / 1.4);
       ctx.save();
       ctx.translate(160, 120); ctx.scale(1.22 - p * .22, 1.22 - p * .22); ctx.translate(-160, -120);
       drawHouseInterior();
       ctx.restore();
-      if (t < 30.5) {
-        ctx.fillStyle = 'rgba(8,10,22,.8)'; ctx.fillRect(14, 12, 292, 23);
-        ctx.strokeStyle = '#d7bd83'; ctx.strokeRect(14.5, 12.5, 291, 22);
-        ctx.fillStyle = '#fff0ce'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('SOMEWHERE, A NEW DAY BEGINS...', 160, 27);
+      if (t < 44.4) {
+        introTextBox(['And here, at the edge of the wilderness, a new day begins...'], (t - 39.0) * 17, 'new-day');
       }
-      const fade = Math.max(0, Math.min(1, (t - 30.5) / 1));
+      const fade = Math.max(0, Math.min(1, (t - 44.5) / 1));
       if (fade > 0) { ctx.fillStyle = 'rgba(0,0,0,' + fade + ')'; ctx.fillRect(0, 0, 320, 240); }
     }
     if (t < INTRO_DURATION - 1) {
@@ -181,7 +218,6 @@ const Overworld = (() => {
       ctx.fillText('PRESS ANY BUTTON TO SKIP', 306, 233);
     }
   }
-
   let worldClock = 0.28, wolfSpawned = false, wolfNoticeCooldown = 0;
   const wolves = [];
   const DAY_LENGTH = 180;
@@ -1509,6 +1545,12 @@ const Overworld = (() => {
     applySave(saveData);
     introActive = !saveData || typeof saveData !== 'object';
     introTime = 0; introSoundChar = 0; introTextSegment = ''; introLastReveal = 0;
+    if (introActive) {
+      try {
+        const AudioCtor = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtor) { if (!introAudio) introAudio = new AudioCtor(); if (introAudio.state === 'suspended') introAudio.resume(); }
+      } catch (_) {}
+    }
     if (introActive) { insideHouse = true; interiorPlayer.x = 94; interiorPlayer.y = 91; interiorPlayer.facing = 'up'; }
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('keyup', onKeyUp);
