@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "assets/TopDownFantasy_Forest_v1.zip"
+      - "assets/Free Pixel Art Forest.zip"
       - ".github/workflows/extract-forest.yml"
   workflow_dispatch:
 
@@ -23,6 +24,9 @@ jobs:
           mkdir -p assets/forest_pack
           unzip -o "assets/TopDownFantasy_Forest_v1.zip" -d assets/forest_pack
           find assets/forest_pack -type f -print
+          mkdir -p assets/free_forest
+          unzip -o "assets/Free Pixel Art Forest.zip" -d assets/free_forest
+          find assets/free_forest -type f -print
       - name: Install preview dependency
         run: python -m pip install pillow
       - name: Create preview
@@ -45,6 +49,29 @@ jobs:
               sheet=Image.new("RGB",(cols*340,rows*280),(24,24,24))
               for i,im in enumerate(thumbs): sheet.paste(im,((i%cols)*340,(i//cols)*280))
               sheet.save("forest-preview.jpg")
+          PY
+      - name: Create supplied side-forest preview
+        run: |
+          python - <<'PY'
+          from PIL import Image, ImageDraw
+          from pathlib import Path
+          files = sorted(Path("assets/free_forest").rglob("*.png"))
+          thumbs = []
+          for p in files:
+              im = Image.open(p).convert("RGBA")
+              size = im.size
+              im.thumbnail((360, 190), Image.Resampling.NEAREST)
+              card = Image.new("RGBA", (380, 225), (28, 28, 34, 255))
+              card.alpha_composite(im, ((380-im.width)//2, 4))
+              ImageDraw.Draw(card).text((8, 198), p.name[:38] + "  " + str(size[0]) + "x" + str(size[1]), fill="white")
+              thumbs.append(card.convert("RGB"))
+          if thumbs:
+              cols = 2
+              rows = (len(thumbs)+cols-1)//cols
+              sheet = Image.new("RGB", (cols*380, rows*225), (20, 20, 26))
+              for i, im in enumerate(thumbs):
+                  sheet.paste(im, ((i%cols)*380, (i//cols)*225))
+              sheet.save("free-forest-preview.jpg", quality=92)
           PY
       - name: Create coordinate atlas preview
         run: |
@@ -80,11 +107,12 @@ jobs:
           path: |
             forest-preview.jpg
             assets/forest_pack/atlas-grid.jpg
+            free-forest-preview.jpg
       - name: Commit extracted assets
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add assets/forest_pack
+          git add assets/forest_pack assets/free_forest
           if git diff --cached --quiet; then
             echo "No extracted assets changed."
           else
