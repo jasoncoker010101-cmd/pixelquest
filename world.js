@@ -12,7 +12,7 @@ const Overworld = (() => {
   let time = 0;
 
   // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
-  let introActive = false, introTime = 0, introAudio = null, introSoundChar = 0;
+  let introActive = false, introTime = 0, introAudio = null, introSoundChar = 0, introTextSegment = '', introLastReveal = 0;
   const INTRO_DURATION = 31.5;
   function finishIntro() {
     introActive = false;
@@ -43,7 +43,10 @@ const Overworld = (() => {
       introSoundChar++;
     } catch (_) {}
   }
-  function introTextBox(lines, reveal) {
+  function introTextBox(lines, reveal, segment) {
+    if (introTextSegment !== segment) { introTextSegment = segment; introLastReveal = 0; }
+    const targetReveal = Math.max(0, Math.floor(reveal));
+    if (targetReveal >= introLastReveal + 2) { introBlip(); introLastReveal = targetReveal; }
     const full = lines.join(' ');
     const shown = full.slice(0, Math.max(0, Math.floor(reveal)));
     const words = shown.split(' ');
@@ -62,10 +65,6 @@ const Overworld = (() => {
     ctx.strokeStyle = '#d7bd83'; ctx.lineWidth = 1; ctx.strokeRect(13.5, y + .5, 293, 38);
     ctx.font = '8px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff0ce';
     for (let i = 0; i < visible; i++) ctx.fillText(output[i], 22, y + 12 + i * 10);
-    if (Math.floor(reveal) > introSoundChar && Math.floor(reveal) > 0) {
-      const target = Math.floor(reveal);
-      if (target - introSoundChar >= 2) introBlip();
-    }
   }
   function drawPixelEarth(rotation) {
     const size = 64, center = 31.5, radius = 29.5;
@@ -136,7 +135,7 @@ const Overworld = (() => {
       ctx.textAlign = 'center'; ctx.font = 'bold 14px monospace';
       ctx.fillStyle = '#f4e8c5'; ctx.fillText('EARTH', 160, 25);
       ctx.fillStyle = '#8294b7'; ctx.fillRect(123, 32, 74, 1);
-      if (t > 2.1) introTextBox(['A quiet world, shaped by open fields, old forests, and clear water.'], (t - 2.1) * 15);
+      if (t > 2.1) introTextBox(['A quiet world, shaped by open fields, old forests, and clear water.'], (t - 2.1) * 18, 'earth');
       if (t > 6.0) {
         const a = Math.min(1, (t - 6.0) / 2.0);
         ctx.fillStyle = 'rgba(0,0,0,' + a + ')'; ctx.fillRect(0, 0, 320, 240);
@@ -157,7 +156,7 @@ const Overworld = (() => {
         cy = 238 - e * 70;
       }
       drawIntroWorld(zoom, cx, cy);
-      if (t < 14.5) introTextBox(['Beyond the fields, the forest and lake are home to all kinds of wildlife.'], (t - 10.5) * 14);
+      if (t < 14.5) introTextBox(['Fields, forests and a quiet lake are home to wildlife.'], (t - 10.5) * 14, 'countryside');
       if (t > 25.8) {
         const a = Math.min(1, (t - 25.8) / 1.7);
         ctx.fillStyle = 'rgba(0,0,0,' + a + ')'; ctx.fillRect(0, 0, 320, 240);
@@ -1509,7 +1508,7 @@ const Overworld = (() => {
     });
     applySave(saveData);
     introActive = !saveData || typeof saveData !== 'object';
-    introTime = 0; introSoundChar = 0;
+    introTime = 0; introSoundChar = 0; introTextSegment = ''; introLastReveal = 0;
     if (introActive) { insideHouse = true; interiorPlayer.x = 94; interiorPlayer.y = 91; interiorPlayer.facing = 'up'; }
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('keyup', onKeyUp);
