@@ -89,12 +89,43 @@ const Overworld = (() => {
     for (let i = 0; i < visible; i++) ctx.fillText(output[i], 22, y + 12 + i * 10);
   }
   function drawPixelEarth(rotation) {
-    const size = 64, center = 31.5, radius = 29.5;
+    // A larger, richly shaded pixel planet with moving cloud bands and a soft atmosphere.
+    const size = 80, center = 39.5, radius = 36.5;
     ctx.save();
     ctx.translate(160, 108);
-    ctx.fillStyle = 'rgba(0,0,0,.42)';
-    ctx.beginPath(); ctx.ellipse(4, 34, 39, 8, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#18223c'; ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,.38)';
+    ctx.beginPath(); ctx.ellipse(3, 43, 47, 9, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Atmospheric rim and subtle glow behind the planet.
+    ctx.shadowColor = 'rgba(72,164,255,.55)';
+    ctx.shadowBlur = 13;
+    ctx.fillStyle = '#17243e';
+    ctx.beginPath(); ctx.arc(0, 0, 42, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    const landShapes = [
+      // North and South America
+      [[-2.75,.78],[-2.35,1.05],[-1.95,1.05],[-1.55,.88],[-1.38,.58],[-1.65,.35],[-1.72,.1],[-1.5,-.22],[-1.7,-.55],[-1.95,-.9],[-2.15,-1.28],[-2.48,-1.05],[-2.72,-.52]],
+      [[-1.9,-.1],[-1.55,-.24],[-1.35,-.55],[-1.25,-.9],[-1.45,-1.25],[-1.62,-1.62],[-1.9,-1.48],[-2.05,-1.02]],
+      // Europe, Africa, Asia
+      [[-.65,.85],[-.35,1.05],[.1,1.02],[.45,.92],[.62,.72],[.95,.7],[1.25,.9],[1.6,.78],[1.85,.55],[2.2,.58],[2.55,.35],[2.85,.12],[2.62,-.18],[2.25,-.28],[1.95,-.35],[1.72,-.65],[1.4,-.6],[1.2,-.25],[.95,-.12],[.72,-.38],[.45,-.5],[.28,-.88],[-.05,-1.15],[-.4,-.92],[-.62,-.45],[-.8,-.15],[-.72,.35]],
+      // India and southeast Asia
+      [[.7,.18],[.92,.1],[1.05,-.25],[.9,-.65],[.68,-.52],[.55,-.15]],
+      [[1.8,-.35],[2.05,-.48],[2.28,-.72],[2.15,-.95],[1.92,-.85],[1.72,-.62]],
+      // Australia and islands
+      [[2.35,-1.05],[2.72,-1.12],[2.85,-1.38],[2.58,-1.52],[2.28,-1.38]],
+      [[-2.9,-.08],[-2.72,-.2],[-2.62,-.38],[-2.8,-.52]],
+      [[-2.2,.15],[-2.05,.25],[-1.9,.15],[-2.02,-.02]],
+      [[-.25,-.12],[.02,-.2],[.12,-.35],[-.1,-.48],[-.32,-.32]]
+    ];
+    const inPoly = (x, y, poly) => {
+      let inside = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+        if (((yi > y) !== (yj > y)) && x < (xj - xi) * (y - yi) / ((yj - yi) || .0001) + xi) inside = !inside;
+      }
+      return inside;
+    };
     for (let py = 0; py < size; py++) {
       for (let px = 0; px < size; px++) {
         const dx = (px - center) / radius, dy = (py - center) / radius;
@@ -103,27 +134,37 @@ const Overworld = (() => {
         const z = Math.sqrt(1 - rr);
         const lat = Math.asin(-dy);
         const lon = Math.atan2(dx, z) + rotation;
-        const n = Math.sin(lon * 9 + Math.sin(lat * 13)) * .11 +
-          Math.sin(lon * 17 + lat * 11) * .055 + Math.cos(lon * 5 - lat * 19) * .035;
-        const land =
-          (((lon + 1.15) / .63) ** 2 + ((lat - .42) / .52) ** 2 < 1 + n) ||
-          (((lon + .72) / .30) ** 2 + ((lat + .30) / .53) ** 2 < 1 + n) ||
-          (((lon - .22) / .38) ** 2 + ((lat - .36) / .28) ** 2 < 1 + n) ||
-          (((lon - .36) / .40) ** 2 + ((lat + .08) / .58) ** 2 < 1 + n) ||
-          (((lon - 1.30) / .78) ** 2 + ((lat - .28) / .42) ** 2 < 1 + n) ||
-          (((lon - 1.55) / .32) ** 2 + ((lat + .56) / .22) ** 2 < 1 + n);
-        const light = Math.max(0, Math.min(1, .34 + (-dx * .56 - dy * .48 + z * .68) * .62));
+        const noise = Math.sin(lon * 8 + Math.sin(lat * 10)) * .055 + Math.sin(lon * 15 + lat * 12) * .035;
+        const land = landShapes.some(poly => inPoly(lon, lat, poly)) || (noise > .065 && lat > -.25 && lat < .7);
+        const light = Math.max(0, Math.min(1, .27 + (-dx * .58 - dy * .45 + z * .72) * .7));
+        const oceanDepth = Math.sin(lon * 3.4 + lat * 5) * .035;
         let color;
-        if (land) color = light > .68 ? '#8fc36d' : light > .42 ? '#4d9658' : '#285b4d';
-        else color = light > .68 ? '#5ab3d2' : light > .42 ? '#286b9c' : '#173b69';
-        const cloud = Math.sin(px * 1.71 + py * .63) * Math.cos(py * 1.19 - px * .37);
-        if (!land && cloud > .91 && light > .32) color = '#c7e1d8';
+        if (land) {
+          const terrain = Math.sin(lon * 11 + lat * 9) * .08 + Math.cos(lat * 15 - lon * 4) * .05;
+          color = light + terrain > .68 ? '#a6cf79' : light + terrain > .43 ? '#579c60' : '#326452';
+          if (lat > 1.15 || lat < -1.18) color = '#d9e8d9';
+        } else {
+          color = light + oceanDepth > .68 ? '#66c0df' : light + oceanDepth > .42 ? '#347da9' : '#19466f';
+        }
+        // Broad, fragmented cloud bands move slowly independently of the continents.
+        const cloudNoise = Math.sin(px * .29 + py * .16 + rotation * 2.2) +
+          Math.sin(px * .13 - py * .31 + rotation * 1.3) +
+          Math.cos(py * .24 + rotation * 1.7);
+        if (cloudNoise > 1.55 && light > .28) color = land ? '#c9e2c0' : '#d9edf0';
         ctx.fillStyle = color;
-        ctx.fillRect(px - 32, py - 32, 1, 1);
+        ctx.fillRect(px - 40, py - 40, 1, 1);
       }
     }
-    ctx.strokeStyle = 'rgba(190,224,255,.55)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.stroke();
+
+    // Fine pixel highlights on the limb and an illuminated atmosphere.
+    ctx.strokeStyle = 'rgba(176,225,255,.8)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(0, 0, 36.5, -.9, 2.65); ctx.stroke();
+    ctx.strokeStyle = 'rgba(63,135,226,.55)';
+    ctx.beginPath(); ctx.arc(0, 0, 38.5, 0, Math.PI * 2); ctx.stroke();
+    // Tiny satellite-like glint to make the planet feel alive.
+    const glint = .35 + .3 * Math.sin(introTime * 2.2);
+    ctx.fillStyle = 'rgba(220,245,255,' + glint + ')';
+    ctx.fillRect(-28, -20, 2, 1); ctx.fillRect(25, 15, 1, 2);
     ctx.restore();
   }
   function drawIntroWorld(zoom, centerX, centerY) {
