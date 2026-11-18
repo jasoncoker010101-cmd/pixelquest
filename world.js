@@ -174,7 +174,7 @@ const Overworld = (() => {
       [36,42,83,91], [92,35,126,67], [94,70,122,88],
       // Living room: couch, bookcases, coffee table and plant.
       [193,42,240,79], [252,27,276,69], [275,27,299,69],
-      [238,70,273,91], [260,62,281,88],
+      [238,70,273,91], [277,64,294,90],
       // Kitchen: refrigerator, counter, dining table and four chairs.
       [32,141,56,172], [55,139,123,171], [64,181,113,210],
       [66,176,79,186], [104,176,117,186],
@@ -745,10 +745,11 @@ const Overworld = (() => {
       ctx.fillStyle = '#d5a36a'; ctx.fillRect(x + 1, y + 29, 14, 2);
     };
     bookshelf(255, 30); bookshelf(278, 30);
-    ctx.fillStyle = '#56383a'; ctx.fillRect(264, 76, 13, 10);
-    ctx.fillStyle = '#b97858'; ctx.fillRect(266, 74, 9, 10);
-    ctx.fillStyle = '#5d884c'; ctx.fillRect(269, 66, 3, 10);
-    ctx.fillStyle = '#83ae5e'; ctx.fillRect(263, 67, 7, 4); ctx.fillRect(271, 63, 7, 5);
+    // Potted plant in the living-room corner, clear of the coffee table.
+    ctx.fillStyle = '#56383a'; ctx.fillRect(279, 78, 12, 10);
+    ctx.fillStyle = '#b97858'; ctx.fillRect(281, 76, 8, 10);
+    ctx.fillStyle = '#5d884c'; ctx.fillRect(284, 68, 3, 10);
+    ctx.fillStyle = '#83ae5e'; ctx.fillRect(278, 69, 7, 4); ctx.fillRect(285, 65, 7, 5);
 
     // Kitchen: refrigerator, counter, sink, stove and a compact dining set.
     // Overhead refrigerator cabinet: compact footprint, visible top panel,
