@@ -77,7 +77,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: forest-pack-preview
-          path: forest-preview.jpg
+          path: |
+            forest-preview.jpg
+            assets/forest_pack/atlas-grid.jpg
       - name: Commit extracted assets
         run: |
           git config user.name "github-actions[bot]"
