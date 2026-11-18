@@ -1813,8 +1813,8 @@ const Overworld = (() => {
       ctx.fillStyle = '#916342'; ctx.fillRect(0, y, HOUSE_SIDE_WIDTH, 2);
       ctx.fillStyle = 'rgba(37,21,27,.24)'; ctx.fillRect(0, y + 9, HOUSE_SIDE_WIDTH, 1);
     }
-    ctx.fillStyle = '#4b3029'; ctx.fillRect(0, 188, HOUSE_SIDE_WIDTH, 52);
-    ctx.fillStyle = '#956342'; ctx.fillRect(0, 190, HOUSE_SIDE_WIDTH, 5);
+    ctx.fillStyle = '#4b3029'; ctx.fillRect(0, 196, HOUSE_SIDE_WIDTH, 44);
+    ctx.fillStyle = '#956342'; ctx.fillRect(0, 194, HOUSE_SIDE_WIDTH, 4);
     for (let x = 0; x < HOUSE_SIDE_WIDTH; x += 32) {
       ctx.fillStyle = '#b47b50'; ctx.fillRect(x + 4, 202, 20, 2);
       ctx.fillStyle = 'rgba(40,22,24,.32)'; ctx.fillRect(x + 27, 197, 2, 18);
