@@ -27,6 +27,12 @@ const Overworld = (() => {
   let stepDistance = 0;
   const keys = new Set();
   const player = { x: SPAWN.x * TILE, y: SPAWN.y * TILE, facing: 'down', moving: false, walk: 0 };
+  const playerSheet = new Image();
+  let playerSheetReady = false;
+  playerSheet.onload = () => { playerSheetReady = true; };
+  playerSheet.onerror = () => { playerSheetReady = false; };
+  playerSheet.src = './assets/player-character3.png';
+
   const inventory = { berries: 3, wood: 0, fish: 0 };
   const stats = { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0 };
 
@@ -483,7 +489,7 @@ const Overworld = (() => {
     ctx.fillRect(x + 4, y + 1 - hop, 1, 1);
   }
 
-  function drawPlayer(sx, sy) {
+  function drawPlayerFallback(sx, sy) {
     const stride=player.moving ? Math.sin(player.walk) : 0, a=stride>0?1:0, b=stride<0?1:0;
     ctx.fillStyle='rgba(0,0,0,0.3)'; ctx.fillRect(sx+2,sy+15,12,2);
     ctx.fillStyle='#39405a'; ctx.fillRect(sx+4,sy+11+a,3,4-a); ctx.fillRect(sx+9,sy+11+b,3,4-b);
@@ -505,6 +511,44 @@ const Overworld = (() => {
       else {ctx.fillRect(sx+11,sy+5,1,1);ctx.fillRect(sx+12,sy+4,2,2);}
     }
     ctx.fillStyle='#f1d28c'; ctx.fillRect(sx+6,sy+7,4,1);
+  }
+
+  function drawPlayer(sx, sy) {
+    // The character sheet uses 32x32 frames. Keep the same ground anchor as
+    // the old 16x16 sprite: centered on sx+8, with the feet at sy+16.
+    if (!playerSheetReady) return drawPlayerFallback(sx, sy);
+
+    const direction = player.facing;
+    let idleRow, walkRow, flip = false;
+    if (direction === 'up') {
+      idleRow = 4; walkRow = 5;
+    } else if (direction === 'left') {
+      idleRow = 2; walkRow = 3;
+    } else if (direction === 'right') {
+      idleRow = 2; walkRow = 3; flip = true;
+    } else {
+      idleRow = 0; walkRow = 1;
+    }
+
+    const frame = player.moving
+      ? Math.floor(player.walk * 0.72) % 6
+      : Math.floor(time * 2) % 2;
+    const row = player.moving ? walkRow : idleRow;
+    const dx = sx - 8;
+    const dy = sy - 16;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(sx + 2, sy + 14, 12, 2);
+    if (flip) {
+      ctx.translate(dx + 32, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(playerSheet, frame * 32, row * 32, 32, 32, 0, dy, 32, 32);
+    } else {
+      ctx.drawImage(playerSheet, frame * 32, row * 32, 32, 32, dx, dy, 32, 32);
+    }
+    ctx.restore();
   }
   function beginBattle(w) {
     if (battle) return;
@@ -846,7 +890,7 @@ const Overworld = (() => {
     ctx.fillStyle=glow;ctx.fillRect(140,0,180,165);
     // Player shown close-up from behind on the left
     ctx.fillStyle='rgba(0,0,0,0.3)';ctx.fillRect(35,180,105,16);
-    ctx.save();ctx.translate(76,108);ctx.scale(4.8,4.8);const oldFacing=player.facing;player.facing='up';drawPlayer(0,0);player.facing=oldFacing;ctx.restore();
+    ctx.save();ctx.translate(76,108);ctx.scale(4.8,4.8);const oldFacing=player.facing;player.facing='up';drawPlayer(8,16);player.facing=oldFacing;ctx.restore();
     drawBattleWolf();
     // Battle HUD
     ctx.fillStyle='rgba(10,14,27,0.94)';ctx.fillRect(12,10,133,47);

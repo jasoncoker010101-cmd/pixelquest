@@ -6,3 +6,9 @@ Interior furniture spritesheet:
 - Source page: https://kenney.nl/assets/roguelike-indoors
 - License: Creative Commons CC0 1.0 (public domain dedication)
 - The sheet is stored in this project as assets/kenney-interior-tilemap.png.b64 and decoded by the game at runtime.
+
+Main character sprite:
+- Artist: Kettoman
+- Asset pack: 3 Free Pixel Characters Pack (32x32)
+- Character used: character3.png
+- License: Free for personal and commercial use; redistribution or resale of the asset as a standalone file or asset pack is prohibited. Credit appreciated but not required.
