@@ -69,7 +69,7 @@ const Overworld = (() => {
     platformScene = 'house';
     sidePlayer.x = 410; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
     sidePlayer.facing = 1; sidePlayer.moving = false; sidePlayer.walk = 0;
-    sideCameraX = 0; sideJumpQueued = false; panel = null;
+    sideCameraX = Math.max(0, sidePlayer.x - (canvas ? canvas.width : 320) * 0.43); sideJumpQueued = false; panel = null;
     keys.clear();
   }
   function introBlip() {
@@ -1874,7 +1874,7 @@ const Overworld = (() => {
     ctx.fillText('HOME / NOTE', 311, 15);
     ctx.fillStyle = 'rgba(8,9,16,.72)';
     ctx.fillRect(0, 226, canvas.width, 14);
-    ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace';
+    ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
     ctx.fillText('A / D MOVE    SPACE OR ↑ JUMP    E INTERACT', 5, 236);
 
     if (Math.abs(sidePlayer.x - 144) < 48) {
@@ -1979,7 +1979,7 @@ const Overworld = (() => {
     ctx.fillText('WOODLAND', 311, 15);
     ctx.fillStyle = 'rgba(8,9,16,.72)';
     ctx.fillRect(0, 226, canvas.width, 14);
-    ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace';
+    ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
     ctx.fillText('A / D MOVE    SPACE OR ↑ JUMP    E INTERACT', 5, 236);
 
     if (sidePlayer.x < 100) {
@@ -2530,7 +2530,7 @@ const Overworld = (() => {
       else if (k === '2' || k === 'escape') { battleAction('run'); e.preventDefault(); }
       return;
     }
-    if (k === 'z' || e.code === 'KeyZ') {
+    if (!platformMode && (k === 'z' || e.code === 'KeyZ')) {
       if (e.repeat) return;
       const alreadyNight = isNight();
       worldClock = 0.80;
@@ -2597,7 +2597,7 @@ const Overworld = (() => {
     sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
     sidePlayer.facing = 1; sidePlayer.moving = false; sidePlayer.walk = 0;
     dadNoteRead = !!(saveData && saveData.sideNoteRead);
-    sideJumpQueued = false; sideCameraX = 0;
+    sideJumpQueued = false; sideCameraX = Math.max(0, sidePlayer.x - canvas.width * 0.43);
     insideHouse = platformScene === 'house';
     introActive = !saveData || typeof saveData !== 'object';
     introTime = 0; introSoundChar = 0; introTextSegment = ''; introLastReveal = 0;
