@@ -646,6 +646,8 @@ const Overworld = (() => {
   }
 
   const MAILBOX = { x: 15.4 * TILE, y: 12.4 * TILE };
+  // A handwritten message left in Dad's bedroom, on top of the dresser.
+  const DAD_NOTE = { x: 104, y: 52 };
 
   function rng(seed) {
     let s = seed >>> 0;
@@ -1531,6 +1533,17 @@ const Overworld = (() => {
     ctx.fillStyle = '#d7a66b'; ctx.fillRect(150, 209, 20, 10);
     ctx.fillStyle = '#f0ca87'; ctx.fillRect(166, 214, 2, 2);
 
+    // A small folded paper note sits on the dresser in Dad's bedroom.
+    ctx.save();
+    ctx.fillStyle = 'rgba(35,18,24,.35)'; ctx.fillRect(96, 48, 17, 13);
+    ctx.fillStyle = '#77513c'; ctx.fillRect(95, 45, 17, 13);
+    ctx.fillStyle = '#eadbb3'; ctx.fillRect(96, 45, 15, 11);
+    ctx.fillStyle = '#fff0cc'; ctx.fillRect(97, 46, 12, 1);
+    ctx.fillStyle = '#b59a70'; ctx.fillRect(98, 49, 9, 1); ctx.fillRect(98, 52, 7, 1);
+    ctx.fillStyle = '#d1bd91'; ctx.fillRect(107, 45, 4, 4);
+    ctx.fillStyle = '#f7ebca'; ctx.fillRect(107, 46, 2, 2);
+    ctx.restore();
+
     // Player remains centered in the hall at spawn and can walk straight to the door.
     const oldFacing = player.facing, oldMoving = player.moving, oldWalk = player.walk;
     player.facing = interiorPlayer.facing;
@@ -1539,7 +1552,13 @@ const Overworld = (() => {
     drawPlayer(Math.round(interiorPlayer.x), Math.round(interiorPlayer.y));
     player.facing = oldFacing; player.moving = oldMoving; player.walk = oldWalk;
 
-    if (Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 25) {
+    if (!panel && Math.hypot(interiorPlayer.x - DAD_NOTE.x, interiorPlayer.y - DAD_NOTE.y) < 35) {
+      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(111, 188, 98, 14);
+      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(111.5, 188.5, 97, 13);
+      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('[ E ] READ NOTE', 160, 198);
+    }
+    if (!panel && Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 25) {
       ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(121, 188, 78, 14);
       ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(121.5, 188.5, 77, 13);
       ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
@@ -1709,12 +1728,22 @@ const Overworld = (() => {
     ctx.strokeRect(44, 38, 232, 162);
     ctx.fillStyle = '#f5dca6'; ctx.textAlign = 'center';
     ctx.font = 'bold 13px monospace';
-    ctx.fillText(panel === 'inventory' ? 'INVENTORY' : 'PLAYER STATS', 160, 57);
+    const panelTitle = panel === 'inventory' ? 'INVENTORY' : panel === 'dad-note' ? 'A NOTE FROM DAD' : 'PLAYER STATS';
+    ctx.fillText(panelTitle, 160, 57);
     ctx.font = '8px monospace';
     ctx.fillStyle = '#b9b1a5';
-    ctx.fillText('Press ' + (panel === 'inventory' ? 'I' : 'C') + ' or ESC to close', 160, 190);
+    ctx.fillText(panel === 'inventory' ? 'Press I or ESC to close' : panel === 'stats' ? 'Press C or ESC to close' : 'Press ESC to close', 160, 190);
 
-    if (panel === 'inventory') {
+    if (panel === 'dad-note') {
+      ctx.fillStyle = '#eadbb3'; ctx.fillRect(69, 72, 182, 92);
+      ctx.fillStyle = '#76553d'; ctx.strokeStyle = '#c79b5d'; ctx.lineWidth = 1;
+      ctx.strokeRect(69.5, 72.5, 181, 91);
+      ctx.fillStyle = '#45332e'; ctx.textAlign = 'center'; ctx.font = '10px monospace';
+      ctx.fillText('Son, meet me at the', 160, 96);
+      ctx.fillText('other side of the forest.', 160, 116);
+      ctx.fillText('Take my armor and', 160, 136);
+      ctx.fillText('weapon.', 160, 151);
+    } else if (panel === 'inventory') {
       const items = [
         { name: 'Berries', count: inventory.berries, color: '#c94e73', icon: '●' },
         { name: 'Wood', count: inventory.wood, color: '#a66a3d', icon: '▰' },
@@ -1878,6 +1907,10 @@ const Overworld = (() => {
 
   function interact() {
     if (insideHouse) {
+      if (Math.hypot(interiorPlayer.x - DAD_NOTE.x, interiorPlayer.y - DAD_NOTE.y) < 35) {
+        panel = 'dad-note';
+        return;
+      }
       if (Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 28) {
         insideHouse = false;
         player.x = HOUSE_DOOR.x;
