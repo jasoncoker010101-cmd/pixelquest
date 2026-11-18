@@ -4,7 +4,7 @@ const Overworld = (() => {
   const MAP_W = 40;
   const MAP_H = 30;
   const SPEED = 60;
-  const SOLID = new Set(['T', 'W', 'H', 'R', 'D']);
+  const SOLID = new Set(['B', 'W', 'H', 'R', 'D']);
   const SPAWN = { x: 20, y: 15 };
   const GAME_KEYS = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'];
 
@@ -281,7 +281,7 @@ const Overworld = (() => {
     if (px < TILE || py < TILE || px > worldW - TILE || py > worldH - TILE) return true;
     const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
     const tile = tileAt(tx, ty);
-    if (tile === 'W' || tile === 'H' || tile === 'R' || tile === 'D') return true;
+    if (tile === 'B' || tile === 'W' || tile === 'H' || tile === 'R' || tile === 'D') return true;
 
     // Trees have a small trunk collision area, not a full-tile wall.
     for (let y = Math.max(0, ty - 1); y <= Math.min(MAP_H - 1, ty + 1); y++) {
@@ -289,7 +289,7 @@ const Overworld = (() => {
         if (tileAt(x, y) !== 'T') continue;
         const trunkX = x * TILE + 8;
         const trunkY = y * TILE + 13;
-        if (Math.hypot(px - trunkX, py - trunkY) < 14) return true;
+        if (Math.abs(px - trunkX) < 6 && py >= y * TILE + 9 && py <= y * TILE + 17) return true;
       }
     }
     return false;
@@ -565,6 +565,19 @@ const Overworld = (() => {
   playerSheet.onerror = () => { playerSheetReady = false; };
   playerSheet.src = pqAsset('./assets/player-character3.png');
 
+  // Forest pack artwork: separate terrain tiles and large transparent decorations.
+  const forestTilesSheet = new Image();
+  let forestTilesReady = false;
+  forestTilesSheet.onload = () => { forestTilesReady = true; };
+  forestTilesSheet.onerror = () => { forestTilesReady = false; };
+  forestTilesSheet.src = pqAsset('./assets/forest_pack/TopDownFantasy-Forest/Tiles/Tileset.png');
+
+  const forestDecorSheet = new Image();
+  let forestDecorReady = false;
+  forestDecorSheet.onload = () => { forestDecorReady = true; };
+  forestDecorSheet.onerror = () => { forestDecorReady = false; };
+  forestDecorSheet.src = pqAsset('./assets/forest_pack/TopDownFantasy-Forest/Decorations/Decorations.png');
+
   const inventory = { berries: 3, wood: 0, fish: 0 };
   const stats = { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0 };
 
@@ -618,7 +631,7 @@ const Overworld = (() => {
       const row = [];
       for (let x = 0; x < MAP_W; x++) {
         const border = x === 0 || y === 0 || x === MAP_W - 1 || y === MAP_H - 1;
-        row.push(border ? 'T' : rand() < 0.05 ? 'F' : 'G');
+        row.push(border ? 'B' : rand() < 0.05 ? 'F' : 'G');
       }
       grid.push(row);
     }
@@ -648,14 +661,23 @@ const Overworld = (() => {
         const tile = grid[y][x];
         if (tile !== 'G' && tile !== 'F') continue;
         if (Math.hypot(x - SPAWN.x, y - SPAWN.y) < 4) continue;
-        if (rand() < 0.07) grid[y][x] = 'T';
+        if (rand() < 0.065) {
+          // Keep full-size trees separated so their canopies do not pile up.
+          let clear = true;
+          for (let ny = Math.max(1, y - 1); ny <= Math.min(MAP_H - 2, y + 1); ny++) {
+            for (let nx = Math.max(1, x - 1); nx <= Math.min(MAP_W - 2, x + 1); nx++) {
+              if (grid[ny][nx] === 'T') clear = false;
+            }
+          }
+          if (clear) grid[y][x] = 'T';
+        }
       }
     }
     return grid;
   }
 
   function tileAt(tx, ty) {
-    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return 'T';
+    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return 'B';
     return map[ty][tx];
   }
 
@@ -680,6 +702,18 @@ const Overworld = (() => {
     for (let ty = minTileY; ty <= maxTileY; ty++) {
       for (let tx = minTileX; tx <= maxTileX; tx++) {
         if (SOLID.has(tileAt(tx, ty))) return true;
+      }
+    }
+
+    // The tree canopy is decorative; only the narrow visible trunk blocks walking.
+    for (let ty = Math.max(0, minTileY - 1); ty <= Math.min(MAP_H - 1, maxTileY); ty++) {
+      for (let tx = Math.max(0, minTileX - 1); tx <= Math.min(MAP_W - 1, maxTileX + 1); tx++) {
+        if (tileAt(tx, ty) !== 'T') continue;
+        const trunkLeft = tx * TILE + 5;
+        const trunkRight = tx * TILE + 11;
+        const trunkTop = ty * TILE + 9;
+        const trunkBottom = ty * TILE + 16;
+        if (left < trunkRight && right > trunkLeft && top < trunkBottom && bottom > trunkTop) return true;
       }
     }
     return mailboxBlocked(px, py);
@@ -786,6 +820,15 @@ const Overworld = (() => {
     ctx.fillStyle='#171923'; ctx.fillRect(x+14,y-3+bob,1,1);
   }
 
+  function drawAtlasSprite(sheet, ready, sx, sy, sw, sh, dx, dy, dw = sw, dh = sh) {
+    if (!ready) return false;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(sheet, sx, sy, sw, sh, dx, dy, dw, dh);
+    ctx.restore();
+    return true;
+  }
+
   function drawGrass(px, py, h) {
     ctx.fillStyle = '#5b8f3e';
     ctx.fillRect(px, py, TILE, TILE);
@@ -799,46 +842,40 @@ const Overworld = (() => {
     const h = Math.abs((tx * 73856093) ^ (ty * 19349663));
     switch (tile) {
       case 'W': {
-        ctx.fillStyle = '#2d6ea6';
-        ctx.fillRect(px, py, TILE, TILE);
-        const wave = Math.floor(Math.sin(time * 2 + tx * 0.8 + ty) * 2);
-        ctx.fillStyle = '#5b9bd5';
-        ctx.fillRect(px + 2 + (h % 6) + wave, py + 5 + ((h >> 3) % 7), 4, 1);
-        break;
-      }
-      case 'F': {
-        drawGrass(px, py, h);
-        const colors = ['#f2d74e', '#e8788a', '#ffffff'];
-        ctx.fillStyle = colors[h % 3];
-        ctx.fillRect(px + 4 + ((h >> 2) % 8), py + 4 + ((h >> 4) % 8), 2, 2);
-        break;
-      }
-      case 'P': {
-        ctx.fillStyle = '#c9a66b';
-        ctx.fillRect(px, py, TILE, TILE);
-        if (h % 2 === 0) {
-          ctx.fillStyle = '#b08f57';
-          ctx.fillRect(px + ((h >> 2) % 12), py + ((h >> 4) % 12), 2, 2);
+        if (!drawAtlasSprite(forestTilesSheet, forestTilesReady, 16, 176, 16, 16, px, py, TILE, TILE)) {
+          ctx.fillStyle = '#2d6ea6';
+          ctx.fillRect(px, py, TILE, TILE);
+          const wave = Math.floor(Math.sin(time * 2 + tx * 0.8 + ty) * 2);
+          ctx.fillStyle = '#5b9bd5';
+          ctx.fillRect(px + 2 + (h % 6) + wave, py + 5 + ((h >> 3) % 7), 4, 1);
         }
         break;
       }
-      case 'T': {
-        drawGrass(px, py, h);
-        // Stable tree placeholder until the atlas is mapped by its actual sprite cells.
-        ctx.fillStyle = '#6b4423';
-        ctx.fillRect(px + 6, py + 10, 4, 6);
-        ctx.fillStyle = '#2f6b2a';
-        ctx.beginPath(); ctx.arc(px + 8, py + 7, 7, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#3f8a36';
-        ctx.beginPath(); ctx.arc(px + 6, py + 5, 2.5, 0, Math.PI * 2); ctx.fill();
+      case 'F': {
+        if (!drawAtlasSprite(forestTilesSheet, forestTilesReady, 16, 16, 16, 16, px, py, TILE, TILE)) drawGrass(px, py, h);
+        // Sparse grass tufts from the pack, not butterflies or unrelated props.
+        drawAtlasSprite(forestDecorSheet, forestDecorReady, (h % 2) * 16, 64, 16, 32,
+          px + 2 + (h % 3), py - 8, 12, 24);
+        break;
+      }
+      case 'P': {
+        if (!drawAtlasSprite(forestTilesSheet, forestTilesReady, 64, 144, 16, 16, px, py, TILE, TILE)) {
+          ctx.fillStyle = '#c9a66b';
+          ctx.fillRect(px, py, TILE, TILE);
+        }
+        break;
+      }
+      case 'T':
+      case 'B': {
+        if (!drawAtlasSprite(forestTilesSheet, forestTilesReady, 16, 16, 16, 16, px, py, TILE, TILE)) drawGrass(px, py, h);
         break;
       }
       case 'R': {
-        drawGrass(px, py, h);
-        ctx.fillStyle = '#7d7d86';
-        ctx.beginPath(); ctx.ellipse(px + 8, py + 10, 5, 4, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#b5b5be';
-        ctx.fillRect(px + 6, py + 8, 2, 1);
+        if (!drawAtlasSprite(forestDecorSheet, forestDecorReady, 176, 112, 16, 16, px, py - 2, TILE, TILE)) {
+          drawGrass(px, py, h);
+          ctx.fillStyle = '#7d7d86';
+          ctx.beginPath(); ctx.ellipse(px + 8, py + 10, 5, 4, 0, 0, Math.PI * 2); ctx.fill();
+        }
         break;
       }
       case 'H':
@@ -847,6 +884,31 @@ const Overworld = (() => {
         break;
       default:
         drawGrass(px, py, h);
+    }
+  }
+
+  function drawForestTrees() {
+    if (!forestDecorReady) return;
+    const variants = [
+      { sx: 0, sy: 144, sw: 64, sh: 96, w: 32, h: 48 },
+      { sx: 64, sy: 144, sw: 64, sh: 96, w: 32, h: 48 },
+      { sx: 128, sy: 160, sw: 48, sh: 80, w: 24, h: 40 },
+      { sx: 176, sy: 160, sw: 48, sh: 80, w: 24, h: 40 }
+    ];
+    const firstY = Math.max(0, Math.floor(camY / TILE) - 4);
+    const lastY = Math.min(MAP_H - 1, Math.floor((camY + canvas.height) / TILE));
+    const firstX = Math.max(0, Math.floor(camX / TILE) - 1);
+    const lastX = Math.min(MAP_W - 1, Math.floor((camX + canvas.width) / TILE));
+    for (let ty = firstY; ty <= lastY; ty++) {
+      for (let tx = firstX; tx <= lastX; tx++) {
+        if (map[ty][tx] !== 'T') continue;
+        const hash = Math.abs((tx * 73856093) ^ (ty * 19349663));
+        const tree = variants[hash % variants.length];
+        const dx = Math.round(tx * TILE + 8 - tree.w / 2 - camX);
+        const dy = Math.round(ty * TILE + 16 - tree.h - camY);
+        drawAtlasSprite(forestDecorSheet, forestDecorReady,
+          tree.sx, tree.sy, tree.sw, tree.sh, dx, dy, tree.w, tree.h);
+      }
     }
   }
 
@@ -1664,6 +1726,7 @@ const Overworld = (() => {
       }
     }
 
+    drawForestTrees();
     drawHouse();
     drawHouseDoorPrompt();
     drawMailbox();
