@@ -750,23 +750,21 @@ const Overworld = (() => {
       [130,128,140,156], [130,186,140,218],
       [180,128,190,156], [180,186,190,218],
       [25,112,68,122], [100,112,114,122],
-      [206,112,220,122], [252,112,295,122]
+      [206,112,220,122], [252,112,295,122],
+      // A short partition makes a separate bathroom behind the living room.
+      [190,175,220,185], [240,175,295,185]
     ];
 
     // Collision footprints follow the furniture's outer shadow / base, not
     // arbitrary oversized boxes. The plant is separate from the coffee table.
     const furniture = [
-      // Bedroom: bed, dresser and bedside chest.
-      [36,42,83,91], [92,35,126,67], [94,70,122,88],
-      // Living room: couch, bookcases, coffee table and plant.
-      [193,42,240,79], [252,27,276,69], [275,27,299,69],
-      [238,70,273,91], [277,64,294,90],
-      // Kitchen: refrigerator, counter, dining table and four chairs.
+      // Two bedrooms: separate beds, dressers and bedside furniture.
+      [36,42,83,91], [88,35,118,69], [91,74,118,97],
+      [200,42,244,91], [248,34,280,68], [244,76,274,99],
+      // Kitchen furniture and dining set.
       [32,141,56,172], [55,139,123,171], [64,181,113,210],
-      [66,176,79,186], [104,176,117,186],
-      [66,204,79,214], [104,204,117,214],
-      // Bathroom: bathtub, basin and toilet.
-      [196,142,282,179], [209,181,239,209], [250,180,285,213]
+      // Living-room seating and shelf. Bathroom fixtures are in the lower alcove.
+      [196,142,244,178], [264,137,294,171], [242,184,290,214]
     ];
 
     return walls.concat(furniture).some(([x1, y1, x2, y2]) =>
@@ -1376,6 +1374,9 @@ const Overworld = (() => {
     // Short cross-walls separate front and back rooms, leaving open doorways.
     wallH(25, 112, 43, 10); wallH(100, 112, 14, 10);
     wallH(206, 112, 14, 10); wallH(252, 112, 43, 10);
+    // The bathroom is a separate small room at the back of the living room.
+    // Leave a doorway in the partition so the fixtures remain accessible.
+    wallH(190, 175, 30, 10); wallH(240, 175, 55, 10);
 
     // Furniture is drawn from the pixel-art packs already included in the project.
     // Dad's bedroom (upper-left): bed, dresser, bedside table and wall window.
@@ -1397,15 +1398,15 @@ const Overworld = (() => {
     drawInteriorArt(51, 395, 32, 34, 37, 179, 18, 18);
 
     // Living room (lower-right): sofa seating, coffee table, shelves and decor.
-    drawInteriorArt(140, 263, 66, 50, 198, 143, 43, 33);
-    drawInteriorArt(224, 282, 47, 40, 237, 178, 31, 26);
-    drawInteriorArt(336, 38, 50, 57, 267, 139, 24, 31);
-    drawInteriorArt(337, 432, 48, 42, 274, 181, 17, 17);
+    drawInteriorArt(140, 263, 66, 50, 198, 139, 43, 33);
+    drawInteriorArt(224, 282, 47, 40, 225, 147, 28, 24);
+    drawInteriorArt(336, 38, 50, 57, 267, 137, 24, 31);
+    drawInteriorArt(337, 432, 48, 42, 274, 153, 17, 17);
 
     // Bathroom (small separate room at the far end of the lower-right side).
     // Fixtures use the bathroom pieces from the Kenney interior tile atlas.
-    drawInteriorSprite(21, 7, 2, 2, 245, 186);
-    drawInteriorSprite(23, 7, 2, 2, 273, 186);
+    drawInteriorSprite(21, 7, 2, 2, 245, 185);
+    drawInteriorSprite(23, 7, 2, 2, 273, 185);
     // Hallway details mounted on the wall edges, not in the walking lane.
     ctx.fillStyle = '#493039'; ctx.fillRect(132, 91, 7, 16);
     ctx.fillStyle = '#d7ad78'; ctx.fillRect(134, 93, 3, 12);
