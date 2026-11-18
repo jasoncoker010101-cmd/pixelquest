@@ -842,6 +842,7 @@ const Overworld = (() => {
     const h = Math.abs((tx * 73856093) ^ (ty * 19349663));
     switch (tile) {
       case 'W': {
+        // Water center tile from the forest atlas. Keep the fallback animated.
         if (!drawAtlasSprite(forestTilesSheet, forestTilesReady, 16, 176, 16, 16, px, py, TILE, TILE)) {
           ctx.fillStyle = '#2d6ea6';
           ctx.fillRect(px, py, TILE, TILE);
@@ -852,13 +853,12 @@ const Overworld = (() => {
         break;
       }
       case 'F': {
-        if (!drawAtlasSprite(forestTilesSheet, forestTilesReady, 16, 16, 16, 16, px, py, TILE, TILE)) drawGrass(px, py, h);
-        // Sparse grass tufts from the pack, not butterflies or unrelated props.
-        drawAtlasSprite(forestDecorSheet, forestDecorReady, (h % 2) * 16, 64, 16, 32,
-          px + 2 + (h % 3), py - 8, 12, 24);
+        // Ground-only leafy grass variant; no oversized plants stamped on every tile.
+        if (!drawAtlasSprite(forestTilesSheet, forestTilesReady, 80, 16, 16, 16, px, py, TILE, TILE)) drawGrass(px, py, h);
         break;
       }
       case 'P': {
+        // Dirt path tile.
         if (!drawAtlasSprite(forestTilesSheet, forestTilesReady, 64, 144, 16, 16, px, py, TILE, TILE)) {
           ctx.fillStyle = '#c9a66b';
           ctx.fillRect(px, py, TILE, TILE);
@@ -866,12 +866,15 @@ const Overworld = (() => {
         break;
       }
       case 'T':
-      case 'B': {
+      case 'B':
+      case 'G': {
+        // Clean grass base under trees and open ground.
         if (!drawAtlasSprite(forestTilesSheet, forestTilesReady, 16, 16, 16, 16, px, py, TILE, TILE)) drawGrass(px, py, h);
         break;
       }
       case 'R': {
-        if (!drawAtlasSprite(forestDecorSheet, forestDecorReady, 176, 112, 16, 16, px, py - 2, TILE, TILE)) {
+        // Rocky shore tile from the terrain atlas.
+        if (!drawAtlasSprite(forestTilesSheet, forestTilesReady, 96, 16, 16, 16, px, py, TILE, TILE)) {
           drawGrass(px, py, h);
           ctx.fillStyle = '#7d7d86';
           ctx.beginPath(); ctx.ellipse(px + 8, py + 10, 5, 4, 0, 0, Math.PI * 2); ctx.fill();
@@ -882,37 +885,64 @@ const Overworld = (() => {
       case 'D':
         // The building is drawn as one complete house above the ground tiles.
         break;
-      case 'G': {
-        if (!drawAtlasSprite(forestTilesSheet, forestTilesReady, 16, 16, 16, 16, px, py, TILE, TILE)) drawGrass(px, py, h);
-        break;
-      }
       default:
         drawGrass(px, py, h);
     }
   }
 
-  function drawForestTrees() {
-    if (!forestDecorReady) return;
-    const variants = [
+  function forestTreeSprites() {
+    // Verified source rectangles for four tree silhouettes in Decorations.png.
+    return [
       { sx: 0, sy: 144, sw: 64, sh: 96, w: 32, h: 48 },
       { sx: 64, sy: 144, sw: 64, sh: 96, w: 32, h: 48 },
       { sx: 128, sy: 160, sw: 48, sh: 80, w: 24, h: 40 },
       { sx: 176, sy: 160, sw: 48, sh: 80, w: 24, h: 40 }
     ];
+  }
+
+  function drawForestTrees(foreground = false) {
+    if (!forestDecorReady) return;
+    const variants = forestTreeSprites();
     const firstY = Math.max(0, Math.floor(camY / TILE) - 4);
     const lastY = Math.min(MAP_H - 1, Math.floor((camY + canvas.height) / TILE));
     const firstX = Math.max(0, Math.floor(camX / TILE) - 1);
     const lastX = Math.min(MAP_W - 1, Math.floor((camX + canvas.width) / TILE));
+    const trees = [];
     for (let ty = firstY; ty <= lastY; ty++) {
       for (let tx = firstX; tx <= lastX; tx++) {
         if (map[ty][tx] !== 'T') continue;
         const hash = Math.abs((tx * 73856093) ^ (ty * 19349663));
         const tree = variants[hash % variants.length];
-        const dx = Math.round(tx * TILE + 8 - tree.w / 2 - camX);
-        const dy = Math.round(ty * TILE + 16 - tree.h - camY);
-        drawAtlasSprite(forestDecorSheet, forestDecorReady,
-          tree.sx, tree.sy, tree.sw, tree.sh, dx, dy, tree.w, tree.h);
+        const groundY = ty * TILE + 16;
+        // Depth-sort the tree relative to the player: trees farther away draw
+        // behind, trees nearer the bottom of the screen draw in front.
+        if ((groundY > player.y + 16) !== foreground) continue;
+        trees.push({ tx, ty, tree, groundY });
       }
+    }
+    trees.sort((a, b) => a.groundY - b.groundY || a.tx - b.tx);
+    for (const { tx, ty, tree } of trees) {
+      const dx = Math.round(tx * TILE + 8 - tree.w / 2 - camX);
+      const dy = Math.round(ty * TILE + 16 - tree.h - camY);
+      drawAtlasSprite(forestDecorSheet, forestDecorReady,
+        tree.sx, tree.sy, tree.sw, tree.sh, dx, dy, tree.w, tree.h);
+    }
+  }
+
+  function drawForestMushrooms() {
+    if (!forestDecorReady) return;
+    // A handful of deliberate, fixed forest-floor spots, not random tile clutter.
+    const spots = [
+      { x: 5, y: 6, sx: 160 }, { x: 19, y: 7, sx: 192 },
+      { x: 23, y: 22, sx: 224 }, { x: 36, y: 18, sx: 160 },
+      { x: 4, y: 25, sx: 192 }
+    ];
+    for (const spot of spots) {
+      if (!['G', 'F'].includes(tileAt(spot.x, spot.y))) continue;
+      const px = Math.round(spot.x * TILE + 1 - camX);
+      const py = Math.round(spot.y * TILE + 1 - camY);
+      drawAtlasSprite(forestDecorSheet, forestDecorReady,
+        spot.sx, 0, 16, 16, px, py, 14, 14);
     }
   }
 
@@ -1730,7 +1760,8 @@ const Overworld = (() => {
       }
     }
 
-    drawForestTrees();
+    drawForestMushrooms();
+    drawForestTrees(false);
     drawHouse();
     drawHouseDoorPrompt();
     drawMailbox();
@@ -1739,6 +1770,7 @@ const Overworld = (() => {
     bunnies.forEach(drawBunny);
     wolves.forEach(drawWolf);
     drawPlayer(Math.round(player.x-camX),Math.round(player.y-camY));
+    drawForestTrees(true);
     const hour=worldClock%1;
     let darkness=0;
     if(hour>=0.62&&hour<0.76) darkness=(hour-0.62)/0.14*0.48;
