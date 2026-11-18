@@ -2044,6 +2044,8 @@ const Overworld = (() => {
     if (sidePlayer.x < 112) {
       platformScene = 'house';
       insideHouse = true;
+      interiorPlayer.x = 160; interiorPlayer.y = 194;
+      interiorPlayer.facing = 'up'; interiorPlayer.moving = false; interiorPlayer.walk = 0;
       sidePlayer.x = 880; sidePlayer.y = SIDE_GROUND_Y;
       sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
       sideCameraX = Math.max(0, HOUSE_SIDE_WIDTH - canvas.width);
@@ -2068,7 +2070,7 @@ const Overworld = (() => {
       if (introTime >= INTRO_DURATION) finishIntro();
       return;
     }
-    if (platformMode) { updatePlatformer(dt); return; }
+    if (platformMode && platformScene === 'forest') { updatePlatformer(dt); return; }
     time += dt;
     saveTimer += dt;
     if (saveTimer >= 5) {
@@ -2317,7 +2319,7 @@ const Overworld = (() => {
 
   function draw() {
     if (introActive) { drawIntro(); return; }
-    if (platformMode) { drawPlatformer(); return; }
+    if (platformMode && platformScene === 'forest') { drawPlatformer(); return; }
     if (battle) { drawBattle(); if (paused) drawPauseMenu(); return; }
     if (insideHouse) { drawHouseInterior(); if (paused) drawPauseMenu(); return; }
     ctx.fillStyle = '#1b1f3a';
@@ -2362,13 +2364,24 @@ const Overworld = (() => {
   }
 
   function interact() {
-    if (platformMode) { interactPlatformer(); return; }
+    if (platformMode && platformScene === 'forest') { interactPlatformer(); return; }
     if (insideHouse) {
       if (Math.hypot(interiorPlayer.x - DAD_NOTE.x, interiorPlayer.y - DAD_NOTE.y) < 35) {
         panel = 'dad-note';
         return;
       }
       if (Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 28) {
+        if (platformMode) {
+          insideHouse = false;
+          platformScene = 'forest';
+          sidePlayer.x = 72; sidePlayer.y = SIDE_GROUND_Y;
+          sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
+          sidePlayer.facing = 1; sideCameraX = 0;
+          keys.clear();
+          notice = 'The forest path begins here.';
+          noticeUntil = time + 2.5;
+          return;
+        }
         insideHouse = false;
         player.x = HOUSE_DOOR.x;
         player.y = HOUSE.y + 85;
