@@ -850,6 +850,47 @@ const Overworld = (() => {
     }
   }
 
+  function drawDirtPathTile(px, py, tx, ty, seed) {
+    // Slightly vary the soil tone by location so neighboring tiles blend
+    // into a continuous trail rather than reading as a checkerboard.
+    const tones = ['#987044', '#a27a4d', '#a98252', '#936b43'];
+    const tone = tones[(Math.abs(seed) >>> 3) % tones.length];
+    ctx.fillStyle = tone;
+    ctx.fillRect(px, py, TILE, TILE);
+
+    // Scattered, world-coordinate-anchored soil flecks and tiny stones.
+    // Their positions don't restart in a repeated atlas pattern at each tile.
+    for (let n = 0; n < 7; n++) {
+      const gx = tx * 16 + ((Math.abs((tx * 127 + ty * 311 + n * 47) ^ (seed >>> 2)) >>> 0) % 16);
+      const gy = ty * 16 + ((Math.abs((tx * 283 + ty * 101 + n * 71) ^ (seed >>> 4)) >>> 0) % 16);
+      const lx = gx - tx * 16, ly = gy - ty * 16;
+      ctx.fillStyle = n % 3 === 0 ? '#c29a65' : n % 3 === 1 ? '#795638' : '#b18a59';
+      ctx.fillRect(px + lx, py + ly, n % 4 === 0 ? 2 : 1, 1);
+    }
+
+    // Soft, broken grass fringe where the path meets the surrounding ground.
+    const edges = [
+      { dx: 0, dy: -1, side: 'top' }, { dx: 0, dy: 1, side: 'bottom' },
+      { dx: -1, dy: 0, side: 'left' }, { dx: 1, dy: 0, side: 'right' }
+    ];
+    for (const edge of edges) {
+      if (tileAt(tx + edge.dx, ty + edge.dy) === 'P') continue;
+      for (let n = 0; n < 3; n++) {
+        const pos = (Math.abs((tx * 193 + ty * 389 + n * 83 + seed) | 0) % 15) + 1;
+        const gx = edge.side === 'left' ? 0 : edge.side === 'right' ? 14 : pos;
+        const gy = edge.side === 'top' ? 0 : edge.side === 'bottom' ? 14 : pos;
+        ctx.fillStyle = n % 2 ? '#687b43' : '#78894b';
+        ctx.fillRect(px + gx, py + gy, 2, 1);
+      }
+    }
+
+    // A few worn lighter patches break up the center without adding clutter.
+    const patchX = 3 + (Math.abs(seed) % 9);
+    const patchY = 3 + ((Math.abs(seed >>> 5) || 1) % 9);
+    ctx.fillStyle = 'rgba(198,157,99,0.28)';
+    ctx.fillRect(px + patchX, py + patchY, 2, 1);
+  }
+
   function drawTile(tile, px, py, tx, ty) {
     const h = Math.abs((tx * 73856093) ^ (ty * 19349663));
     switch (tile) {
@@ -870,11 +911,9 @@ const Overworld = (() => {
         break;
       }
       case 'P': {
-        // Dirt path tile.
-        if (!drawAtlasSprite(forestTilesSheet, forestTilesReady, 64, 144, 16, 16, px, py, TILE, TILE)) {
-          ctx.fillStyle = '#c9a66b';
-          ctx.fillRect(px, py, TILE, TILE);
-        }
+        // Draw the trail as one continuous, irregular dirt surface instead of
+        // stamping the same square atlas tile over and over.
+        drawDirtPathTile(px, py, tx, ty, h);
         break;
       }
       case 'T':
