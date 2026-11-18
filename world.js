@@ -700,8 +700,8 @@ const Overworld = (() => {
   }
 
   const MAILBOX = { x: 15.4 * TILE, y: 12.4 * TILE };
-  // A handwritten message left in Dad's bedroom, on top of the dresser.
-  const DAD_NOTE = { x: 102, y: 146 };
+  // The note rests on the dresser in Dad's bedroom.
+  const DAD_NOTE = { x: 103, y: 183 };
 
   function rng(seed) {
     let s = seed >>> 0;
@@ -825,10 +825,10 @@ const Overworld = (() => {
       [198,39,241,72], [230,70,258,94], [266,34,293,67], [270,72,292,91],
       // Separate bathroom fixtures opening onto the hallway.
       [210,111,237,136], [254,111,282,136],
-      // Dad's bedroom (lower-left).
-      [41,152,74,190], [88,132,118,168], [91,180,118,202],
-      // Player's bedroom (lower-right).
-      [204,161,237,199], [248,155,280,182], [263,187,290,214]
+      // Dad's bedroom: bed, bedside table, bookcase and dresser.
+      [39,128,74,171], [76,131,92,148], [92,131,118,164], [91,180,118,203],
+      // Player's bedroom: bed, bedside table, wall shelf and dresser.
+      [203,162,239,206], [242,164,258,181], [263,164,289,187], [263,189,289,212]
     ];
 
     return walls.concat(furniture).some(([x1, y1, x2, y2]) =>
@@ -1577,25 +1577,31 @@ const Overworld = (() => {
     drawInteriorSprite(21, 7, 2, 2, 210, 112, 24, 24);
     drawInteriorSprite(23, 7, 2, 2, 254, 112, 24, 24);
 
-    // Dad's bedroom, bottom-left. The note is on the dresser.
-    drawInteriorArt(16, 48, 47, 49, 42, 152, 31, 37);
-    drawInteriorArt(336, 38, 50, 57, 88, 132, 30, 34);
+    // Dad's bedroom, bottom-left. Use the actual blue bed and blue rug sprites.
+    // The headboard sits close to the upper wall; the rug extends around the bed.
+    drawInteriorArt(544, 545, 78, 78, 32, 135, 50, 55);
+    drawInteriorArt(16, 48, 47, 49, 39, 127, 35, 44);
+    drawInteriorArt(224, 282, 47, 40, 76, 131, 16, 17);
+    drawInteriorArt(336, 38, 50, 57, 92, 131, 26, 33);
     drawInteriorArt(224, 282, 47, 40, 91, 180, 27, 23);
 
-    // Player's bedroom, bottom-right.
-    drawInteriorArt(111, 48, 48, 49, 207, 161, 31, 37);
-    drawInteriorArt(398, 61, 49, 36, 250, 155, 29, 27);
-    drawInteriorArt(224, 282, 47, 40, 263, 187, 27, 23);
+    // Player's bedroom, bottom-right. Match the blue bed and place its furniture
+    // along the right wall so the doorway and floor space remain clear.
+    drawInteriorArt(544, 545, 78, 78, 199, 164, 55, 48);
+    drawInteriorArt(16, 48, 47, 49, 203, 162, 36, 44);
+    drawInteriorArt(224, 282, 47, 40, 242, 164, 16, 17);
+    drawInteriorArt(398, 61, 49, 36, 263, 164, 26, 23);
+    drawInteriorArt(224, 282, 47, 40, 263, 189, 26, 21);
 
     // A folded paper note on Dad's dresser.
     ctx.save();
-    ctx.fillStyle = 'rgba(35,18,24,.35)'; ctx.fillRect(96, 145, 17, 13);
-    ctx.fillStyle = '#77513c'; ctx.fillRect(95, 142, 17, 13);
-    ctx.fillStyle = '#eadbb3'; ctx.fillRect(96, 142, 15, 11);
-    ctx.fillStyle = '#fff0cc'; ctx.fillRect(97, 143, 12, 1);
-    ctx.fillStyle = '#b59a70'; ctx.fillRect(98, 146, 9, 1); ctx.fillRect(98, 149, 7, 1);
-    ctx.fillStyle = '#d1bd91'; ctx.fillRect(107, 142, 4, 4);
-    ctx.fillStyle = '#f7ebca'; ctx.fillRect(107, 143, 2, 2);
+    ctx.fillStyle = 'rgba(35,18,24,.35)'; ctx.fillRect(96, 181, 17, 13);
+    ctx.fillStyle = '#77513c'; ctx.fillRect(95, 178, 17, 13);
+    ctx.fillStyle = '#eadbb3'; ctx.fillRect(96, 178, 15, 11);
+    ctx.fillStyle = '#fff0cc'; ctx.fillRect(97, 179, 12, 1);
+    ctx.fillStyle = '#b59a70'; ctx.fillRect(98, 182, 9, 1); ctx.fillRect(98, 185, 7, 1);
+    ctx.fillStyle = '#d1bd91'; ctx.fillRect(107, 178, 4, 4);
+    ctx.fillStyle = '#f7ebca'; ctx.fillRect(107, 179, 2, 2);
     ctx.restore();
 
     // Draw the player in the same top-down view used by the rest of the house.
@@ -1607,10 +1613,10 @@ const Overworld = (() => {
     player.facing = oldFacing; player.moving = oldMoving; player.walk = oldWalk;
 
     if (!panel && Math.hypot(interiorPlayer.x - DAD_NOTE.x, interiorPlayer.y - DAD_NOTE.y) < 35) {
-      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(45, 125, 108, 14);
-      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(45.5, 125.5, 107, 13);
+      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(73, 163, 108, 14);
+      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(73.5, 163.5, 107, 13);
       ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('[ E ] READ NOTE', 99, 135);
+      ctx.fillText('[ E ] READ NOTE', 127, 173);
     }
     if (!panel && Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 25) {
       ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(121, 188, 78, 14);
