@@ -159,8 +159,8 @@ const Overworld = (() => {
       [130,128,140,151], [130,180,140,218],
       [180,128,190,151], [180,180,190,218],
       // Cross walls separate the four rooms, with generous door openings.
-      [25,112,68,122], [100,112,130,122],
-      [190,112,220,122], [252,112,295,122]
+      [25,112,68,122], [100,112,114,122],
+      [206,112,220,122], [252,112,295,122]
     ];
     const furniture = [
       [36,39,80,88], [92,35,126,67], [94,70,122,88],
@@ -671,8 +671,8 @@ const Overworld = (() => {
     wallV(180, 128, 28, 10); wallV(180, 186, 32, 10);
 
     // Short cross-walls separate front and back rooms, leaving open doorways.
-    wallH(25, 112, 43, 10); wallH(100, 112, 30, 10);
-    wallH(190, 112, 30, 10); wallH(252, 112, 43, 10);
+    wallH(25, 112, 43, 10); wallH(100, 112, 14, 10);
+    wallH(206, 112, 14, 10); wallH(252, 112, 43, 10);
 
     // Bedroom: large bed, dresser, bedside chest and window.
     const bed = (x, y, w, h, blanket, pillow) => {
