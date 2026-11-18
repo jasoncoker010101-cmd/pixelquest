@@ -187,7 +187,7 @@ const Overworld = (() => {
       }
       drawIntroWorld(zoom, cx, cy);
       if (t > 9.0 && t < 14.3) {
-        introTextBox(['For generations, people lived alongside the land, building small homes between fields and forests.'], (t - 9.0) * 17, 'settled-world');
+        introTextBox(['Long ago, people built quiet homes and villages between the fields and forests.'], (t - 9.0) * 17, 'settled-world');
       } else if (t >= 14.8 && t < 20.0) {
         introTextBox(['Then strange energy stirred in forgotten places, and the wilderness began to change.'], (t - 14.8) * 17, 'awakening');
       } else if (t >= 20.5 && t < 25.7) {
