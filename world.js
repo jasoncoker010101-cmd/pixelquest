@@ -2632,7 +2632,7 @@ const Overworld = (() => {
     }
 
     if (paused) {
-      if (action === 'back') {
+      if (action === 'back' || action === 'pause') {
         paused = false;
         pauseSelection = 0;
       } else if (action === 'primary') {
