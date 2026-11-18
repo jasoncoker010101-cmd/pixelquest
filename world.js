@@ -123,8 +123,13 @@ const Overworld = (() => {
   }
   function drawIntroWorld(zoom, centerX, centerY) {
     const oldX = camX, oldY = camY;
+    // The distant howl hits with a brief, uneven pixel-camera shake.
+    const howlAge = introTime - 21.4;
+    const shakeEnvelope = howlAge >= 0 && howlAge < 2.6 ? (1 - howlAge / 2.6) * (0.65 + 0.35 * Math.abs(Math.sin(howlAge * 8))) : 0;
+    const shakeX = shakeEnvelope * (Math.sin(introTime * 39) * 2.8 + Math.sin(introTime * 17) * 1.3);
+    const shakeY = shakeEnvelope * (Math.cos(introTime * 31) * 2.1 + Math.sin(introTime * 23) * 0.9;
     ctx.save();
-    ctx.translate(160, 120);
+    ctx.translate(160 + shakeX, 120 + shakeY);
     ctx.scale(zoom, zoom);
     ctx.translate(-centerX, -centerY);
     camX = 0; camY = 0;
@@ -1214,9 +1219,9 @@ const Overworld = (() => {
   function update(dt) {
     if (introActive) {
       introTime += dt;
-      if (introTime >= 17.2 && !introWolfHowlOne) { introWolfHowlOne = true; playIntroWolfAudio(introWolfHowlAudioOne, 0.72, 1.0); }
+      if (introTime >= 17.2 && !introWolfHowlOne) { introWolfHowlOne = true; playIntroWolfAudio(introWolfHowlAudioOne, 0.52, 1.0); }
       // This recording is an environmental howl from beyond the visible wolves, not from the wolf on the right.
-      if (introTime >= 21.4 && !introWolfHowlTwo) { introWolfHowlTwo = true; playIntroWolfAudio(introWolfHowlAudioTwo, 0.24, 0.92); }
+      if (introTime >= 21.4 && !introWolfHowlTwo) { introWolfHowlTwo = true; playIntroWolfAudio(introWolfHowlAudioTwo, 0.16, 0.92); }
       if (introTime >= INTRO_DURATION) finishIntro();
       return;
     }
