@@ -12,3 +12,7 @@ Main character sprite:
 - Asset pack: 3 Free Pixel Characters Pack (32x32)
 - Character used: character3.png
 - License: Free for personal and commercial use; redistribution or resale of the asset as a standalone file or asset pack is prohibited. Credit appreciated but not required.
+
+Pixel planet opening cinematic:
+- PixelPlanets by Deep-Fold (MIT License), supplied by the project owner and used as a visual/technical reference for the procedural pixel-shaded planet effect.
+- Original browser-side Earth rendering in world.js; no Godot runtime files are required by Pixel Quest.

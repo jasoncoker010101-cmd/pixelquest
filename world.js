@@ -10,6 +10,179 @@ const Overworld = (() => {
 
   let canvas, ctx, onExit, onSave, saveTimer = 0, map = [];
   let time = 0;
+
+  // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
+  let introActive = false, introTime = 0, introAudio = null, introSoundChar = 0;
+  const INTRO_DURATION = 31.5;
+  function finishIntro() {
+    introActive = false;
+    introTime = INTRO_DURATION;
+    insideHouse = true;
+    interiorPlayer.x = 94;
+    interiorPlayer.y = 91;
+    interiorPlayer.facing = 'up';
+    interiorPlayer.moving = false;
+    interiorPlayer.walk = 0;
+    keys.clear();
+  }
+  function introBlip() {
+    try {
+      const AudioCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtor) return;
+      if (!introAudio) introAudio = new AudioCtor();
+      if (introAudio.state === 'suspended') introAudio.resume();
+      const osc = introAudio.createOscillator();
+      const gain = introAudio.createGain();
+      const now = introAudio.currentTime;
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(690 + (introSoundChar % 3) * 55, now);
+      gain.gain.setValueAtTime(0.018, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.026);
+      osc.connect(gain); gain.connect(introAudio.destination);
+      osc.start(now); osc.stop(now + 0.027);
+      introSoundChar++;
+    } catch (_) {}
+  }
+  function introTextBox(lines, reveal) {
+    const full = lines.join(' ');
+    const shown = full.slice(0, Math.max(0, Math.floor(reveal)));
+    const words = shown.split(' ');
+    const output = [];
+    let line = '';
+    for (const word of words) {
+      const next = line ? line + ' ' + word : word;
+      if (next.length > 43 && line) { output.push(line); line = word; }
+      else line = next;
+    }
+    if (line) output.push(line);
+    const visible = Math.min(3, output.length);
+    const y = 190;
+    ctx.fillStyle = 'rgba(8,10,22,.88)';
+    ctx.fillRect(13, y, 294, 39);
+    ctx.strokeStyle = '#d7bd83'; ctx.lineWidth = 1; ctx.strokeRect(13.5, y + .5, 293, 38);
+    ctx.font = '8px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff0ce';
+    for (let i = 0; i < visible; i++) ctx.fillText(output[i], 22, y + 12 + i * 10);
+    if (Math.floor(reveal) > introSoundChar && Math.floor(reveal) > 0) {
+      const target = Math.floor(reveal);
+      if (target - introSoundChar >= 2) introBlip();
+    }
+  }
+  function drawPixelEarth(rotation) {
+    const size = 64, center = 31.5, radius = 29.5;
+    ctx.save();
+    ctx.translate(160, 108);
+    ctx.fillStyle = 'rgba(0,0,0,.42)';
+    ctx.beginPath(); ctx.ellipse(4, 34, 39, 8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#18223c'; ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI * 2); ctx.fill();
+    for (let py = 0; py < size; py++) {
+      for (let px = 0; px < size; px++) {
+        const dx = (px - center) / radius, dy = (py - center) / radius;
+        const rr = dx * dx + dy * dy;
+        if (rr > 1) continue;
+        const z = Math.sqrt(1 - rr);
+        const lat = Math.asin(-dy);
+        const lon = Math.atan2(dx, z) + rotation;
+        const n = Math.sin(lon * 9 + Math.sin(lat * 13)) * .11 +
+          Math.sin(lon * 17 + lat * 11) * .055 + Math.cos(lon * 5 - lat * 19) * .035;
+        const land =
+          (((lon + 1.15) / .63) ** 2 + ((lat - .42) / .52) ** 2 < 1 + n) ||
+          (((lon + .72) / .30) ** 2 + ((lat + .30) / .53) ** 2 < 1 + n) ||
+          (((lon - .22) / .38) ** 2 + ((lat - .36) / .28) ** 2 < 1 + n) ||
+          (((lon - .36) / .40) ** 2 + ((lat + .08) / .58) ** 2 < 1 + n) ||
+          (((lon - 1.30) / .78) ** 2 + ((lat - .28) / .42) ** 2 < 1 + n) ||
+          (((lon - 1.55) / .32) ** 2 + ((lat + .56) / .22) ** 2 < 1 + n);
+        const light = Math.max(0, Math.min(1, .34 + (-dx * .56 - dy * .48 + z * .68) * .62));
+        let color;
+        if (land) color = light > .68 ? '#8fc36d' : light > .42 ? '#4d9658' : '#285b4d';
+        else color = light > .68 ? '#5ab3d2' : light > .42 ? '#286b9c' : '#173b69';
+        const cloud = Math.sin(px * 1.71 + py * .63) * Math.cos(py * 1.19 - px * .37);
+        if (!land && cloud > .91 && light > .32) color = '#c7e1d8';
+        ctx.fillStyle = color;
+        ctx.fillRect(px - 32, py - 32, 1, 1);
+      }
+    }
+    ctx.strokeStyle = 'rgba(190,224,255,.55)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  function drawIntroWorld(zoom, centerX, centerY) {
+    const oldX = camX, oldY = camY;
+    ctx.save();
+    ctx.translate(160, 120);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-centerX, -centerY);
+    camX = 0; camY = 0;
+    for (let ty = 0; ty < MAP_H; ty++) {
+      for (let tx = 0; tx < MAP_W; tx++) drawTile(map[ty][tx], tx * TILE, ty * TILE, tx, ty);
+    }
+    drawHouse();
+    drawMailbox();
+    drawFish();
+    bunnies.forEach(drawBunny);
+    camX = oldX; camY = oldY;
+    ctx.restore();
+  }
+  function drawIntro() {
+    const t = introTime;
+    ctx.fillStyle = '#070b19'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (t < 10.5) {
+      for (let i = 0; i < 52; i++) {
+        const x = (i * 73 + 19) % 320, y = (i * 47 + 11) % 178;
+        const twinkle = .45 + .45 * Math.sin(t * 2 + i);
+        ctx.fillStyle = 'rgba(218,231,255,' + twinkle + ')';
+        ctx.fillRect(x, y, i % 7 === 0 ? 2 : 1, i % 7 === 0 ? 2 : 1);
+      }
+      drawPixelEarth(t * .13);
+      ctx.textAlign = 'center'; ctx.font = 'bold 14px monospace';
+      ctx.fillStyle = '#f4e8c5'; ctx.fillText('EARTH', 160, 25);
+      ctx.fillStyle = '#8294b7'; ctx.fillRect(123, 32, 74, 1);
+      if (t > 2.1) introTextBox(['A quiet world, shaped by open fields, old forests, and clear water.'], (t - 2.1) * 15);
+      if (t > 6.0) {
+        const a = Math.min(1, (t - 6.0) / 2.0);
+        ctx.fillStyle = 'rgba(0,0,0,' + a + ')'; ctx.fillRect(0, 0, 320, 240);
+      }
+    } else if (t < 27.5) {
+      let zoom, cx, cy;
+      if (t < 20.5) {
+        const p = (t - 10.5) / 10;
+        const e = p * p * (3 - 2 * p);
+        zoom = .53 + e * .15;
+        cx = 485 - e * 185;
+        cy = 250 - e * 12;
+      } else {
+        const p = Math.min(1, (t - 20.5) / 7);
+        const e = p * p * (3 - 2 * p);
+        zoom = .68 + e * .92;
+        cx = 300 - e * 116;
+        cy = 238 - e * 70;
+      }
+      drawIntroWorld(zoom, cx, cy);
+      if (t < 14.5) introTextBox(['Beyond the fields, the forest and lake are home to all kinds of wildlife.'], (t - 10.5) * 14);
+      if (t > 25.8) {
+        const a = Math.min(1, (t - 25.8) / 1.7);
+        ctx.fillStyle = 'rgba(0,0,0,' + a + ')'; ctx.fillRect(0, 0, 320, 240);
+      }
+    } else {
+      const p = Math.min(1, (t - 27.5) / 1.4);
+      ctx.save();
+      ctx.translate(160, 120); ctx.scale(1.22 - p * .22, 1.22 - p * .22); ctx.translate(-160, -120);
+      drawHouseInterior();
+      ctx.restore();
+      if (t < 30.5) {
+        ctx.fillStyle = 'rgba(8,10,22,.8)'; ctx.fillRect(14, 12, 292, 23);
+        ctx.strokeStyle = '#d7bd83'; ctx.strokeRect(14.5, 12.5, 291, 22);
+        ctx.fillStyle = '#fff0ce'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('SOMEWHERE, A NEW DAY BEGINS...', 160, 27);
+      }
+      const fade = Math.max(0, Math.min(1, (t - 30.5) / 1));
+      if (fade > 0) { ctx.fillStyle = 'rgba(0,0,0,' + fade + ')'; ctx.fillRect(0, 0, 320, 240); }
+    }
+    if (t < INTRO_DURATION - 1) {
+      ctx.fillStyle = 'rgba(235,229,211,.68)'; ctx.font = '6px monospace'; ctx.textAlign = 'right';
+      ctx.fillText('PRESS ANY BUTTON TO SKIP', 306, 233);
+    }
+  }
+
   let worldClock = 0.28, wolfSpawned = false, wolfNoticeCooldown = 0;
   const wolves = [];
   const DAY_LENGTH = 180;
@@ -916,6 +1089,11 @@ const Overworld = (() => {
   }
 
   function update(dt) {
+    if (introActive) {
+      introTime += dt;
+      if (introTime >= INTRO_DURATION) finishIntro();
+      return;
+    }
     time += dt;
     saveTimer += dt;
     if (saveTimer >= 5) {
@@ -1105,6 +1283,7 @@ const Overworld = (() => {
   }
 
   function draw() {
+    if (introActive) { drawIntro(); return; }
     if (battle) { drawBattle(); return; }
     if (insideHouse) { drawHouseInterior(); return; }
     ctx.fillStyle = '#1b1f3a';
@@ -1258,6 +1437,7 @@ const Overworld = (() => {
 
   function onKeyDown(e) {
     const k = e.key.toLowerCase();
+    if (introActive) { finishIntro(); e.preventDefault(); e.stopPropagation(); return; }
     if (battle) {
       if (k === '1' || k === 'enter' || k === ' ') { battleAction('fight'); e.preventDefault(); }
       else if (k === '2' || k === 'escape') { battleAction('run'); e.preventDefault(); }
@@ -1328,6 +1508,9 @@ const Overworld = (() => {
       b.vx = 0; b.vy = 0; b.flee = 0;
     });
     applySave(saveData);
+    introActive = !saveData || typeof saveData !== 'object';
+    introTime = 0; introSoundChar = 0;
+    if (introActive) { insideHouse = true; interiorPlayer.x = 94; interiorPlayer.y = 91; interiorPlayer.facing = 'up'; }
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('keyup', onKeyUp);
     const maxCamX = Math.max(0, MAP_W * TILE - canvas.width);
@@ -1343,6 +1526,7 @@ const Overworld = (() => {
   }
 
   function controllerAction(action) {
+    if (introActive) { finishIntro(); return; }
     if (battle) {
       if (action === 'primary') battleAction('fight');
       else if (action === 'back') battleAction('run');
