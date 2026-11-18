@@ -196,29 +196,25 @@ const Overworld = (() => {
     const px = Math.round(x);
     const howlPulse = howling ? (Math.sin(introTime * 13) + 1) * 0.5 : 0;
     const py = Math.round(y + Math.sin(introTime * 3 + x) * 1.1 - howlPulse * 1.5);
+    const sprite = flip ? introRedWerewolf : introBlackWerewolf;
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,.38)';
-    ctx.beginPath(); ctx.ellipse(px, py + 17, 23, 4, 0, 0, Math.PI * 2); ctx.fill();
-    if (battleWolfSprite.complete && battleWolfSprite.naturalWidth && battleWolfSprite.naturalHeight) {
-      const cellW = battleWolfSprite.naturalWidth / 3;
-      const cellH = battleWolfSprite.naturalHeight / 4;
+    ctx.fillStyle = 'rgba(0,0,0,.4)';
+    ctx.beginPath(); ctx.ellipse(px, py + 18, 23, 4, 0, 0, Math.PI * 2); ctx.fill();
+    if (sprite.complete && sprite.naturalWidth) {
       ctx.imageSmoothingEnabled = false;
       ctx.translate(px, py);
       if (flip) ctx.scale(-1, 1);
       if (howling) ctx.rotate(-0.04 - howlPulse * 0.035);
-      // Larger framing, sharper pixels, and a little darker contrast to feel more threatening.
-      ctx.drawImage(battleWolfSprite, cellW, cellH, cellW, cellH, -24, -25, 48, 46);
+      // The new Craftpix werewolf pack is used for the cinematic only.
+      ctx.drawImage(sprite, 0, 0, sprite.naturalWidth, sprite.naturalHeight, -24, -24, 48, 48);
       ctx.restore();
     } else { ctx.restore(); return; }
-    // Small eye glints and rough silhouette accents, kept restrained so the source sprite stays readable.
-    ctx.save();
-    ctx.fillStyle = howling ? '#e7b7a8' : '#d5b5a0';
-    const eyeX = px + (flip ? 11 : -11);
-    ctx.fillRect(eyeX, py - 9, 2, 1);
-    ctx.fillStyle = 'rgba(15,12,20,.35)';
-    ctx.fillRect(px - (flip ? 18 : -14), py - 20, 4, 2);
-    ctx.restore();
-    if (howling) drawGlitchHowl(px + (flip ? 14 : -14), py - 13, howlPulse, 2);
+    if (howling) {
+      // Eye flicker and the intentionally broken sound-wave distortion.
+      ctx.fillStyle = '#f1b6a9';
+      ctx.fillRect(px + (flip ? 10 : -10), py - 10, 2, 1);
+      drawGlitchHowl(px + (flip ? 14 : -14), py - 13, howlPulse, 2);
+    }
   }
   function drawIntro() {
     const t = introTime;
@@ -312,6 +308,11 @@ const Overworld = (() => {
   // The middle cell of row two is the detailed grey wolf used in battles.
   const battleWolfSprite = new Image();
   battleWolfSprite.src = 'https://opengameart.org/sites/default/files/enemies_081719_zp.png';
+  // User-provided free werewolf sprites: idle poses converted to compact 48px images.
+  const introBlackWerewolf = new Image();
+  introBlackWerewolf.src = './assets/intro-black-werewolf.png';
+  const introRedWerewolf = new Image();
+  introRedWerewolf.src = './assets/intro-red-werewolf.png';
 
   let camX = 0, camY = 0;
   let panel = null;
