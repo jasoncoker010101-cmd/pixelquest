@@ -1,0 +1,61 @@
+name: Extract forest tileset
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "assets/TopDownFantasy_Forest_v1.zip"
+      - ".github/workflows/extract-forest.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract forest pack
+        run: |
+          mkdir -p assets/forest_pack
+          unzip -o "assets/TopDownFantasy_Forest_v1.zip" -d assets/forest_pack
+          find assets/forest_pack -type f -print
+      - name: Create preview
+        run: |
+          python - <<'PY'
+          from PIL import Image, ImageOps, ImageDraw
+          from pathlib import Path
+          files = list(Path("assets/forest_pack").rglob("*.png"))
+          thumbs=[]
+          for p in files:
+              im=Image.open(p).convert("RGBA")
+              im.thumbnail((320,240), Image.Resampling.NEAREST)
+              bg=Image.new("RGBA",(340,280),(32,32,32,255))
+              bg.alpha_composite(im,((340-im.width)//2,8))
+              d=ImageDraw.Draw(bg)
+              d.text((8,252),p.name[:45],fill="white")
+              thumbs.append(bg.convert("RGB"))
+          if thumbs:
+              cols=3; rows=(len(thumbs)+cols-1)//cols
+              sheet=Image.new("RGB",(cols*340,rows*280),(24,24,24))
+              for i,im in enumerate(thumbs): sheet.paste(im,((i%cols)*340,(i//cols)*280))
+              sheet.save("forest-preview.jpg")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forest-pack-preview
+          path: forest-preview.jpg
+      - name: Commit extracted assets
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/forest_pack
+          if git diff --cached --quiet; then
+            echo "No extracted assets changed."
+          else
+            git commit -m "Extract forest tileset assets"
+            git push
+          fi
