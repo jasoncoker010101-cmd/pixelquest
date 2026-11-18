@@ -152,8 +152,8 @@ const Overworld = (() => {
       const fleeY = fleeProgress * 70;
       const pause = introTime >= howlAt && introTime < fleeStart;
       const walk = introTime < howlAt;
-      drawIntroWolf(24 * TILE + wanderX - fleeX, 18 * TILE + wanderY - fleeY, false, false, walk, fleeProgress);
-      drawIntroWolf(29 * TILE - wanderX * 0.72 + fleeX, 20 * TILE - wanderY * 0.65 - fleeY * 0.8, true, false, walk, fleeProgress);
+      drawIntroWolf(24 * TILE + wanderX - fleeX, 18 * TILE + wanderY + fleeY, false, false, walk, fleeProgress);
+      drawIntroWolf(29 * TILE - wanderX * 0.72 - fleeX * 0.8, 20 * TILE - wanderY * 0.65 + fleeY * 0.8, true, false, walk, fleeProgress);
       if (introTime >= 21.4 && introTime < 24.8) {
         drawDistantHowlGlitch(37 * TILE, 8 * TILE, (introTime - 21.4) / 3.4);
       }
