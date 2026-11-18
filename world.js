@@ -422,9 +422,6 @@ const Overworld = (() => {
   introRedWalk.src = pqAsset('./assets/werewolves/Red_Werewolf/Walk.png');
   const introRedRun = new Image();
   introRedRun.src = pqAsset('./assets/werewolves/Red_Werewolf/Run.png');
-  const natureTreeSheet = new Image();
-  natureTreeSheet.src = pqAsset('./assets/nature/nature free/global.png');
-
   let camX = 0, camY = 0;
   let panel = null;
   let notice = '';
@@ -697,23 +694,13 @@ const Overworld = (() => {
       }
       case 'T': {
         drawGrass(px, py, h);
-        // Draw the uploaded nature-pack tree sprite, with its trunk aligned to the tile.
-        if (natureTreeSheet.complete && natureTreeSheet.naturalWidth >= 48 && natureTreeSheet.naturalHeight >= 32) {
-          ctx.imageSmoothingEnabled = false;
-          // The pack is a 3-by-2 atlas: pick a cell consistently per tile,
-          // rather than repeatedly drawing just the first two cells.
-          const treeCell = h % 6;
-          const sx = (treeCell % 3) * 16;
-          const sy = Math.floor(treeCell / 3) * 16;
-          ctx.drawImage(natureTreeSheet, sx, sy, 16, 16, px - 6, py - 12, 28, 28);
-        } else {
-          ctx.fillStyle = '#6b4423';
-          ctx.fillRect(px + 6, py + 10, 4, 6);
-          ctx.fillStyle = '#2f6b2a';
-          ctx.beginPath(); ctx.arc(px + 8, py + 7, 7, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = '#3f8a36';
-          ctx.beginPath(); ctx.arc(px + 6, py + 5, 2.5, 0, Math.PI * 2); ctx.fill();
-        }
+        // Stable tree placeholder until the atlas is mapped by its actual sprite cells.
+        ctx.fillStyle = '#6b4423';
+        ctx.fillRect(px + 6, py + 10, 4, 6);
+        ctx.fillStyle = '#2f6b2a';
+        ctx.beginPath(); ctx.arc(px + 8, py + 7, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#3f8a36';
+        ctx.beginPath(); ctx.arc(px + 6, py + 5, 2.5, 0, Math.PI * 2); ctx.fill();
         break;
       }
       case 'R': {
