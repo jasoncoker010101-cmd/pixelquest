@@ -198,8 +198,14 @@ const Overworld = (() => {
       const fleeY = fleeProgress * 70;
       const pause = introTime >= howlAt && introTime < fleeStart;
       const walk = introTime < howlAt;
-      drawIntroWolf(24 * TILE + wanderX - fleeX, 18 * TILE + wanderY + fleeY, false, false, walk, fleeProgress);
-      drawIntroWolf(29 * TILE - wanderX * 0.72 - fleeX * 0.8, 20 * TILE - wanderY * 0.65 + fleeY * 0.8, true, false, walk, fleeProgress);
+      const wolfOneX = 24 * TILE + wanderX - fleeX;
+      const wolfOneY = 18 * TILE + wanderY + fleeY;
+      const wolfTwoX = 29 * TILE - wanderX * 0.72 - fleeX * 0.8;
+      const wolfTwoY = 20 * TILE - wanderY * 0.65 + fleeY * 0.8;
+      const wolfOneVX = Math.cos(introTime * 0.85) * 13 * 0.85 + Math.cos(introTime * 1.7) * 4 * 1.7 + fleeProgress * 70;
+      const wolfTwoVX = -wolfOneVX * 0.72 + fleeProgress * 56;
+      drawIntroWolf(wolfOneX, wolfOneY, false, wolfOneVX >= 0, walk, fleeProgress);
+      drawIntroWolf(wolfTwoX, wolfTwoY, true, wolfTwoVX >= 0, walk, fleeProgress);
       if (introTime >= 21.4 && introTime < 24.8) {
         drawDistantHowlGlitch(37 * TILE, 8 * TILE, (introTime - 21.4) / 3.4);
       }
@@ -251,32 +257,59 @@ const Overworld = (() => {
     }
     ctx.restore();
   }
-  function drawIntroWolf(x, y, flip, howling, walking, fleeing) {
-    const px = Math.round(x);
+  function introWolfAvoidTrees(x, y) {
+    // Trees are solid for the cinematic wolves too. Push their ground point away
+    // from nearby trunks rather than letting the scripted path clip through them.
+    let px = x, py = y;
+    for (let pass = 0; pass < 3; pass++) {
+      const tx0 = Math.floor((px - 14) / TILE), tx1 = Math.floor((px + 14) / TILE);
+      const ty0 = Math.floor((py - 8) / TILE), ty1 = Math.floor((py + 8) / TILE);
+      for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+        if (tileAt(tx, ty) !== 'T') continue;
+        const trunkX = tx * TILE + 8, trunkY = ty * TILE + 13;
+        const dx = px - trunkX, dy = py - trunkY;
+        const d = Math.hypot(dx, dy);
+        if (d < 13) {
+          const angle = d > 0.01 ? Math.atan2(dy, dx) : Math.PI / 2;
+          px = trunkX + Math.cos(angle) * 13;
+          py = trunkY + Math.sin(angle) * 13;
+        }
+      }
+    }
+    return { x: px, y: py };
+  }
+  function drawIntroWolf(x, y, isRed, facingRight, walking, fleeing) {
+    const safe = introWolfAvoidTrees(x, y);
+    const px = Math.round(safe.x), groundY = Math.round(safe.y);
     const moving = walking || fleeing > 0;
     const running = fleeing > 0;
-    const phase = introTime * (running ? 12 : 8) + (flip ? 2 : 0);
-    const gait = moving ? Math.sin(phase) : 0;
-    const py = Math.round(y + gait * (running ? 1.7 : 1) + Math.sin(introTime * 3 + x) * 0.5);
-    const idle = flip ? introRedWerewolf : introBlackWerewolf;
-    const walkSheet = flip ? introRedWalk : introBlackWalk;
-    const runSheet = flip ? introRedRun : introBlackRun;
+    const phase = introTime * (running ? 12 : 8) + (isRed ? 2 : 0);
+    const py = Math.round(groundY + (moving ? Math.sin(phase) * (running ? 1.2 : 0.7) : 0));
+    const walkSheet = isRed ? introRedWalk : introBlackWalk;
+    const runSheet = isRed ? introRedRun : introBlackRun;
     const sheet = running ? runSheet : walking ? walkSheet : null;
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,.4)';
-    ctx.beginPath(); ctx.ellipse(px, py + 18, Math.max(8, 23 - fleeing * 7), 4, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.imageSmoothingEnabled = false;
-    ctx.translate(px, py);
-    if (flip) ctx.scale(-1, 1);
-    ctx.rotate(fleeing * (flip ? -0.12 : 0.12));
-    const bob = moving ? Math.round(Math.sin(phase * 2) * (running ? 2 : 1)) : 0;
+    // Shadow stays anchored to the ground, independent of body bob and frame.
+    ctx.fillStyle = 'rgba(0,0,0,.34)';
+    ctx.beginPath(); ctx.ellipse(px, groundY + 3, running ? 11 : 12, 3, 0, 0, Math.PI * 2); ctx.fill();
     if (sheet && sheet.complete && sheet.naturalWidth && sheet.naturalHeight) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.translate(px, py);
+      if (!facingRight) ctx.scale(-1, 1);
       const frameW = sheet.naturalHeight;
       const frameCount = Math.max(1, Math.floor(sheet.naturalWidth / frameW));
-      const frame = Math.floor(introTime * (running ? 12 : 8) + (flip ? 2 : 0)) % frameCount;
-      ctx.drawImage(sheet, frame * frameW, 0, frameW, sheet.naturalHeight, -32, -32 + bob, 64, 64);
-    } else if (idle.complete && idle.naturalWidth) {
-      ctx.drawImage(idle, 0, 0, idle.naturalWidth, idle.naturalHeight, -32, -32 + bob, 64, 64);
+      const frame = Math.floor(introTime * (running ? 12 : 8) + (isRed ? 2 : 0)) % frameCount;
+      // Smaller footprint, centered over the ground point. Never flash the old static art.
+      ctx.drawImage(sheet, frame * frameW, 0, frameW, sheet.naturalHeight, -22, -29, 44, 44);
+    } else if (!moving) {
+      // Only show the matching idle artwork when stationary; never substitute it for a moving sheet.
+      const idle = isRed ? introRedWerewolf : introBlackWerewolf;
+      if (idle.complete && idle.naturalWidth) {
+        ctx.imageSmoothingEnabled = false;
+        ctx.translate(px, py);
+        if (!facingRight) ctx.scale(-1, 1);
+        ctx.drawImage(idle, 0, 0, idle.naturalWidth, idle.naturalHeight, -22, -29, 44, 44);
+      }
     }
     ctx.restore();
   }
@@ -386,6 +419,8 @@ const Overworld = (() => {
   introRedWalk.src = pqAsset('./assets/werewolves/Red_Werewolf/Walk.png');
   const introRedRun = new Image();
   introRedRun.src = pqAsset('./assets/werewolves/Red_Werewolf/Run.png');
+  const natureTreeSheet = new Image();
+  natureTreeSheet.src = pqAsset('./assets/nature/nature free/global.png');
 
   let camX = 0, camY = 0;
   let panel = null;
@@ -659,12 +694,20 @@ const Overworld = (() => {
       }
       case 'T': {
         drawGrass(px, py, h);
-        ctx.fillStyle = '#6b4423';
-        ctx.fillRect(px + 6, py + 10, 4, 6);
-        ctx.fillStyle = '#2f6b2a';
-        ctx.beginPath(); ctx.arc(px + 8, py + 7, 7, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#3f8a36';
-        ctx.beginPath(); ctx.arc(px + 6, py + 5, 2.5, 0, Math.PI * 2); ctx.fill();
+        // Draw the uploaded nature-pack tree sprite, with its trunk aligned to the tile.
+        if (natureTreeSheet.complete && natureTreeSheet.naturalWidth >= 48 && natureTreeSheet.naturalHeight >= 32) {
+          ctx.imageSmoothingEnabled = false;
+          const treeVariant = h % 2;
+          const sx = treeVariant * 16, sy = 0;
+          ctx.drawImage(natureTreeSheet, sx, sy, 16, 16, px - 4, py - 8, 24, 24);
+        } else {
+          ctx.fillStyle = '#6b4423';
+          ctx.fillRect(px + 6, py + 10, 4, 6);
+          ctx.fillStyle = '#2f6b2a';
+          ctx.beginPath(); ctx.arc(px + 8, py + 7, 7, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#3f8a36';
+          ctx.beginPath(); ctx.arc(px + 6, py + 5, 2.5, 0, Math.PI * 2); ctx.fill();
+        }
         break;
       }
       case 'R': {
