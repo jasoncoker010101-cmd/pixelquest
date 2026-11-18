@@ -112,7 +112,48 @@
     </div>
   </div>
 </div>
-<script src="world.js?v=wolves-flee-howled-11"></script>
+<script>
+(async function pixelquestUpdateLoader(){
+  const repoApi = 'https://api.github.com/repos/jasoncoker010101-cmd/pixelquest/branches/main';
+  const params = new URLSearchParams(location.search);
+  const currentRev = params.get('pqrev') || '';
+  async function getLatestRevision(){
+    try {
+      const response = await fetch(repoApi, { cache: 'no-store', headers: { Accept: 'application/vnd.github+json' } });
+      if (!response.ok) throw new Error('GitHub update check failed');
+      const data = await response.json();
+      return data && data.commit && data.commit.sha ? data.commit.sha : '';
+    } catch (_) { return ''; }
+  }
+  const latest = await getLatestRevision();
+  if (latest && latest !== currentRev) {
+    params.set('pqrev', latest);
+    location.replace(location.pathname + '?' + params.toString() + location.hash);
+    return;
+  }
+  window.PQ_REV = latest || currentRev || String(Date.now());
+  const gameScript = document.createElement('script');
+  gameScript.src = 'world.js?rev=' + encodeURIComponent(window.PQ_REV);
+  gameScript.onload = () => {
+    // Check periodically so an already-open game notices new commits too.
+    setInterval(async () => {
+      const newer = await getLatestRevision();
+      if (newer && newer !== window.PQ_REV) {
+        const next = new URL(location.href);
+        next.searchParams.set('pqrev', newer);
+        location.replace(next.toString());
+      }
+    }, 60000);
+  };
+  gameScript.onerror = () => {
+    // If GitHub's API is unavailable, still bypass the browser's cached script.
+    const fallback = document.createElement('script');
+    fallback.src = 'world.js?reload=' + Date.now();
+    document.body.appendChild(fallback);
+  };
+  document.body.appendChild(gameScript);
+})();
+</script>
 <script>
 const tvShell = document.getElementById('tvShell');
 const tvFullscreenButton = document.getElementById('tvFullscreen');
