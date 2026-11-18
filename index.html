@@ -507,7 +507,6 @@ document.querySelectorAll('[data-game-key]').forEach(button => {
 
 function update(dt) {
   clouds.forEach(c => { c.x -= dt * 4; if (c.x + c.w < 0) c.x = 320; });
-  birds.forEach(b => { b.x += dt * 8; if (b.x > 330) b.x = -10; });
   motes.forEach(m => {
     m.y -= dt * (4 + m.s * 4);
     m.x += Math.sin(t + m.ph) * 0.15;
