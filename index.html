@@ -386,7 +386,6 @@ function exitWorld(data) {
 
 function rnd(i) { return Math.abs(Math.sin(i * 12.9898 + 78.233) * 43758.5453) % 1; }
 
-const SKY = ['#1d1033', '#2e1648', '#4a1f5e', '#7a2a68', '#b8405f', '#e8645a', '#f7905a', '#ffb766'];
 const stars = [...Array(48)].map((_, i) => ({
   x: Math.floor(rnd(i + 12) * 320), y: Math.floor(rnd(i + 50) * 92), p: rnd(i + 99) * 6,
   size: i % 9 === 0 ? 2 : 1
@@ -512,138 +511,6 @@ function update(dt) {
     m.x += Math.sin(t + m.ph) * 0.15;
     if (m.y < 100) { m.y = 230; m.x = Math.random() * 320; }
   });
-}
-
-function drawSky() {
-  SKY.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(0, i * 20, 320, 20); });
-}
-
-function drawStars() {
-  const a = Math.min(1, t / 20);
-  stars.forEach(s => {
-    ctx.fillStyle = `rgba(255,240,220,${a * (0.5 + 0.5 * Math.sin(t * 2 + s.p))})`;
-    ctx.fillRect(s.x, s.y, 1, 1);
-  });
-}
-
-function drawClouds() {
-  clouds.forEach(c => {
-    ctx.fillStyle = '#d9739c';
-    ctx.fillRect(c.x, c.y, c.w, 4);
-    ctx.fillRect(c.x + 4, c.y - 3, c.w - 8, 3);
-    ctx.fillRect(c.x + c.w * 0.3, c.y - 6, c.w * 0.35, 3);
-    ctx.fillStyle = '#f6b08a';
-    ctx.fillRect(c.x + 2, c.y - 1, c.w - 4, 1);
-  });
-}
-
-function drawSun() {
-  const sx = 236, sy = 96 + Math.min(1, t / 25) * 56;
-  [[34, 'rgba(255,210,122,0.08)'], [26, 'rgba(255,210,122,0.14)'], [19, 'rgba(255,220,140,0.25)']]
-    .forEach(([r, c]) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill(); });
-  ctx.fillStyle = '#fff3b0';
-  ctx.beginPath(); ctx.arc(sx, sy, 12, 0, Math.PI * 2); ctx.fill();
-}
-
-function drawBirds() {
-  const f = Math.floor(t * 4) % 2;
-  ctx.fillStyle = '#2a0f2a';
-  birds.forEach(b => {
-    ctx.fillRect(b.x - 1, b.y, 3, 1);
-    ctx.fillRect(b.x - 2, b.y - f, 1, 1);
-    ctx.fillRect(b.x + 2, b.y - f, 1, 1);
-  });
-}
-
-function drawHill(base, amp, freq, phase, color) {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(0, 240);
-  for (let x = 0; x <= 320; x += 4) {
-    const y = base + Math.sin(x * freq + phase) * amp + Math.sin(x * freq * 2.3 + phase * 1.7) * amp * 0.4;
-    ctx.lineTo(x, y);
-  }
-  ctx.lineTo(320, 240);
-  ctx.closePath();
-  ctx.fill();
-}
-
-function drawGrass() {
-  ctx.fillStyle = '#3e5226'; ctx.fillRect(0, 166, 320, 74);
-  ctx.fillStyle = '#324620'; ctx.fillRect(0, 192, 320, 48);
-  for (let i = 0; i < 150; i++) {
-    const x = Math.floor(rnd(i) * 320);
-    const y = 170 + Math.floor(rnd(i + 500) * 70);
-    const h = 2 + Math.floor(rnd(i + 900) * 3);
-    const sway = Math.round(Math.sin(t * 1.5 + x * 0.05) * 0.8);
-    ctx.fillStyle = y > 190 ? '#23371a' : '#4c6330';
-    ctx.fillRect(x + sway, y - h, 1, h);
-  }
-}
-
-function drawHorse(x, y, phase, scale = 1) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(scale, scale);
-  const chew = Math.sin(t * 2.2 + phase);
-
-  // Shadow and relaxed tail
-  ctx.fillStyle = 'rgba(25,12,25,0.28)';
-  ctx.fillRect(1, 18, 31, 3);
-  ctx.fillStyle = '#3a1d28';
-  ctx.fillRect(-3, 7, 3, 2);
-  ctx.fillRect(-5, 9, 2, 3);
-  ctx.fillRect(-4, 12, 2, 2);
-
-  // Quiet, planted legs
-  ctx.fillStyle = '#39202a';
-  ctx.fillRect(5, 13, 3, 6);
-  ctx.fillRect(11, 13, 3, 6);
-  ctx.fillRect(21, 13, 3, 6);
-  ctx.fillRect(27, 13, 3, 6);
-  ctx.fillStyle = '#17121d';
-  ctx.fillRect(5, 18, 4, 2);
-  ctx.fillRect(11, 18, 4, 2);
-  ctx.fillRect(21, 18, 4, 2);
-  ctx.fillRect(27, 18, 4, 2);
-
-  // Body and rump
-  ctx.fillStyle = '#7b3e32';
-  ctx.fillRect(4, 5, 25, 10);
-  ctx.fillRect(2, 7, 5, 7);
-  ctx.fillStyle = '#a85a40';
-  ctx.fillRect(7, 6, 18, 2);
-  ctx.fillRect(9, 13, 14, 2);
-  ctx.fillStyle = '#5b2c2b';
-  ctx.fillRect(25, 8, 4, 5);
-
-  // Neck slopes down as the horse grazes
-  ctx.fillStyle = '#8d4937';
-  ctx.fillRect(23, 8, 6, 8);
-  ctx.fillRect(26, 13, 5, 5);
-  ctx.fillRect(29, 16 + Math.round(chew), 6, 3);
-  ctx.fillStyle = '#b96b4b';
-  ctx.fillRect(30, 17 + Math.round(chew), 4, 1);
-  ctx.fillStyle = '#2a1720';
-  ctx.fillRect(34, 17 + Math.round(chew), 1, 1);
-
-  // Mane and ears
-  ctx.fillStyle = '#2b1724';
-  ctx.fillRect(23, 7, 3, 8);
-  ctx.fillRect(25, 5, 2, 3);
-  ctx.fillRect(28, 11, 2, 3);
-
-  ctx.restore();
-}
-
-function drawHorses() {
-  // Two calm horses grazing in the meadow.
-  drawHorse(34, 193, 0, 0.88);
-  drawHorse(82, 197, 1.7, 0.72);
-}
-function drawMotes() {
-  ctx.fillStyle = 'rgba(255,220,160,0.55)';
-  motes.forEach(m => ctx.fillRect(Math.round(m.x), Math.round(m.y), 1, 1));
 }
 
 function drawLogo() {
@@ -817,8 +684,11 @@ function drawMoon() {
   ctx.fillStyle = glow;
   ctx.fillRect(x - 44, y - 44, 88, 88);
 
+  // Stepped pixel edges keep the moon consistent with the forest art.
   ctx.fillStyle = '#c3cee0';
-  ctx.beginPath(); ctx.arc(x, y, 13, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(x - 8, y - 13, 16, 26);
+  ctx.fillRect(x - 11, y - 8, 22, 16);
+  ctx.fillRect(x - 5, y - 15, 10, 30);
   ctx.fillStyle = '#e3e5df';
   ctx.fillRect(x - 5, y - 9, 7, 3);
   ctx.fillRect(x + 2, y - 2, 5, 4);
