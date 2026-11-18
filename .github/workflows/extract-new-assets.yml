@@ -1,0 +1,41 @@
+name: Extract new game assets
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "assets/free-werewolf-sprite-sheets-pixel-art.zip"
+      - "assets/Pixel_Interiors.zip"
+      - ".github/workflows/extract-new-assets.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract sprite packs
+        run: |
+          mkdir -p assets/werewolves assets/interiors
+          unzip -o "assets/free-werewolf-sprite-sheets-pixel-art.zip" -d assets/werewolves
+          unzip -o "assets/Pixel_Interiors.zip" -d assets/interiors
+          echo "Werewolf files:"
+          find assets/werewolves -type f -print
+          echo "Interior files:"
+          find assets/interiors -type f -print
+      - name: Commit extracted assets
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/werewolves assets/interiors
+          if git diff --cached --quiet; then
+            echo "No extracted files changed."
+          else
+            git commit -m "Extract werewolf animations and interior assets"
+            git push
+          fi
