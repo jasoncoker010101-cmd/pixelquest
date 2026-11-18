@@ -220,9 +220,11 @@ const Overworld = (() => {
         if (two) wolfTwo = two;
       }
 
-      // Keep the walk loop moving before the howl; use the run loop only after it.
-      drawIntroWolf(wolfOne.x, wolfOne.y, false, wolfOne.vx, running ? 'run' : 'walk', walking || running && (wolfOne.vx !== 0 || wolfOne.vy !== 0));
-      drawIntroWolf(wolfTwo.x, wolfTwo.y, true, wolfTwo.vx, running ? 'run' : 'walk', walking || running && (wolfTwo.vx !== 0 || wolfTwo.vy !== 0));
+      // Keep the walk loop moving before the howl; start running at frame zero,
+      // then hold the final run frame after reaching the clear destination.
+      const runMoving = running && introTime < fleeStart + 3.25;
+      drawIntroWolf(wolfOne.x, wolfOne.y, false, wolfOne.vx, running ? 'run' : 'walk', walking || runMoving, running ? introTime - fleeStart : routeTime - 15);
+      drawIntroWolf(wolfTwo.x, wolfTwo.y, true, wolfTwo.vx, running ? 'run' : 'walk', walking || runMoving, running ? introTime - fleeStart : routeTime - 15);
       if (introTime >= 21.4 && introTime < 24.8) {
         drawDistantHowlGlitch(37 * TILE, 8 * TILE, (introTime - 21.4) / 3.4);
       }
@@ -400,20 +402,22 @@ const Overworld = (() => {
       totalLength += Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y);
     }
     let remaining = totalLength * Math.max(0, Math.min(1, progress));
+    let lastHorizontalDirection = 1;
     for (let i = 1; i < path.length; i++) {
       const a = path[i - 1], b = path[i];
       const dx = b.x - a.x, dy = b.y - a.y;
       const length = Math.hypot(dx, dy);
+      if (dx !== 0) lastHorizontalDirection = dx;
       if (remaining <= length || i === path.length - 1) {
         const t = length > 0 ? Math.max(0, Math.min(1, remaining / length)) : 0;
-        return { x: a.x + dx * t, y: a.y + dy * t, vx: dx, vy: dy };
+        return { x: a.x + dx * t, y: a.y + dy * t, vx: dx || lastHorizontalDirection, vy: dy };
       }
       remaining -= length;
     }
-    return { x: path[path.length - 1].x, y: path[path.length - 1].y, vx: 0, vy: 0 };
+    return { x: path[path.length - 1].x, y: path[path.length - 1].y, vx: lastHorizontalDirection, vy: 0 };
   }
 
-  function drawIntroWolf(x, y, isRed, vx, animation, moving) {
+  function drawIntroWolf(x, y, isRed, vx, animation, moving, animationTime) {
     const px = Math.round(x), groundY = Math.round(y);
     const running = animation === 'run';
     const sheet = running
@@ -426,7 +430,7 @@ const Overworld = (() => {
     ctx.ellipse(px, groundY + 3, running ? 15 : 13, 3.5, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Never substitute the old standing PNG. If a sheet is not ready, wait for it.
+    // Never substitute either legacy standing PNG. If a sheet is not ready, wait for it.
     if (sheet.complete && sheet.naturalWidth && sheet.naturalHeight) {
       ctx.imageSmoothingEnabled = false;
       ctx.translate(px, groundY);
@@ -435,9 +439,9 @@ const Overworld = (() => {
       const frameCount = Math.max(1, Math.floor(sheet.naturalWidth / frameW));
       const fps = running ? 14 : 9;
       const phaseOffset = isRed ? 2 : 0;
-      // Hold a real walk-sheet frame at the howl; use every frame while moving.
+      // Start the run cycle on its first frame; freeze a walk frame during the howl.
       const frame = moving
-        ? Math.floor(introTime * fps + phaseOffset) % frameCount
+        ? Math.floor(animationTime * fps + phaseOffset) % frameCount
         : Math.min(frameCount - 1, Math.floor(frameCount * 0.45));
       ctx.drawImage(sheet, frame * frameW, 0, frameW, sheet.naturalHeight, -24, -32, 48, 48);
     }
