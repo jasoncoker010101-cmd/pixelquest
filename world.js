@@ -253,21 +253,40 @@ const Overworld = (() => {
   }
   function drawIntroWolf(x, y, flip, howling, walking, fleeing) {
     const px = Math.round(x);
-    const gait = walking ? Math.sin(introTime * 10 + (flip ? 1.8 : 0)) : 0;
-    const py = Math.round(y + gait * 2.2 + Math.sin(introTime * 3 + x) * 0.8);
+    const phase = introTime * (fleeing > 0 ? 18 : 7.5) + (flip ? Math.PI : 0);
+    const gait = walking || fleeing > 0 ? Math.sin(phase) : 0;
+    const py = Math.round(y + gait * (fleeing > 0 ? 2.8 : 1.2) + Math.sin(introTime * 3 + x) * 0.5);
     const sprite = flip ? introRedWerewolf : introBlackWerewolf;
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,.4)';
-    ctx.beginPath(); ctx.ellipse(px, py + 18, Math.max(8, 23 - fleeing * 7), 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(px, py + 18, Math.max(8, 23 - fleeing * 7) * (1 + Math.abs(gait) * .08), 4, 0, 0, Math.PI * 2); ctx.fill();
     if (sprite.complete && sprite.naturalWidth) {
       ctx.imageSmoothingEnabled = false;
       ctx.translate(px, py);
       if (flip) ctx.scale(-1, 1);
-      // Lean and bob during the flee reaction; idle sprite is reused with pixel-stepped movement.
-      ctx.rotate(fleeing * (flip ? -0.12 : 0.12));
-      const bob = walking || fleeing > 0 ? Math.round(Math.sin(introTime * (fleeing > 0 ? 17 : 10) + (flip ? 2 : 0)) * (fleeing > 0 ? 3 : 1.5)) : 0;
       const sourceHeight = sprite === introRedWerewolf ? Math.min(42, sprite.naturalHeight) : sprite.naturalHeight;
-      ctx.drawImage(sprite, 0, 0, sprite.naturalWidth, sourceHeight, -32, -32 + bob, 64, 64);
+      const running = fleeing > 0;
+      const moving = walking || running;
+      // Alternating stride: split the lower sprite into a small independently animated leg section.
+      const split = Math.floor(sourceHeight * .62);
+      const bodyBob = moving ? Math.round(Math.sin(phase * 2) * (running ? 2 : 1)) : 0;
+      const lean = fleeing * (flip ? -.20 : .20) + (moving ? Math.sin(phase) * (running ? .035 : .015) : 0);
+      ctx.rotate(lean);
+      ctx.drawImage(sprite, 0, 0, sprite.naturalWidth, split, -32, -32 + bodyBob, 64, 64 * split / sourceHeight);
+      const legSrcH = sourceHeight - split;
+      const legDestH = 64 * legSrcH / sourceHeight;
+      const stride = moving ? Math.round(Math.sin(phase) * (running ? 5 : 2)) : 0;
+      ctx.save();
+      ctx.translate(0, -32 + bodyBob + 64 * split / sourceHeight);
+      ctx.rotate(moving ? Math.sin(phase) * (running ? .16 : .07) : 0);
+      ctx.drawImage(sprite, 0, split, sprite.naturalWidth, legSrcH, -32 + stride, 0, 64, legDestH);
+      ctx.restore();
+      // Tiny pixel dust kicks appear only once they start fleeing.
+      if (fleeing > .12 && Math.sin(phase) > .25) {
+        ctx.fillStyle = 'rgba(190,190,190,.45)';
+        ctx.fillRect(-31 - Math.round(fleeing * 4), 22, 2, 2);
+        ctx.fillRect(-26 - Math.round(fleeing * 7), 26, 1, 1);
+      }
       ctx.restore();
     } else { ctx.restore(); return; }
   }
