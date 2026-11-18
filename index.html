@@ -743,7 +743,8 @@ function pollGamepad(now) {
 }
 
 function frame(now) {
-  pollGamepad(now);\n  const dt = Math.min(0.05, (now - last) / 1000);
+  pollGamepad(now);
+  const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   t += dt;
   if (inWorld) {
