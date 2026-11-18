@@ -60,8 +60,8 @@ const Overworld = (() => {
     introActive = false;
     introTime = INTRO_DURATION;
     insideHouse = true;
-    interiorPlayer.x = 94;
-    interiorPlayer.y = 91;
+    interiorPlayer.x = 240;
+    interiorPlayer.y = 180;
     interiorPlayer.facing = 'up';
     interiorPlayer.moving = false;
     interiorPlayer.walk = 0;
@@ -654,21 +654,20 @@ const Overworld = (() => {
   const HOUSE = { x: 8 * TILE, y: 8 * TILE, w: 7 * TILE, h: 5 * TILE };
   const HOUSE_DOOR = { x: HOUSE.x + HOUSE.w / 2, y: HOUSE.y + 67 };
   let insideHouse = false;
-  const interiorPlayer = { x: 160, y: 174, facing: 'up', moving: false, walk: 0 };
+  const interiorPlayer = { x: 240, y: 180, facing: 'up', moving: false, walk: 0 };
   const INTERIOR_WALLS = [
-    // Outer room shell and the single front entrance.
+    // Outer shell. The front door opens into the bottom of the long hallway.
     [12, 12, 296, 14], [12, 24, 14, 194], [294, 24, 14, 194],
-    [12, 218, 133, 12], [175, 218, 133, 12],
-    // Upper bedroom entrances from the central hallway.
-    [130, 25, 10, 25], [130, 78, 10, 34],
-    [180, 25, 10, 25], [180, 78, 10, 34],
-    // Lower rooms: wide open kitchen entrance, single living-room entrance.
-    [130, 128, 10, 20], [130, 196, 10, 22],
-    [180, 128, 10, 28], [180, 186, 10, 32],
-    // Full cross-walls stop rooms connecting directly to one another.
-    [25, 112, 115, 10], [180, 112, 115, 10],
-    // Bathroom has one doorway, opening from the living room.
-    [190, 175, 30, 10], [240, 175, 55, 10]
+    [12, 218, 132, 12], [176, 218, 132, 12],
+    // Left side: kitchen above Dad's bedroom, both entered from the hallway.
+    [126, 25, 10, 27], [126, 82, 10, 33],
+    [126, 125, 10, 35], [126, 193, 10, 25],
+    [26, 115, 100, 10],
+    // Right side: living room, bathroom, then the player's bedroom.
+    [184, 25, 10, 27], [184, 82, 10, 15],
+    [184, 97, 10, 18], [184, 143, 10, 10],
+    [184, 153, 10, 15], [184, 196, 10, 22],
+    [194, 104, 100, 10], [194, 151, 100, 10]
   ];
   const interiorArtSheet = new Image();
   let interiorArtReady = false;
@@ -702,7 +701,7 @@ const Overworld = (() => {
 
   const MAILBOX = { x: 15.4 * TILE, y: 12.4 * TILE };
   // A handwritten message left in Dad's bedroom, on top of the dresser.
-  const DAD_NOTE = { x: 104, y: 52 };
+  const DAD_NOTE = { x: 102, y: 146 };
 
   function rng(seed) {
     let s = seed >>> 0;
@@ -820,13 +819,16 @@ const Overworld = (() => {
     // Collision footprints follow the furniture's outer shadow / base, not
     // arbitrary oversized boxes. The plant is separate from the coffee table.
     const furniture = [
-      // Two single beds, dressers and bedside furniture.
-      [41,42,74,81], [88,35,118,69], [91,74,118,97],
-      [204,42,237,81], [248,34,280,68], [244,76,274,99],
-      // Kitchen furniture and dining set.
-      [32,141,56,172], [55,139,123,171], [64,181,113,210],
-      // Living-room seating and shelf. Keep the bathroom doorway clear.
-      [198,139,241,172], [264,137,294,171], [242,184,269,210], [271,184,295,210]
+      // Kitchen fixtures and dining set (upper-left).
+      [33,39,57,71], [64,66,112,104], [35,78,54,100], [95,79,115,100],
+      // Living-room seating, coffee table and shelf (upper-right).
+      [198,39,241,72], [230,70,258,94], [266,34,293,67], [270,72,292,91],
+      // Separate bathroom fixtures opening onto the hallway.
+      [210,111,237,136], [254,111,282,136],
+      // Dad's bedroom (lower-left).
+      [41,152,74,190], [88,132,118,168], [91,180,118,202],
+      // Player's bedroom (lower-right).
+      [204,161,237,199], [248,155,280,182], [244,194,274,215]
     ];
 
     return walls.concat(furniture).some(([x1, y1, x2, y2]) =>
@@ -1489,11 +1491,12 @@ const Overworld = (() => {
   }
 
   function drawHouseInterior() {
-    // Four roomy spaces connected by one clear, full-length central hallway.
+    // Top-down family home. The central hallway is deliberately long and open:
+    // front door at the bottom, kitchen/living room above, bedrooms at the bottom.
     ctx.fillStyle = '#160d20';
     ctx.fillRect(0, 0, 320, 240);
 
-    // Continuous timber floor.
+    // Warm timber floor throughout the house.
     ctx.fillStyle = '#704333'; ctx.fillRect(18, 18, 284, 208);
     ctx.fillStyle = '#c58a57'; ctx.fillRect(25, 25, 270, 193);
     for (let y = 27; y < 218; y += 10) {
@@ -1507,29 +1510,36 @@ const Overworld = (() => {
       }
     }
 
-    // Room rugs and flooring accents make each room distinct without shrinking it.
-    ctx.fillStyle = '#a96d56'; ctx.fillRect(31, 31, 94, 72);
-    ctx.fillStyle = '#c58a57'; ctx.fillRect(35, 35, 86, 64);
-    ctx.fillStyle = '#49617b'; ctx.fillRect(194, 31, 94, 72);
-    ctx.fillStyle = '#b7a28a'; ctx.fillRect(198, 35, 86, 64);
-    ctx.fillStyle = '#9b6749'; ctx.fillRect(31, 132, 94, 78);
-    ctx.fillStyle = '#bd8056'; ctx.fillRect(35, 136, 86, 70);
-    ctx.fillStyle = '#80988d'; ctx.fillRect(194, 132, 94, 78);
-    ctx.fillStyle = '#a9b7a5'; ctx.fillRect(198, 136, 86, 70);
+    // Separate floor areas keep each room readable without reducing its space.
+    // Kitchen, upper-left.
+    ctx.fillStyle = '#a96d56'; ctx.fillRect(30, 29, 92, 80);
+    ctx.fillStyle = '#c58a57'; ctx.fillRect(34, 33, 84, 72);
+    // Living room, upper-right.
+    ctx.fillStyle = '#49617b'; ctx.fillRect(198, 29, 91, 68);
+    ctx.fillStyle = '#b7a28a'; ctx.fillRect(202, 33, 83, 60);
+    // Dad's bedroom, lower-left.
+    ctx.fillStyle = '#9b6749'; ctx.fillRect(30, 130, 92, 82);
+    ctx.fillStyle = '#bd8056'; ctx.fillRect(34, 134, 84, 74);
+    // Player's bedroom, lower-right.
+    ctx.fillStyle = '#60758a'; ctx.fillRect(198, 157, 91, 55);
+    ctx.fillStyle = '#b7b09a'; ctx.fillRect(202, 161, 83, 47);
+    // Bathroom, a separate room directly off the hallway.
+    ctx.fillStyle = '#557b80'; ctx.fillRect(198, 108, 91, 39);
+    ctx.fillStyle = '#b6c6b9'; ctx.fillRect(202, 112, 83, 31);
 
-    // Open central hallway with the same overhead timber flooring as the rooms.
-    ctx.fillStyle = '#c58a57'; ctx.fillRect(141, 27, 38, 190);
-    for (let y = 30; y < 216; y += 10) {
-      ctx.fillStyle = '#e7b777'; ctx.fillRect(142, y, 36, 2);
-      ctx.fillStyle = '#a96845'; ctx.fillRect(142, y + 7, 36, 2);
-      const seam = (Math.floor(y / 10) % 2) * 9;
-      ctx.fillStyle = 'rgba(76,39,31,.28)';
-      ctx.fillRect(150 + seam, y + 2, 1, 5);
-      ctx.fillRect(168 - seam, y + 2, 1, 5);
+    // Long central hallway, from the front entrance nearly to the far wall.
+    ctx.fillStyle = '#c58a57'; ctx.fillRect(136, 27, 48, 188);
+    ctx.fillStyle = '#8b553e'; ctx.fillRect(137, 28, 2, 186); ctx.fillRect(181, 28, 2, 186);
+    // A long runner emphasizes the distance and keeps the walking route clear.
+    ctx.fillStyle = '#6d4140'; ctx.fillRect(143, 34, 34, 174);
+    ctx.fillStyle = '#9b6550'; ctx.fillRect(146, 37, 28, 168);
+    ctx.fillStyle = '#c18a61'; ctx.fillRect(148, 39, 24, 164);
+    for (let y = 45; y < 201; y += 24) {
+      ctx.fillStyle = 'rgba(92,48,43,.42)'; ctx.fillRect(150, y, 20, 1);
+      ctx.fillStyle = 'rgba(241,194,133,.38)'; ctx.fillRect(150, y + 2, 20, 1);
     }
-    ctx.fillStyle = '#8b553e'; ctx.fillRect(143, 28, 2, 186); ctx.fillRect(175, 28, 2, 186);
 
-    // Consistent raised timber wall pieces with dark lower trim.
+    // Consistent raised timber wall pieces, with dark lower trim.
     const wallH = (x, y, w, h = 10) => {
       ctx.fillStyle = '#3a222b'; ctx.fillRect(x, y + 2, w, h);
       ctx.fillStyle = '#704333'; ctx.fillRect(x, y, w, h - 2);
@@ -1545,61 +1555,50 @@ const Overworld = (() => {
       ctx.fillStyle = 'rgba(35,18,25,.35)'; ctx.fillRect(x + w - 1, y, 2, h);
     };
 
-    // Draw exactly the same wall rectangles used by collision detection.
-    // This keeps the hallway entrances consistent and prevents stray gaps.
+    // Draw the same wall rectangles used by collision, so doors stay open and aligned.
     for (const [wx, wy, ww, wh] of INTERIOR_WALLS) {
       if (ww >= wh) wallH(wx, wy, ww, wh);
       else wallV(wx, wy, wh, ww);
     }
 
-    // Furniture is drawn from the pixel-art packs already included in the project.
-    // Dad's bedroom (upper-left): bed, dresser, bedside table and wall window.
-    drawInteriorArt(16, 48, 47, 49, 42, 43, 31, 37);
-    drawInteriorArt(336, 38, 50, 57, 88, 35, 30, 34);
-    drawInteriorArt(224, 282, 47, 40, 91, 74, 27, 23);
-    ctx.fillStyle = '#4b2b35'; ctx.fillRect(82, 25, 37, 19);
-    ctx.fillStyle = '#77aeb5'; ctx.fillRect(86, 29, 29, 12);
+    // Kitchen: counter, dining table and small kitchen pieces.
+    drawInteriorArt(16, 387, 39, 48, 34, 38, 22, 29);
+    drawInteriorArt(16, 253, 88, 62, 64, 65, 48, 38);
+    drawInteriorArt(240, 405, 31, 34, 95, 40, 20, 23);
+    drawInteriorArt(51, 395, 32, 34, 36, 77, 18, 18);
 
-    // Player's bedroom (upper-right): a separate bed, bookcase and bedside table.
-    drawInteriorArt(111, 48, 48, 49, 207, 43, 31, 37);
-    drawInteriorArt(398, 61, 49, 36, 250, 34, 29, 27);
-    drawInteriorArt(224, 282, 47, 40, 246, 76, 27, 23);
+    // Living room: sofa, coffee table, bookcase and decor.
+    drawInteriorArt(140, 263, 66, 50, 198, 39, 43, 33);
+    drawInteriorArt(224, 282, 47, 40, 230, 70, 28, 24);
+    drawInteriorArt(336, 38, 50, 57, 266, 34, 24, 31);
+    drawInteriorArt(337, 432, 48, 42, 270, 72, 17, 17);
 
-    // Kitchen (lower-left): use the matching pixel-art table, chairs and kitchen props.
-    drawInteriorArt(16, 253, 88, 62, 65, 164, 48, 38);
-    drawInteriorArt(16, 387, 39, 48, 34, 142, 22, 29);
-    drawInteriorArt(240, 405, 31, 34, 95, 143, 20, 23);
-    drawInteriorArt(51, 395, 32, 34, 37, 179, 18, 18);
+    // Bathroom: two clear fixtures in a separate room off the hallway.
+    drawInteriorSprite(21, 7, 2, 2, 210, 112, 24, 24);
+    drawInteriorSprite(23, 7, 2, 2, 254, 112, 24, 24);
 
-    // Living room (lower-right): sofa seating, coffee table, shelves and decor.
-    drawInteriorArt(140, 263, 66, 50, 198, 139, 43, 33);
-    drawInteriorArt(224, 282, 47, 40, 225, 147, 28, 24);
-    drawInteriorArt(336, 38, 50, 57, 267, 137, 24, 31);
-    drawInteriorArt(337, 432, 48, 42, 274, 153, 17, 17);
+    // Dad's bedroom, bottom-left. The note is on the dresser.
+    drawInteriorArt(16, 48, 47, 49, 42, 152, 31, 37);
+    drawInteriorArt(336, 38, 50, 57, 88, 132, 30, 34);
+    drawInteriorArt(224, 282, 47, 40, 91, 180, 27, 23);
 
-    // Bathroom (small separate room at the far end of the lower-right side).
-    // Fixtures use the bathroom pieces from the Kenney interior tile atlas.
-    drawInteriorSprite(21, 7, 2, 2, 245, 188, 24, 24);
-    drawInteriorSprite(23, 7, 2, 2, 271, 188, 24, 24);
+    // Player's bedroom, bottom-right.
+    drawInteriorArt(111, 48, 48, 49, 207, 161, 31, 37);
+    drawInteriorArt(398, 61, 49, 36, 250, 155, 29, 27);
+    drawInteriorArt(224, 282, 47, 40, 246, 194, 27, 23);
 
-    // Front entrance door at the end of the central hallway.
-    ctx.fillStyle = '#503139'; ctx.fillRect(145, 207, 30, 17);
-    ctx.fillStyle = '#a96e48'; ctx.fillRect(148, 207, 24, 14);
-    ctx.fillStyle = '#d7a66b'; ctx.fillRect(150, 209, 20, 10);
-    ctx.fillStyle = '#f0ca87'; ctx.fillRect(166, 214, 2, 2);
-
-    // A small folded paper note sits on the dresser in Dad's bedroom.
+    // A folded paper note on Dad's dresser.
     ctx.save();
-    ctx.fillStyle = 'rgba(35,18,24,.35)'; ctx.fillRect(96, 48, 17, 13);
-    ctx.fillStyle = '#77513c'; ctx.fillRect(95, 45, 17, 13);
-    ctx.fillStyle = '#eadbb3'; ctx.fillRect(96, 45, 15, 11);
-    ctx.fillStyle = '#fff0cc'; ctx.fillRect(97, 46, 12, 1);
-    ctx.fillStyle = '#b59a70'; ctx.fillRect(98, 49, 9, 1); ctx.fillRect(98, 52, 7, 1);
-    ctx.fillStyle = '#d1bd91'; ctx.fillRect(107, 45, 4, 4);
-    ctx.fillStyle = '#f7ebca'; ctx.fillRect(107, 46, 2, 2);
+    ctx.fillStyle = 'rgba(35,18,24,.35)'; ctx.fillRect(96, 145, 17, 13);
+    ctx.fillStyle = '#77513c'; ctx.fillRect(95, 142, 17, 13);
+    ctx.fillStyle = '#eadbb3'; ctx.fillRect(96, 142, 15, 11);
+    ctx.fillStyle = '#fff0cc'; ctx.fillRect(97, 143, 12, 1);
+    ctx.fillStyle = '#b59a70'; ctx.fillRect(98, 146, 9, 1); ctx.fillRect(98, 149, 7, 1);
+    ctx.fillStyle = '#d1bd91'; ctx.fillRect(107, 142, 4, 4);
+    ctx.fillStyle = '#f7ebca'; ctx.fillRect(107, 143, 2, 2);
     ctx.restore();
 
-    // Player remains centered in the hall at spawn and can walk straight to the door.
+    // Draw the player in the same top-down view used by the rest of the house.
     const oldFacing = player.facing, oldMoving = player.moving, oldWalk = player.walk;
     player.facing = interiorPlayer.facing;
     player.moving = interiorPlayer.moving;
@@ -1608,10 +1607,10 @@ const Overworld = (() => {
     player.facing = oldFacing; player.moving = oldMoving; player.walk = oldWalk;
 
     if (!panel && Math.hypot(interiorPlayer.x - DAD_NOTE.x, interiorPlayer.y - DAD_NOTE.y) < 35) {
-      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(111, 188, 98, 14);
-      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(111.5, 188.5, 97, 13);
+      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(45, 125, 108, 14);
+      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(45.5, 125.5, 107, 13);
       ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('[ E ] READ NOTE', 160, 198);
+      ctx.fillText('[ E ] READ NOTE', 99, 135);
     }
     if (!panel && Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 25) {
       ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(121, 188, 78, 14);
@@ -2463,8 +2462,8 @@ const Overworld = (() => {
     // must begin in the kid's bedroom. Later saves preserve the real location.
     if (saveData.houseSpawnMigrated !== true) {
       insideHouse = true;
-      interiorPlayer.x = 160;
-      interiorPlayer.y = 194;
+      interiorPlayer.x = 240;
+      interiorPlayer.y = 180;
       interiorPlayer.facing = 'down';
       return;
     }
@@ -2608,7 +2607,7 @@ const Overworld = (() => {
         if (AudioCtor) { if (!introAudio) introAudio = new AudioCtor(); if (introAudio.state === 'suspended') introAudio.resume(); }
       } catch (_) {}
     }
-    if (introActive) { insideHouse = true; interiorPlayer.x = 94; interiorPlayer.y = 91; interiorPlayer.facing = 'up'; }
+    if (introActive) { insideHouse = true; interiorPlayer.x = 240; interiorPlayer.y = 180; interiorPlayer.facing = 'up'; }
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('keyup', onKeyUp);
     const maxCamX = Math.max(0, MAP_W * TILE - canvas.width);
