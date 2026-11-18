@@ -324,9 +324,9 @@ const Overworld = (() => {
   battleWolfSprite.src = 'https://opengameart.org/sites/default/files/enemies_081719_zp.png';
   // User-provided free werewolf sprites: idle poses converted to compact 48px images.
   const introBlackWerewolf = new Image();
-  introBlackWerewolf.src = './assets/intro-black-werewolf.png';
+  introBlackWerewolf.src = pqAsset('./assets/intro-black-werewolf.png');
   const introRedWerewolf = new Image();
-  introRedWerewolf.src = './assets/intro-red-werewolf.png';
+  introRedWerewolf.src = pqAsset('./assets/intro-red-werewolf.png');
 
   let camX = 0, camY = 0;
   let panel = null;
