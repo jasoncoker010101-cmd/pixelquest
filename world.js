@@ -148,28 +148,42 @@ const Overworld = (() => {
   }
 
   function interiorBlocked(px, py) {
-    const left = px + 3, right = px + 12, top = py + 9, bottom = py + 15;
-    // Solid outer shell, central hallway partitions, and furniture footprints.
+    // Interior player coordinates are the character CENTER. drawPlayer is
+    // rendered at center - 8, so convert its lower-body hitbox back to world
+    // coordinates here. This keeps collision aligned with the visible sprite.
+    const left = px - 5, right = px + 4;
+    const top = py + 1, bottom = py + 7;
+
+    // These rectangles match the visible wall segments drawn below. Door gaps
+    // are intentionally omitted so each room remains connected to the hall.
     const walls = [
       [12,12,308,25], [12,25,25,218], [295,25,308,218],
       [12,218,145,230], [175,218,308,230],
-      // Central hallway runs vertically from the front door to the back wall.
       [130,25,140,49], [130,78,140,112],
       [180,25,190,49], [180,78,190,112],
-      [130,128,140,151], [130,180,140,218],
-      [180,128,190,151], [180,180,190,218],
-      // Cross walls separate the four rooms, with generous door openings.
+      [130,128,140,156], [130,186,140,218],
+      [180,128,190,156], [180,186,190,218],
       [25,112,68,122], [100,112,114,122],
       [206,112,220,122], [252,112,295,122]
     ];
+
+    // Collision footprints follow the furniture's outer shadow / base, not
+    // arbitrary oversized boxes. The plant is separate from the coffee table.
     const furniture = [
-      [36,39,80,88], [92,35,126,67], [94,70,122,88],
-      [191,40,240,80], [253,28,274,69], [276,28,297,69], [238,70,273,91],
-      [32,141,56,181], [55,139,123,171], [64,181,113,210],
-      [66,176,79,186], [104,176,117,186], [66,204,79,214], [104,204,117,214],
+      // Bedroom: bed, dresser and bedside chest.
+      [36,42,83,91], [92,35,126,67], [94,70,122,88],
+      // Living room: couch, bookcases, coffee table and plant.
+      [193,42,240,79], [252,27,276,69], [275,27,299,69],
+      [238,70,273,91], [260,62,281,88],
+      // Kitchen: refrigerator, counter, dining table and four chairs.
+      [32,141,56,172], [55,139,123,171], [64,181,113,210],
+      [66,176,79,186], [104,176,117,186],
+      [66,204,79,214], [104,204,117,214],
+      // Bathroom: bathtub, basin and toilet.
       [196,142,282,179], [209,181,239,209], [250,180,285,213]
     ];
-    return walls.concat(furniture).some(([x1,y1,x2,y2]) =>
+
+    return walls.concat(furniture).some(([x1, y1, x2, y2]) =>
       left < x2 && right > x1 && top < y2 && bottom > y1
     );
   }
@@ -714,18 +728,21 @@ const Overworld = (() => {
     ctx.fillStyle = '#e0b577'; ctx.fillRect(243, 75, 23, 9);
     ctx.fillStyle = '#f2d59b'; ctx.fillRect(251, 78, 7, 3);
     const bookshelf = (x, y) => {
+      // From above: one low wooden case with book covers visible on its top,
+      // rather than three horizontal shelf rows facing the camera.
       ctx.fillStyle = '#39242d'; ctx.fillRect(x - 2, y + 2, 20, 35);
-      ctx.fillStyle = '#8a5a3b'; ctx.fillRect(x, y, 16, 32);
-      ctx.fillStyle = '#d09a60'; ctx.fillRect(x + 1, y + 1, 14, 2);
-      const colors = ['#bd6253','#5d7f9e','#d3a34f','#66875d','#a77aab'];
-      for (let row = 0; row < 3; row++) {
-        ctx.fillStyle = '#4b302b'; ctx.fillRect(x + 2, y + 4 + row * 9, 12, 7);
-        for (let k = 0; k < 4; k++) {
-          ctx.fillStyle = colors[(k + row * 2) % colors.length];
-          ctx.fillRect(x + 3 + k * 3, y + 5 + row * 9, 2, 5);
-        }
-        ctx.fillStyle = '#d5a36a'; ctx.fillRect(x + 1, y + 11 + row * 9, 14, 1);
+      ctx.fillStyle = '#70452f'; ctx.fillRect(x, y, 16, 32);
+      ctx.fillStyle = '#bd8956'; ctx.fillRect(x + 1, y + 1, 14, 30);
+      ctx.fillStyle = '#4b302b'; ctx.fillRect(x + 2, y + 3, 12, 25);
+      const colors = ['#bd6253','#5d7f9e','#d3a34f','#66875d','#a77aab','#d49a55'];
+      for (let k = 0; k < colors.length; k++) {
+        const bx = x + 3 + k * 1.7;
+        ctx.fillStyle = colors[k];
+        ctx.fillRect(bx, y + 5, 1.5, 20);
+        ctx.fillStyle = 'rgba(255,235,195,.32)';
+        ctx.fillRect(bx, y + 6, 1, 3);
       }
+      ctx.fillStyle = '#d5a36a'; ctx.fillRect(x + 1, y + 29, 14, 2);
     };
     bookshelf(255, 30); bookshelf(278, 30);
     ctx.fillStyle = '#56383a'; ctx.fillRect(264, 76, 13, 10);
@@ -734,13 +751,16 @@ const Overworld = (() => {
     ctx.fillStyle = '#83ae5e'; ctx.fillRect(263, 67, 7, 4); ctx.fillRect(271, 63, 7, 5);
 
     // Kitchen: refrigerator, counter, sink, stove and a compact dining set.
-    ctx.fillStyle = '#493039'; ctx.fillRect(33, 143, 22, 36);
-    ctx.fillStyle = '#879b94'; ctx.fillRect(35, 145, 18, 32);
-    ctx.fillStyle = '#cbd5c9'; ctx.fillRect(37, 147, 14, 27);
-    ctx.fillStyle = '#e4e7d8'; ctx.fillRect(39, 149, 10, 23);
-    ctx.fillStyle = '#78978c'; ctx.fillRect(43, 150, 3, 2);
-    ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.fillRect(38, 149, 2, 20);
-    ctx.fillStyle = '#5b4038'; ctx.fillRect(35, 176, 18, 3);
+    // Overhead refrigerator cabinet: compact footprint, visible top panel,
+    // a narrow freezer seam and a small handle along the near edge.
+    ctx.fillStyle = '#493039'; ctx.fillRect(32, 141, 24, 31);
+    ctx.fillStyle = '#879b94'; ctx.fillRect(34, 143, 20, 27);
+    ctx.fillStyle = '#cbd5c9'; ctx.fillRect(36, 145, 16, 23);
+    ctx.fillStyle = '#e4e7d8'; ctx.fillRect(38, 147, 12, 18);
+    ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(39, 148, 2, 15);
+    ctx.fillStyle = '#8a9d91'; ctx.fillRect(36, 151, 16, 2);
+    ctx.fillStyle = '#5c716a'; ctx.fillRect(47, 153, 2, 5);
+    ctx.fillStyle = '#5b4038'; ctx.fillRect(34, 168, 20, 2);
     ctx.fillStyle = '#503139'; ctx.fillRect(57, 142, 64, 27);
     ctx.fillStyle = '#a36a49'; ctx.fillRect(59, 144, 60, 23);
     ctx.fillStyle = '#e0ad70'; ctx.fillRect(60, 144, 58, 3);
