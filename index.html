@@ -52,6 +52,41 @@
   .mobile-actions button { width: 34px; height: 30px; font-size: 9px; }
   .mobile-pad button:active, .mobile-actions button:active { background: #9a6847; }
   .tv-shell.playing .mobile-controls { display: flex; }
+
+  .tv-fullscreen-btn {
+    position: absolute; z-index: 6; right: 5%; bottom: 1.2%;
+    border: 1px solid #c5a978; border-radius: 5px;
+    padding: 5px 9px; color: #f8e8c4; background: #17121ddd;
+    font: bold 10px monospace; letter-spacing: .5px;
+    box-shadow: 0 2px 6px #000a; cursor: pointer;
+    touch-action: manipulation;
+  }
+  .tv-fullscreen-btn:active { background: #60432f; }
+  .tv-shell:fullscreen {
+    width: 100vw; height: 100dvh; max-width: none; max-height: none;
+    aspect-ratio: auto; padding: 0; border-radius: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #09080b; box-shadow: none; overflow: hidden;
+  }
+  .tv-shell:fullscreen canvas {
+    width: min(100vw, calc(100dvh * 4 / 3));
+    height: min(100dvh, calc(100vw * 3 / 4));
+    flex: 0 0 auto;
+  }
+  .tv-shell:fullscreen::before {
+    inset: max(1%, 5px); border-radius: 3% / 4%;
+  }
+  .tv-shell:fullscreen::after {
+    inset: max(1.5%, 8px); border-radius: 3% / 4%;
+  }
+  .tv-shell:fullscreen .tv-fullscreen-btn {
+    right: max(3%, 14px); bottom: max(2%, 12px);
+    opacity: .72;
+  }
+  @media (max-width: 600px) {
+    .tv-fullscreen-btn { right: 4%; bottom: 1%; padding: 4px 7px; font-size: 9px; }
+  }
+
   @media (pointer: coarse) {
     .tv-shell { -webkit-tap-highlight-color: transparent; }
   }
@@ -60,6 +95,7 @@
 <body>
 <div class="tv-shell" id="tvShell">
   <canvas id="game" width="320" height="240"></canvas>
+  <button type="button" class="tv-fullscreen-btn" id="tvFullscreen" aria-label="Enter TV fullscreen">⛶ TV FULLSCREEN</button>
   <div class="mobile-controls" aria-label="Touch game controls">
     <div class="mobile-pad">
       <span></span><button type="button" data-game-key="ArrowUp">▲</button><span></span>
@@ -78,6 +114,27 @@
 </div>
 <script src="world.js?v=dualsense-controls-1"></script>
 <script>
+const tvShell = document.getElementById('tvShell');
+const tvFullscreenButton = document.getElementById('tvFullscreen');
+async function toggleTVFullscreen() {
+  try {
+    if (document.fullscreenElement === tvShell) {
+      await document.exitFullscreen();
+    } else if (tvShell.requestFullscreen) {
+      await tvShell.requestFullscreen();
+    } else {
+      message = 'Fullscreen is not supported by this browser.';
+    }
+  } catch (error) {
+    message = 'Could not enter fullscreen. Try rotating your device or browser settings.';
+  }
+}
+tvFullscreenButton.addEventListener('click', toggleTVFullscreen);
+document.addEventListener('fullscreenchange', () => {
+  const active = document.fullscreenElement === tvShell;
+  tvFullscreenButton.textContent = active ? '⛶ EXIT TV' : '⛶ TV FULLSCREEN';
+  tvFullscreenButton.setAttribute('aria-label', active ? 'Exit TV fullscreen' : 'Enter TV fullscreen');
+});
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
