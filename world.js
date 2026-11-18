@@ -1876,12 +1876,14 @@ const Overworld = (() => {
     drawInteriorSprite(21, 7, 2, 2, 839, 164, 28, 28);
     drawInteriorSprite(23, 7, 2, 2, 878, 164, 28, 28);
 
-    // The handwritten note remains on the dresser in Dad's room.
+    // A clearly visible folded note on Dad's dresser, with a bright paper edge.
+    ctx.fillStyle = 'rgba(245,211,139,.22)'; ctx.fillRect(130, 132, 27, 18);
     ctx.fillStyle = '#4b302b'; ctx.fillRect(133, 145, 22, 3);
-    ctx.fillStyle = '#eadbb3'; ctx.fillRect(135, 136, 18, 10);
-    ctx.fillStyle = '#fff0ce'; ctx.fillRect(136, 137, 15, 1);
-    ctx.fillStyle = '#b59a70'; ctx.fillRect(137, 140, 11, 1); ctx.fillRect(137, 143, 8, 1);
-    ctx.fillStyle = '#f2e5c5'; ctx.fillRect(150, 137, 3, 3);
+    ctx.fillStyle = '#eadbb3'; ctx.fillRect(134, 135, 20, 12);
+    ctx.fillStyle = '#fff5d8'; ctx.fillRect(135, 136, 17, 1);
+    ctx.fillStyle = '#b59a70'; ctx.fillRect(136, 139, 13, 1); ctx.fillRect(136, 142, 10, 1);
+    ctx.fillStyle = '#f2e5c5'; ctx.fillRect(151, 136, 3, 3);
+    ctx.strokeStyle = '#fff0c5'; ctx.strokeRect(133.5, 134.5, 20, 12);
 
     // The front door is the right-hand exit to the forest.
     ctx.fillStyle = '#3e2930'; ctx.fillRect(916, 112, 31, 84);
@@ -1901,11 +1903,11 @@ const Overworld = (() => {
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
     ctx.fillText('A / D MOVE    SPACE OR ↑ JUMP    E INTERACT', 5, 236);
 
-    if (Math.abs(sidePlayer.x - 144) < 48) {
-      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(95 - sideCameraX, 180, 98, 13);
-      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(95.5 - sideCameraX, 180.5, 97, 12);
+    if (Math.abs(sidePlayer.x - 144) < 58 && Math.abs(sidePlayer.y - 164) < 52) {
+      ctx.fillStyle = 'rgba(15,12,24,.97)'; ctx.fillRect(82 - sideCameraX, 176, 124, 16);
+      ctx.strokeStyle = '#f4d27b'; ctx.lineWidth = 1; ctx.strokeRect(82.5 - sideCameraX, 176.5, 123, 15);
       ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('[ E ] READ NOTE', 144 - sideCameraX, 189);
+      ctx.fillText('[ E / X ] READ DAD\'S NOTE', 144 - sideCameraX, 187);
     } else if (Math.abs(sidePlayer.x - 930) < 55) {
       ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(875 - sideCameraX, 180, 110, 13);
       ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(875.5 - sideCameraX, 180.5, 109, 12);
@@ -2197,11 +2199,13 @@ const Overworld = (() => {
       ctx.fillStyle = '#eadbb3'; ctx.fillRect(69, 72, 182, 92);
       ctx.fillStyle = '#76553d'; ctx.strokeStyle = '#c79b5d'; ctx.lineWidth = 1;
       ctx.strokeRect(69.5, 72.5, 181, 91);
-      ctx.fillStyle = '#45332e'; ctx.textAlign = 'center'; ctx.font = '10px monospace';
+      ctx.fillStyle = '#45332e'; ctx.textAlign = 'center'; ctx.font = 'bold 10px monospace';
       ctx.fillText('Son, meet me at the', 160, 96);
       ctx.fillText('other side of the forest.', 160, 116);
       ctx.fillText('Take my armor and', 160, 136);
       ctx.fillText('weapon.', 160, 151);
+      ctx.fillStyle = '#8b6a48'; ctx.font = '7px monospace';
+      ctx.fillText('- Dad', 224, 157);
     } else if (panel === 'inventory') {
       const items = [
         { name: 'Berries', count: inventory.berries, color: '#c94e73', icon: '●' },
