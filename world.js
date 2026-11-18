@@ -654,7 +654,7 @@ const Overworld = (() => {
   const HOUSE = { x: 8 * TILE, y: 8 * TILE, w: 7 * TILE, h: 5 * TILE };
   const HOUSE_DOOR = { x: HOUSE.x + HOUSE.w / 2, y: HOUSE.y + 67 };
   let insideHouse = false;
-  const interiorPlayer = { x: 240, y: 180, facing: 'up', moving: false, walk: 0 };
+  const interiorPlayer = { x: 208, y: 184, facing: 'up', moving: false, walk: 0 };
   const INTERIOR_WALLS = [
     // Outer shell. The front door opens into the bottom of the long hallway.
     [12, 12, 296, 14], [12, 24, 14, 194], [294, 24, 14, 194],
@@ -1489,6 +1489,12 @@ const Overworld = (() => {
   }
 
   function drawHouseInterior() {
+    // Zoom the complete interior out slightly. This scales the player and furniture
+    // down together rather than enlarging the character and creating collision issues.
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.scale(0.92, 0.92);
+    ctx.translate(-canvas.width / 2, -canvas.height / 2);
     // Top-down family home. The central hallway is deliberately long and open:
     // front door at the bottom, kitchen/living room above, bedrooms at the bottom.
     ctx.fillStyle = '#160d20';
@@ -1635,6 +1641,7 @@ const Overworld = (() => {
       ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
       ctx.fillText('[ E ] OUTSIDE', 160, 198);
     }
+    ctx.restore();
   }
   function drawBattle() {
     ctx.fillStyle='#17233a'; ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -2327,7 +2334,7 @@ const Overworld = (() => {
     if (introActive) { drawIntro(); return; }
     if (platformMode && platformScene === 'forest') { drawPlatformer(); return; }
     if (battle) { drawBattle(); if (paused) drawPauseMenu(); return; }
-    if (insideHouse) { drawHouseInterior(); if (paused) drawPauseMenu(); return; }
+    if (insideHouse) { drawHouseInterior(); drawPanel(); if (paused) drawPauseMenu(); return; }
     ctx.fillStyle = '#1b1f3a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     const x0 = Math.max(0, Math.floor(camX / TILE));
@@ -2632,7 +2639,7 @@ const Overworld = (() => {
         if (AudioCtor) { if (!introAudio) introAudio = new AudioCtor(); if (introAudio.state === 'suspended') introAudio.resume(); }
       } catch (_) {}
     }
-    if (introActive) { insideHouse = true; interiorPlayer.x = 240; interiorPlayer.y = 180; interiorPlayer.facing = 'up'; }
+    if (introActive) { insideHouse = true; interiorPlayer.x = 208; interiorPlayer.y = 184; interiorPlayer.facing = 'up'; }
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('keyup', onKeyUp);
     const maxCamX = Math.max(0, MAP_W * TILE - canvas.width);
