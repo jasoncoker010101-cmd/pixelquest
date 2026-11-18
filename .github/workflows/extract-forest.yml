@@ -23,6 +23,8 @@ jobs:
           mkdir -p assets/forest_pack
           unzip -o "assets/TopDownFantasy_Forest_v1.zip" -d assets/forest_pack
           find assets/forest_pack -type f -print
+      - name: Install preview dependency
+        run: python -m pip install pillow
       - name: Create preview
         run: |
           python - <<'PY'
