@@ -165,7 +165,7 @@ const Overworld = (() => {
   }
   function loadSceneMobs(scene) {
     sideMobs = (SCENE_MOBS[scene] || []).map(([type, x, range], i) => makeMob(type, x, range, i));
-    sideMobs.forEach(m => { if (m.T.riser) m.dormant = true; });
+    sideMobs.forEach(m => { if (m.T.riser) m.dormant = true; rollElite(m); });
     const R = REGIONS[scene];
     if (R && R.boss && !story[R.bossFlag]) {
       const boss = makeMob(R.boss, R.bossX, 120, 0);
@@ -1308,7 +1308,7 @@ const Overworld = (() => {
   const equipment = { armor: false, weapon: 'sword' };
   let quickSlot = 'berries';
   const newItems = new Set();
-  const stats = { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0, xp: 0, kills: 0, goblinKills: 0, atkUp: 0, defUp: 0 };
+  const stats = { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0, xp: 0, kills: 0, goblinKills: 0, atkUp: 0, defUp: 0, perkAtk: 0, perkDef: 0, critUp: 0, luck: 0, thirst: 0, chargeUp: 0, elites: 0, chests: 0 };
 
   const bunnies = [
     { x: 17 * TILE, y: 10 * TILE, vx: 0, vy: 0, flee: 0, hop: 0 },
@@ -2723,7 +2723,7 @@ const Overworld = (() => {
   function currentWeapon() { const w = equipment.weapon; return w !== 'sword' && WEAPONS[w] && inventory[w] > 0 ? w : 'sword'; }
   function ownedWeapons() { return Object.keys(WEAPONS).filter(w => w === 'sword' || inventory[w] > 0); }
   const RARITY_COLOR = { common: '#8a7a68', uncommon: '#5fbf6a', rare: '#5fa8ff', legend: '#f2c14e' };
-  const INV_TABS = ['ITEMS', 'GEAR', 'STATS', 'QUEST', 'LORE', 'MAP'];
+  const INV_TABS = ['ITEMS', 'GEAR', 'STATS', 'QUEST', 'LORE', 'MAP', 'RELICS'];
   const ARMOR_DEFENSE = 3, SWORD_ATTACK = 2;
   let invTab = 0, invSel = 0, gearSel = 0, invOpenTime = 0;
   let hitStop = 0, screenShake = 0, comboTimer = 0, lastMove = null, landTime = 0;
@@ -2731,8 +2731,8 @@ const Overworld = (() => {
   let levelUpUntil = 0;
 
   function xpForNext(level) { return 20 + level * 15; }
-  function totalDefense() { return stats.defense + (stats.defUp || 0) + (equipment.armor ? ARMOR_DEFENSE : 0); }
-  function totalAttack() { return stats.strength + (stats.atkUp || 0) + (equipment.armor ? WEAPONS[currentWeapon()].atk : 0); }
+  function totalDefense() { return stats.defense + (stats.defUp || 0) + (stats.perkDef || 0) + (equipment.armor ? ARMOR_DEFENSE : 0); }
+  function totalAttack() { return stats.strength + (stats.atkUp || 0) + (stats.perkAtk || 0) + (equipment.armor ? WEAPONS[currentWeapon()].atk : 0); }
 
   // ---------- Audio: recorded CC0 sound effects + area music ----------
   const SFX_BANK = {
@@ -2997,6 +2997,7 @@ const Overworld = (() => {
     }
     stats.stamina = Math.max(0, stats.stamina - (move.stamina || 0));
     comboTimer = 0;
+    if (name === 'finisher' && hasRelic('echoblade')) playerWaves.push({ x: 0, y: 0, f: sidePlayer.facing, age: 0, life: 0.5, hit: new Set(), dist: 0, delay: 0.16, small: true, dmg: 2 });
   }
 
   // Plunging strike: a short hang, a fast dive, then the ground-impact frames
@@ -3149,7 +3150,7 @@ const Overworld = (() => {
       const cx = sidePlayer.x, cy = sidePlayer.y - 22;
       combatFx.push({ kind: 'mote', x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r, tx: cx, ty: cy, color: Math.random() < 0.5 ? '#8fd8ff' : '#e6f6ff', life: 0.34, max: 0.34, vx: 0, vy: 0 });
     }
-    if (!c.ready && c.t >= CHARGE_TIME) {
+    if (!c.ready && c.t >= chargeTime()) {
       c.ready = true;
       combatFx.push({ kind: 'ring', x: sidePlayer.x, y: sidePlayer.y - 24, blue: true, life: 0.3, max: 0.3, vx: 0, vy: 0 });
       sfx('ready'); padRumble(0.2, 0.5, 90);
@@ -3166,6 +3167,7 @@ const Overworld = (() => {
   function updatePlayerWaves(dt) {
     for (let i = playerWaves.length - 1; i >= 0; i--) {
       const w = playerWaves[i];
+      if (w.delay > 0) { w.delay -= dt; if (w.delay <= 0) { w.f = sidePlayer.facing; w.x = sidePlayer.x + w.f * 22; w.y = sidePlayer.y - 24; sfx('waveHum', 0.6); } continue; }
       w.age += dt;
       const step = (360 - w.age * 180) * dt;
       w.x += w.f * step; w.dist += step;
@@ -3176,7 +3178,7 @@ const Overworld = (() => {
         if (m.y < w.y - 30 || mobTop(m) > w.y + 30) return;
         w.hit.add(k);
         const bonus = Math.floor((totalAttack() - 5) / 4);
-        damageMob(m, 4 + bonus, w.f, 220, true, false);
+        damageMob(m, (w.dmg || 4) + bonus, w.f, w.small ? 120 : 220, true, false);
       });
       if (w.age >= w.life || w.x < 0 || w.x > sideWorldWidth()) playerWaves.splice(i, 1);
     }
@@ -3186,8 +3188,9 @@ const Overworld = (() => {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     playerWaves.forEach(w => {
+      if (w.delay > 0) return;
       const a = Math.max(0, 1 - w.age / w.life);
-      const s = 1 + w.age * 0.6;
+      const s = (1 + w.age * 0.6) * (w.small ? 0.62 : 1);
       for (let t = 3; t >= 0; t--) {
         const x = w.x - w.f * t * 9;
         ctx.globalAlpha = a * (t === 0 ? 1 : 0.28 - t * 0.05);
@@ -3235,6 +3238,7 @@ const Overworld = (() => {
       r.trail.push({ x: sidePlayer.x, y: sidePlayer.y, t: r.t, life: 0.14 });
       if (Math.random() < 0.5) spawnDust(sidePlayer.x - r.dir * 8, sidePlayer.y, 1);
     }
+    emberRoll(r);
     r.trail.forEach(g => g.life -= dt);
     r.trail = r.trail.filter(g => g.life > 0);
     if (r.t >= ROLL_TIME) { sidePlayer.roll = null; sidePlayer.rollCooldown = 0.08; sidePlayer.vx *= 0.55; landTime = 0.05; }
@@ -3250,7 +3254,7 @@ const Overworld = (() => {
         addDamageNumber(sidePlayer.x, sidePlayer.y - 56, 'DODGE', '#8fd8ff');
         combatFx.push({ kind: 'ring', x: sidePlayer.x, y: sidePlayer.y - 22, blue: true, life: 0.3, max: 0.3, vx: 0, vy: 0 });
         hitStop = Math.max(hitStop, 0.06);
-        sfx('dodge');
+        sfx('dodge'); onPerfectDodge();
       }
       return false;
     }
@@ -3268,7 +3272,7 @@ const Overworld = (() => {
       addDamageNumber(m.x, mobTop(m) - 8, 'BLOCK', '#c9d6ff');
       sfx('clash'); hitStop = 0.04; return;
     }
-    dmg = Math.max(1, dmg);
+    dmg = fortuneDamage(Math.max(1, dmg));
     m.hp = Math.max(0, m.hp - dmg);
     m.flash = 0.07; m.showHpUntil = time + 3;
     if (!m.T.armor) {
@@ -3285,6 +3289,7 @@ const Overworld = (() => {
     mobVoice(m, 'hurt');
     padRumble(big ? 0.7 : 0.35, big ? 0.9 : 0.6, big ? 140 : 80);
     if (m.hp <= 0) defeatMob(m, f);
+    if (crit) onCrit(m, f);
   }
 
   function knightHitCheck(atk, move) {
@@ -3299,9 +3304,9 @@ const Overworld = (() => {
       if (m.y < swingTop || mobTop(m) > swingBottom) return;
       atk.hit.add(i);
       const bonus = Math.floor((totalAttack() - 5) / 4);
-      const crit = Math.random() < 0.12;
+      const crit = Math.random() < critChance();
       const big = atk.name === 'finisher' || atk.name === 'thrust' || atk.name === 'power' || crit;
-      damageMob(m, move.dmg + bonus + (crit ? 1 : 0), f, move.knock, big, crit);
+      damageMob(m, crit ? Math.ceil((move.dmg + bonus) * 1.6) : move.dmg + bonus, f, move.knock, big, crit);
       // The rising slash pops light enemies into the air for a follow-up.
       if (move.upper && !m.dead && !m.T.armor && !m.T.fly && !m.T.boss && m.blockTime <= 0) { m.liftV = -250; m.lift = Math.max(m.lift || 0, 1); }
     });
@@ -3329,12 +3334,14 @@ const Overworld = (() => {
     mobVoice(m, 'death');
     if (!T.anims.death && !T.boss) spawnSparks(m.x, m.y - T.bodyH * 0.5, f, 10, ['#5a5060', '#8a8090', '#2a2430', T.light ? '#ffb347' : '#c8324a']);
     const dropY = m.y - T.bodyH * 0.6;
-    const coins = T.coins[0] + Math.floor(Math.random() * (T.coins[1] - T.coins[0] + 1));
+    const coinMul = (hasRelic('giltooth') ? 1.6 : 1) * (m.elite ? (m.elite.gold ? 4 : 2) : 1) * (bloodMoon ? 1.5 : 1);
+    const coins = Math.round((T.coins[0] + Math.floor(Math.random() * (T.coins[1] - T.coins[0] + 1))) * coinMul);
     for (let i = 0; i < coins; i++) pickups.push({ type: 'coin', amount: 1, x: m.x, y: dropY, vx: (Math.random() - 0.5) * 140, vy: -150 - Math.random() * 90, age: 0 });
     T.drops.forEach(([item, chance], k) => {
       if (Math.random() < chance) pickups.push({ type: item, amount: 1, x: m.x, y: dropY, vx: (k % 2 ? -1 : 1) * f * 60, vy: -190 - k * 20, age: 0 });
     });
-    gainXp(T.xp);
+    fortuneOnKill(m, dropY);
+    gainXp(Math.round(T.xp * (m.elite ? 2.5 : 1) * (bloodMoon ? 2 : 1)));
     if (T.boss) onBossDefeated(m);
   }
 
@@ -3347,7 +3354,7 @@ const Overworld = (() => {
       stats.maxHealth += 4; stats.strength += 1;
       if (stats.level % 2 === 0) stats.defense += 1;
       stats.health = stats.maxHealth; stats.stamina = stats.maxStamina;
-      levelUpUntil = time + 2.4;
+      levelUpUntil = time + 2.4; pendingPerks++;
       notice = 'LEVEL UP! You reached level ' + stats.level + '.'; noticeUntil = time + 2.6;
       sfx('level'); padRumble(0.4, 0.4, 260);
       if (onSave) onSave(getSaveData());
@@ -3355,6 +3362,7 @@ const Overworld = (() => {
   }
 
   function hurtSidePlayer(amount, fromDir, who) {
+    amount = fortuneHurt(amount);
     stats.health = Math.max(0, stats.health - amount);
     sidePlayer.hurtTime = 0.36; sidePlayer.invulnTime = 1.1;
     sidePlayer.atk = null; sidePlayer.attackTime = 0; comboTimer = 0; sidePlayer.charge = null; sidePlayer.roll = null; sidePlayer.drink = null;
@@ -3364,7 +3372,9 @@ const Overworld = (() => {
     spawnSparks(sidePlayer.x, sidePlayer.y - 28, fromDir, 6, ['#ff8a8a', '#ffffff']);
     sfx('hurt');
     padRumble(0.9, 0.5, stats.health <= 0 ? 420 : 200);
-    if (stats.health <= 0) {
+    if (stats.health <= 0 && phoenixRevive()) {
+      notice = 'The Phoenix Plume burns away your death!'; noticeUntil = time + 2.4;
+    } else if (stats.health <= 0) {
       sidePlayer.deadTime = 1.9; sidePlayer.deathAge = 0;
       notice = 'You were overwhelmed. Returning to the trail...'; noticeUntil = time + 2.2;
     } else { notice = (who || 'Something') + ' hit you!'; noticeUntil = time + 1.2; }
@@ -3403,6 +3413,7 @@ const Overworld = (() => {
       }
       if (p.age > 0.55 && dist < 13) {
         if (p.type === 'coin') { inventory.coins = (inventory.coins || 0) + p.amount; sfx('tick'); }
+        else if (p.type === 'relic') { pickups.splice(i, 1); grantRelic(p.relic); continue; }
         else {
           inventory[p.type] = (inventory[p.type] || 0) + p.amount;
           if (!newItems.has(p.type) && (inventory[p.type] || 0) === p.amount) newItems.add(p.type);
@@ -3410,7 +3421,7 @@ const Overworld = (() => {
           sfx(ITEM_DEFS[p.type].rarity === 'rare' || ITEM_DEFS[p.type].rarity === 'legend' ? 'gem' : 'pickup');
         }
         pickups.splice(i, 1);
-      } else if (p.age > 30) pickups.splice(i, 1);
+      } else if (p.age > 30 && p.type !== 'relic') pickups.splice(i, 1);
     }
   }
 
@@ -3475,6 +3486,16 @@ const Overworld = (() => {
         ctx.fillStyle = '#7a4a12'; ctx.fillRect(Math.round(p.x - w / 2) - 1, Math.round(p.y + bob) - 3, w + 2, 7);
         ctx.fillStyle = '#f2c14e'; ctx.fillRect(Math.round(p.x - w / 2), Math.round(p.y + bob) - 2, w, 5);
         ctx.fillStyle = '#fff1a8'; ctx.fillRect(Math.round(p.x - w / 2), Math.round(p.y + bob) - 2, 1, 2);
+      } else if (p.type === 'relic') {
+        const RR = RARITY[RELICS[p.relic].rarity], py = Math.round(p.y + bob);
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        const bg = ctx.createLinearGradient(0, py - 90, 0, py);
+        bg.addColorStop(0, 'rgba(' + RR.glow + ',0)'); bg.addColorStop(1, 'rgba(' + RR.glow + ',.5)');
+        ctx.fillStyle = bg; ctx.fillRect(Math.round(p.x) - 4, py - 90, 8, 90);
+        const gg = ctx.createRadialGradient(p.x, py, 1, p.x, py, 14);
+        gg.addColorStop(0, 'rgba(' + RR.glow + ',.6)'); gg.addColorStop(1, 'rgba(' + RR.glow + ',0)');
+        ctx.fillStyle = gg; ctx.fillRect(p.x - 14, py - 14, 28, 28); ctx.restore();
+        drawRelicIcon(p.relic, Math.round(p.x) - 4, py - 4, 1);
       } else {
         ctx.fillStyle = 'rgba(255,230,150,' + (0.25 + Math.sin(time * 6) * 0.1) + ')';
         ctx.fillRect(Math.round(p.x) - 8, Math.round(p.y + bob) - 8, 16, 16);
@@ -3911,6 +3932,7 @@ const Overworld = (() => {
     sidePlayer.invulnTime = Math.max(0, sidePlayer.invulnTime - dt);
     sidePlayer.rollCooldown = Math.max(0, (sidePlayer.rollCooldown || 0) - dt);
     updateCombatFx(dt);
+    updateFortune(dt);
     updatePlayerWaves(dt);
     updateAmbient(dt);
     if (sidePlayer.deadTime > 0) {
@@ -3953,6 +3975,7 @@ const Overworld = (() => {
       return;
     }
 
+    maybeOpenPerks();
     if (sideRollQueued) { sideRollQueued = false; if (!tryRoll()) rollBuffer = 0.18; }
     else if (rollBuffer > 0) { rollBuffer -= dt; if (tryRoll(true)) rollBuffer = 0; }
     if (sidePlayer.pray) {
@@ -3996,7 +4019,7 @@ const Overworld = (() => {
         sidePlayer.onGround = false;
         spawnDust(sidePlayer.x, sidePlayer.y, 4);
         sfx('cloth', 0.5, 1.2);
-      }
+      } else if (sideJumpQueued) tryAirJump();
       if (sprinting) stats.stamina = Math.max(0, stats.stamina - 20 * dt);
       else stats.stamina = Math.min(stats.maxStamina, stats.stamina + 13 * dt);
       if (sidePlayer.moving) {
@@ -4030,7 +4053,7 @@ const Overworld = (() => {
       if (!sidePlayer.onGround && sidePlayer.vy > 180) { landTime = 0.08; spawnDust(sidePlayer.x, landing.y, 5); if (!(sidePlayer.atk && sidePlayer.atk.phase === 'dive')) sfx('land', 0.7); }
       sidePlayer.y = landing.y;
       sidePlayer.vy = 0;
-      sidePlayer.onGround = true;
+      sidePlayer.onGround = true; sidePlayer.airJumped = false;
     } else {
       sidePlayer.y = nextFeet;
       sidePlayer.onGround = false;
@@ -4051,7 +4074,7 @@ const Overworld = (() => {
     stepDistance += moved;
     while (stepDistance >= 20) { stats.steps++; stepDistance -= 20; }
 
-    if (outdoorScene()) { updateForestCombat(dt); updateStory(dt); }
+    if (outdoorScene()) { updateForestCombat(time < witchUntil ? dt * 0.3 : dt); updateStory(dt); }
     updateSideCamera(dt);
   }
 
@@ -4137,7 +4160,8 @@ const Overworld = (() => {
         m.deadTime += dt; m.respawn -= dt;
         if (T.fly && !T.anims.death) m.y = Math.min(SIDE_GROUND_Y, m.y + dt * (40 + m.deadTime * 300));
         if (m.respawn <= 0 && Math.abs(sidePlayer.x - m.home) > 240) {
-          Object.assign(m, makeMob(m.type, m.home, (m.max - m.min) / 2, 1), { patrolDir: m.patrolDir });
+          Object.assign(m, makeMob(m.type, m.home, (m.max - m.min) / 2, 1), { patrolDir: m.patrolDir, elite: null });
+          rollElite(m);
         }
         continue;
       }
@@ -4163,7 +4187,7 @@ const Overworld = (() => {
       m.hurtTime = Math.max(0, m.hurtTime - dt);
       const dx = sidePlayer.x - m.x;
       const distance = Math.abs(dx);
-      const speedMul = enraged ? 1.45 : 1;
+      const speedMul = (enraged ? 1.45 : 1) * (m.elite && m.elite.spd || 1);
       m.moving = false;
       if (m.hurtTime > 0 || m.kvx || m.blockTime > 0) {
         // Staggered.
@@ -4180,7 +4204,7 @@ const Overworld = (() => {
           m.moving = true;
         } else if (m.attackCooldown <= 0) {
           m.attackTime = T.atkTime / speedMul; m.atkLen = m.attackTime; m.attackHit = false; m.waveDone = false;
-          m.attackCooldown = (T.cd[0] + Math.random() * (T.cd[1] - T.cd[0])) / speedMul;
+          m.attackCooldown = (T.cd[0] + Math.random() * (T.cd[1] - T.cd[0])) / speedMul * (m.elite && m.elite.cd || 1);
           if (Math.random() < 0.6) mobVoice(m, 'attack');
         }
       } else {
@@ -4228,12 +4252,12 @@ const Overworld = (() => {
               m.waveDone = true; m.attackHit = true;
               const sx = m.x + m.dir * 10, sy = m.y - T.bodyH * 0.5;
               const tx = sidePlayer.x, ty = sidePlayer.y - 20, d = Math.max(1, Math.hypot(tx - sx, ty - sy));
-              mobShots.push({ x: sx, y: sy, vx: (tx - sx) / d * 120, vy: (ty - sy) / d * 120, life: 2.6, dmg: T.dmg, who: 'A fireball', kind: 'fire' });
+              mobShots.push({ x: sx, y: sy, vx: (tx - sx) / d * 120, vy: (ty - sy) / d * 120, life: 2.6, dmg: T.dmg + eliteDmg(m), who: 'A fireball', kind: 'fire' });
               sfx('skull');
             }
           } else if (distance < T.reach + 4 && facing && playerBodyOverlaps(m.y - T.bodyH - 6, m.y + 4) && playerAlive && canHitPlayer()) {
             m.attackHit = true;
-            hurtSidePlayer(Math.max(1, T.dmg - Math.floor(totalDefense() / 2)), m.dir, T.boss ? T.short : 'The ' + T.name.toLowerCase());
+            hurtSidePlayer(Math.max(1, T.dmg + eliteDmg(m) - Math.floor(totalDefense() / 2)), m.dir, T.boss ? T.short : m.elite ? 'The ' + m.elite.name.toLowerCase() + ' ' + T.name.toLowerCase() : 'The ' + T.name.toLowerCase());
           }
         } else if (p > T.hit[1]) m.attackHit = true;
       }
@@ -4473,7 +4497,7 @@ const Overworld = (() => {
       if (T.boss) alpha *= m.deadTime < 1.6 ? (Math.floor(m.deadTime * 14) % 2 ? 0.5 : 1) : 1;
       if (alpha <= 0) return;
     }
-    const sc = T.scale, w = T.fw * sc, h = T.fh * sc;
+    const sc = T.scale * (m.elite ? ELITE_SCALE : 1), w = T.fw * sc, h = T.fh * sc;
     const flip = T.faceLeft ? m.dir > 0 : m.dir < 0;
     const sink = T.boss && m.dead && !T.fly ? Math.min(14, m.deadTime * 6) : 0;
     const squash = m.dead && !T.anims.death && !T.boss ? Math.max(0.2, 1 - m.deadTime * 1.6) : 1;
@@ -4509,18 +4533,20 @@ const Overworld = (() => {
         g.addColorStop(0, 'rgba(' + m.T.light + ',.32)'); g.addColorStop(1, 'rgba(' + m.T.light + ',0)');
         ctx.fillStyle = g; ctx.fillRect(m.x - fl, ly - fl, fl * 2, fl * 2); ctx.restore();
       }
+      drawEliteAura(m);
       drawMob(m);
       // Telegraph: a red glint before a heavy swing.
       if (!m.dead && m.attackTime > 0 && (1 - m.attackTime / m.atkLen) < m.T.hit[0] && Math.floor(time * 16) % 2) {
         ctx.fillStyle = '#ff5050';
         ctx.fillRect(Math.round(m.x + m.dir * (m.T.width / 2 + 2)), Math.round(mobTop(m) + 4), 2, 2);
       }
-      if (!m.dead && !m.T.boss && !m.dormant && (time < m.showHpUntil || m.hp < m.maxHp)) {
+      if (!m.dead && !m.T.boss && !m.dormant && (time < m.showHpUntil || m.hp < m.maxHp || m.elite)) {
         const bw = 22, bx = Math.round(m.x - bw / 2), by = Math.round(mobTop(m) - 7);
         ctx.fillStyle = '#120c14'; ctx.fillRect(bx - 1, by - 1, bw + 2, 4);
         ctx.fillStyle = '#4a1820'; ctx.fillRect(bx, by, bw, 2);
-        ctx.fillStyle = '#e04848'; ctx.fillRect(bx, by, Math.round(bw * m.hp / m.maxHp), 2);
+        ctx.fillStyle = m.elite ? m.elite.color : '#e04848'; ctx.fillRect(bx, by, Math.round(bw * m.hp / m.maxHp), 2);
       }
+      drawEliteTag(m);
     });
     bossWaves.forEach(w => {
       const a = Math.min(1, w.life * 2);
@@ -4618,7 +4644,7 @@ const Overworld = (() => {
       });
       // Moonblade charge: a pulsing blue aura behind the knight.
       if (c) {
-        const k = Math.min(1, c.t / CHARGE_TIME), pul = c.ready ? 0.55 + Math.sin(time * 16) * 0.2 : 0.25 * k;
+        const k = Math.min(1, c.t / chargeTime()), pul = c.ready ? 0.55 + Math.sin(time * 16) * 0.2 : 0.25 * k;
         ctx.save(); ctx.globalCompositeOperation = 'lighter';
         const g = ctx.createRadialGradient(x, y - 22, 2, x, y - 22, 20 + k * 14);
         g.addColorStop(0, 'rgba(140,215,255,' + pul + ')'); g.addColorStop(1, 'rgba(60,120,255,0)');
@@ -4850,6 +4876,7 @@ const Overworld = (() => {
     // the separate raised platforms here; keep the continuous ground invisible.
     FOREST_SIDE_PLATFORMS.slice(1).forEach(drawSidePlatform);
 
+    drawChests();
     drawSideMobs();
 
     drawCamp();
@@ -4857,6 +4884,7 @@ const Overworld = (() => {
     drawSidePlayer();
     drawPlayerWaves();
     drawCombatFx();
+    drawFortuneFx();
     drawAmbient();
     ctx.restore();
     drawSideOverlays(sidePlayer.x > CAMP.start ? "BRAM'S CAMP" : 'WOODLAND');
@@ -5011,12 +5039,827 @@ const Overworld = (() => {
     ctx.restore();
   }
 
+  // ===========================================================================
+  // FORTUNE: relics, treasure chests, elite monsters, the Blood Moon,
+  // level-up blessings and Bram's Fortune Wheel. All of it runs on dice rolls.
+  // ===========================================================================
+  const RARITY = {
+    common: { name: 'COMMON', color: '#d8cfbf', glow: '216,207,191' },
+    rare:   { name: 'RARE', color: '#5fa8ff', glow: '95,168,255' },
+    epic:   { name: 'EPIC', color: '#c77dff', glow: '199,125,255' },
+    legend: { name: 'LEGENDARY', color: '#f2c14e', glow: '242,193,78' }
+  };
+  const RARITY_ORDER = ['common', 'rare', 'epic', 'legend'];
+  // 8 x 8 pixel icons. a = outline, b = body, c = light, d = accent.
+  const RELIC_ICONS = {
+    fang:      ['..aaaa..', '.abbbba.', '.abccba.', '..abcba.', '..abba..', '...aba..', '...aa...', '..d..d..'],
+    shield:    ['.aaaaaa.', 'abbcbbba', 'abccdbba', 'abbcbbba', 'abbbbbba', '.abbbba.', '..abba..', '...aa...'],
+    coin:      ['..aaaa..', '.abbbba.', 'abcddbba', 'abcdbbba', 'abbbbbba', 'abbbbbba', '.abbbba.', '..aaaa..'],
+    feather:   ['......aa', '.....abc', '....abca', '...abca.', '..abca..', '.abca...', '.aca....', 'a.......'],
+    rose:      ['...ab...', '..abba..', '.abccba.', '..abba..', '...da...', '..dda...', '...da...', '...d....'],
+    heart:     ['.aa..aa.', 'abbaabba', 'abccbbba', 'abcbbbba', '.abbbba.', '..abba..', '...aa...', '........'],
+    clover:    ['.aa..aa.', 'abbaabba', 'abcbbcba', '.aabbaa.', 'abcbbcba', 'abbaabba', '.aa.da..', '....d...'],
+    moon:      ['..aaa...', '.abba...', 'abca....', 'abca....', 'abca....', 'abcba...', '.abbba..', '..aaa...'],
+    gem:       ['...aa...', '..acba..', '.acbbba.', 'acbbbbba', '.abbbba.', '..abba..', '...aa...', '........'],
+    rune:      ['.aaaaaa.', 'abbbdbba', 'abbddbba', 'abddddba', 'abbddbba', 'abbdbbba', 'abbbbbba', '.aaaaaa.'],
+    blade:     ['......ab', '.....abc', '....abc.', 'd..abc..', '.dabc...', '..dd....', '.d.d....', 'd.......'],
+    flame:     ['...a....', '..aba...', '..abca..', '.abcca..', '.abccba.', 'abccdcba', 'abcddcba', '.aaaaaa.'],
+    hourglass: ['aaaaaaaa', '.abbbba.', '..accb..', '...dd...', '...dd...', '..abba..', '.adddda.', 'aaaaaaaa'],
+    eye:       ['..aaaa..', '.abbbba.', 'abbccbba', 'abcddcba', 'abcddcba', 'abbccbba', '.abbbba.', '..aaaa..'],
+    star:      ['...aa...', '...ca...', 'aaacbaaa', '.acbbba.', '..abba..', '.abaaba.', '.aa..aa.', '........'],
+    bag:       ['..aaaa..', '...dd...', '.abbbba.', 'abbccbba', 'abcbbbba', 'abbbbbba', '.abbbba.', '..aaaa..']
+  };
+  const RELICS = {
+    wolftooth:  { name: 'Wolf Tooth', rarity: 'common', icon: 'fang', pal: ['#2a1a14', '#e8dcc0', '#fff8e6', '#c8324a'],
+                  desc: '+10% critical hit chance.', lore: 'Pulled from a werewolf on the night your father left. It still wants to bite.' },
+    ironbark:   { name: 'Ironbark Charm', rarity: 'common', icon: 'shield', pal: ['#1a1410', '#6b4a2a', '#a8784a', '#d6b477'],
+                  desc: 'Take 1 less damage from every hit.', lore: 'Bark from the oldest tree in the woodland. Bram swears it once stopped an arrow.' },
+    giltooth:   { name: 'Gilded Tooth', rarity: 'common', icon: 'coin', pal: ['#5a3a10', '#f2c14e', '#fff1a8', '#ffffff'],
+                  desc: 'Monsters drop 60% more coins.', lore: "A goblin chief's gold tooth. Goblins can smell it on you, and they hate you for it." },
+    crowquill:  { name: 'Crow Quill', rarity: 'rare', icon: 'feather', pal: ['#0e0c16', '#3a3452', '#a89ee0', '#ffffff'],
+                  desc: 'Jump a second time in mid-air.', lore: 'A pinion from the crows that follow the Pale Court. It weighs less than nothing.' },
+    nightthorn: { name: 'Night Thorn', rarity: 'rare', icon: 'rose', pal: ['#1a0a12', '#a0244a', '#ff6a8a', '#3f9a3a'],
+                  desc: 'Heal 2 HP whenever you slay a foe.', lore: 'It only grows where blood was spilled under a full moon. Drink deep.' },
+    emberheart: { name: 'Ember Heart', rarity: 'rare', icon: 'heart', pal: ['#2a0a06', '#d8482a', '#ffb347', '#ffffff'],
+                  desc: 'Rolling through foes burns them.', lore: "Ashmane's foals are born with these where their hearts should be." },
+    clover:     { name: 'Four-Leaf Clover', rarity: 'rare', icon: 'clover', pal: ['#0e2410', '#3f9a3a', '#9be37a', '#6b4a2a'],
+                  desc: 'Luck up: rarer chests, more relics.', lore: 'Mother pressed it inside a book of moon songs. Dad kept the book.' },
+    moonshard:  { name: 'Moon Splinter', rarity: 'epic', icon: 'moon', pal: ['#0a1430', '#7fb8ff', '#e6f6ff', '#ffffff'],
+                  desc: 'Moonblade charges twice as fast.', lore: 'A sliver of the broken moon. Hold it to your ear and something is singing.' },
+    glasssaint: { name: 'Glass Saint', rarity: 'epic', icon: 'gem', pal: ['#14202a', '#8fe0ff', '#e6fbff', '#ffffff'],
+                  desc: '+3 damage, but you take +2 damage.', lore: 'Relic of a Watch martyr who fought without armor. He won. Once.' },
+    stormrune:  { name: 'Storm Rune', rarity: 'epic', icon: 'rune', pal: ['#14121e', '#4a4660', '#6a6690', '#ffe86b'],
+                  desc: 'Critical hits call down lightning.', lore: 'The lightning over the Pale Court is not weather. It answers to this stone.' },
+    echoblade:  { name: 'Echo Blade', rarity: 'epic', icon: 'blade', pal: ['#101828', '#8fd8ff', '#ffffff', '#d6b477'],
+                  desc: 'Combo finishers fire a moon wave.', lore: 'Every swing of this ghost-sword is followed by a second, quieter one.' },
+    phoenix:    { name: 'Phoenix Plume', rarity: 'legend', icon: 'flame', pal: ['#3a0a06', '#ff6a2a', '#ffc94a', '#fff6d0'],
+                  desc: 'Cheat death once. Recharges at fires.', lore: 'The firebird fell over the Ashen Pass a hundred years ago. It is still not finished dying.' },
+    hourglass:  { name: 'Sands of Ages', rarity: 'legend', icon: 'hourglass', pal: ['#2a1a10', '#d6b477', '#ffe3a1', '#8fd8ff'],
+                  desc: 'Perfect dodges slow time.', lore: "Morwen's first attempt to stop the night from coming. Time bent. The night came anyway." },
+    bloodidol:  { name: 'Blood Moon Idol', rarity: 'legend', icon: 'eye', pal: ['#1a0408', '#8a1020', '#ff3a4a', '#ffd0d0'],
+                  desc: '+60% damage while under 35% HP.', lore: 'Carved by the cult of the red moon. It wants you close to death.' }
+  };
+  const RELIC_ORDER = Object.keys(RELICS);
+  const fortune = { owned: [], equipped: [], slots: 2, phoenixUsed: false };
+  const fortuneFx = [];
+  let relicReveal = null, relicSel = 0, pendingPerks = 0, perkOffer = null, wheel = null;
+  let bloodMoon = false, bloodMoonAt = -10, witchUntil = 0;
+
+  function hasRelic(id) { return fortune.equipped.includes(id); }
+  function luckValue() { return (stats.luck || 0) * 0.12 + (hasRelic('clover') ? 0.4 : 0) + (bloodMoon ? 0.3 : 0); }
+  function critChance() { return 0.1 + (stats.critUp || 0) * 0.05 + (hasRelic('wolftooth') ? 0.1 : 0); }
+  function chargeTime() { return CHARGE_TIME * (hasRelic('moonshard') ? 0.5 : 1) * Math.pow(0.8, stats.chargeUp || 0); }
+  function eliteDmg(m) { return m.elite && m.elite.dmg ? m.elite.dmg : 0; }
+  function fortuneDamage(dmg) {
+    if (hasRelic('glasssaint')) dmg += 3;
+    if (hasRelic('bloodidol') && stats.health <= stats.maxHealth * 0.35) dmg = Math.ceil(dmg * 1.6);
+    return dmg;
+  }
+  function fortuneHurt(amount) {
+    if (hasRelic('glasssaint')) amount += 2;
+    if (hasRelic('ironbark')) amount -= 1;
+    if (bloodMoon) amount += 1;
+    return Math.max(1, amount);
+  }
+  function rollRarity(bonus = 0, floor = 'common') {
+    const L = luckValue() + bonus;
+    const w = { common: 60 / (1 + L), rare: 28 * (1 + L * 0.6), epic: 10 * (1 + L), legend: 2.5 * (1 + L * 1.6) };
+    const pool = RARITY_ORDER.slice(RARITY_ORDER.indexOf(floor));
+    let roll = Math.random() * pool.reduce((s, r) => s + w[r], 0);
+    for (const r of pool) { roll -= w[r]; if (roll <= 0) return r; }
+    return pool[pool.length - 1];
+  }
+  function randomRelic(rarity) {
+    const unowned = RELIC_ORDER.filter(id => !fortune.owned.includes(id));
+    if (!unowned.length) return null;
+    const ri = RARITY_ORDER.indexOf(rarity);
+    for (const d of [0, -1, 1, -2, 2, -3, 3]) {
+      const r = RARITY_ORDER[ri + d]; if (!r) continue;
+      const list = unowned.filter(id => RELICS[id].rarity === r);
+      if (list.length) return list[Math.floor(Math.random() * list.length)];
+    }
+    return unowned[0];
+  }
+  function dropRelic(x, y, rarity) {
+    const id = randomRelic(rarity);
+    if (!id) { for (let i = 0; i < 12; i++) pickups.push({ type: 'coin', amount: 3, x, y, vx: (Math.random() - 0.5) * 160, vy: -170 - Math.random() * 90, age: 0 }); return; }
+    pickups.push({ type: 'relic', relic: id, amount: 1, x, y, vx: (Math.random() - 0.5) * 40, vy: -230, age: 0 });
+    sfx('gem', 0.7, 0.8);
+  }
+  function grantRelic(id) {
+    if (fortune.owned.includes(id)) { inventory.coins = (inventory.coins || 0) + 30; return; }
+    fortune.owned.push(id);
+    const eq = fortune.equipped.length < fortune.slots;
+    if (eq) fortune.equipped.push(id);
+    relicSel = RELIC_ORDER.indexOf(id);
+    relicReveal = { id, t: time, equipped: eq };
+    openPanel('relic');
+    sfx(RELICS[id].rarity === 'legend' || RELICS[id].rarity === 'epic' ? 'victory' : 'gem', 0.7); sfx('magic', 0.5);
+    padRumble(0.5, 0.7, 260);
+    if (onSave) onSave(getSaveData());
+  }
+  function drawRelicIcon(id, x, y, s = 1, silhouette = false, iconKey, pal) {
+    const R = RELICS[id] || {};
+    const g = RELIC_ICONS[iconKey || R.icon]; const P = pal || R.pal;
+    if (!g) return;
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+      const ch = g[r][c]; if (ch === '.') continue;
+      ctx.fillStyle = silhouette ? (ch === 'a' ? '#0a080d' : '#2a2331') : P['abcd'.indexOf(ch)];
+      ctx.fillRect(Math.round(x + c * s), Math.round(y + r * s), s, s);
+    }
+  }
+  function drawRays(cx, cy, glow, a, n = 12, len = 170, spin = 0.25) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < n; i++) {
+      const ang = time * spin + i * Math.PI * 2 / n, w = 0.11;
+      ctx.fillStyle = 'rgba(' + glow + ',' + (a * (i % 2 ? 0.07 : 0.12)) + ')';
+      ctx.beginPath(); ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(ang - w) * len, cy + Math.sin(ang - w) * len);
+      ctx.lineTo(cx + Math.cos(ang + w) * len, cy + Math.sin(ang + w) * len);
+      ctx.closePath(); ctx.fill();
+    }
+    const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, 46);
+    g.addColorStop(0, 'rgba(' + glow + ',' + 0.45 * a + ')'); g.addColorStop(1, 'rgba(' + glow + ',0)');
+    ctx.fillStyle = g; ctx.fillRect(cx - 46, cy - 46, 92, 92);
+    ctx.restore();
+  }
+
+  // ---- Elite monsters ----
+  const ELITE_SCALE = 1.12;
+  const ELITE_AFFIXES = [
+    { id: 'swift', name: 'SWIFT', color: '#7fe3ff', glow: '127,227,255', spd: 1.45 },
+    { id: 'brutal', name: 'BRUTAL', color: '#ff6a4a', glow: '255,106,74', dmg: 3 },
+    { id: 'tough', name: 'IRONHIDE', color: '#9be37a', glow: '155,227,122', hp: 1.8 },
+    { id: 'gilded', name: 'GILDED', color: '#f2c14e', glow: '242,193,78', gold: true },
+    { id: 'frenzied', name: 'FRENZIED', color: '#ff7ad9', glow: '255,122,217', spd: 1.2, cd: 0.5 }
+  ];
+  function makeElite(m, affix) {
+    const a = affix || ELITE_AFFIXES[Math.floor(Math.random() * ELITE_AFFIXES.length)];
+    m.elite = a;
+    m.maxHp = m.hp = Math.ceil(m.T.hp * 1.7 * (a.hp || 1));
+  }
+  function rollElite(m) {
+    if (m.T.boss || m.summoned || m.elite) return;
+    const ch = 0.07 + (bloodMoon ? 0.25 : 0) + Math.min(0.06, luckValue() * 0.03) + (questChapter() - 1) * 0.02;
+    if (Math.random() < ch) makeElite(m);
+  }
+  function drawEliteAura(m) {
+    if (!m.elite || m.dead || m.dormant) return;
+    const T = m.T, [anim, frame] = mobFrame(m), img = mobSheet(T, anim);
+    if (!imgReady(img)) return;
+    const sc = T.scale * ELITE_SCALE, w = T.fw * sc, h = T.fh * sc;
+    const flip = T.faceLeft ? m.dir > 0 : m.dir < 0;
+    mobFlashCanvas.width = T.fw; mobFlashCanvas.height = T.fh;
+    mobFlashCtx.clearRect(0, 0, T.fw, T.fh);
+    mobFlashCtx.drawImage(img, frame * T.fw, 0, T.fw, T.fh, 0, 0, T.fw, T.fh);
+    mobFlashCtx.globalCompositeOperation = 'source-in';
+    mobFlashCtx.fillStyle = m.elite.color; mobFlashCtx.fillRect(0, 0, T.fw, T.fh);
+    mobFlashCtx.globalCompositeOperation = 'source-over';
+    ctx.save();
+    ctx.globalAlpha = 0.55 + Math.sin(time * 6 + m.x) * 0.2;
+    ctx.translate(Math.round(m.x), Math.round(m.y));
+    if (flip) ctx.scale(-1, 1);
+    [[-1, 0], [1, 0], [0, -1], [0, 1]].forEach(([ox, oy]) => ctx.drawImage(mobFlashCanvas, -T.ax * sc + ox, -T.ay * sc + oy, w, h));
+    ctx.restore();
+    ctx.fillStyle = m.elite.color;
+    for (let k = 0; k < 4; k++) {
+      const px = m.x + Math.sin(time * 2.2 + k * 2.1 + m.x) * T.width * 0.7;
+      const py = m.y - ((time * 26 + k * 17) % (T.bodyH + 14));
+      ctx.globalAlpha = 0.8; ctx.fillRect(Math.round(px), Math.round(py), 1, 1 + (k % 2));
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawEliteTag(m) {
+    if (!m.elite || m.dead || m.dormant) return;
+    const label = m.elite.name + ' ' + m.T.name.toUpperCase();
+    const y = Math.round(mobTop(m) - 12);
+    ctx.font = 'bold 5px monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#0a080d'; ctx.fillText(label, Math.round(m.x) + 1, y + 1);
+    ctx.fillStyle = m.elite.color; ctx.fillText(label, Math.round(m.x), y);
+    ctx.fillRect(Math.round(m.x) - 1, y - 8 + Math.round(Math.sin(time * 4) * 1), 2, 2);
+    ctx.textAlign = 'left';
+  }
+
+  // ---- Combat hooks ----
+  function onCrit(m, f) {
+    combatFx.push({ kind: 'ring', x: m.x, y: mobTop(m) + m.T.bodyH * 0.4, life: 0.22, max: 0.22, vx: 0, vy: 0 });
+    addDamageNumber(m.x, mobTop(m) - 20, 'CRIT', '#ffb347');
+    if (hasRelic('stormrune')) {
+      const targets = sideMobs.filter(o => !o.dead && !o.dormant && Math.abs(o.x - m.x) < 110).slice(0, 3);
+      targets.forEach((o, k) => setTimeout(() => {
+        if (o.dead) return;
+        lightningAt(o.x, o.y);
+        damageMob(o, 3, o.x < sidePlayer.x ? -1 : 1, 60, true, false);
+      }, 60 + k * 90));
+    }
+  }
+  function lightningAt(x, y) {
+    const pts = []; let px = x + (Math.random() - 0.5) * 20;
+    for (let yy = -10; yy < y; yy += 12) { pts.push([px, yy]); px += (Math.random() - 0.5) * 14; }
+    pts.push([x, y]);
+    fortuneFx.push({ kind: 'bolt', x, y, pts, life: 0.28, max: 0.28 });
+    flashUntil = Math.max(flashUntil, time + 0.05);
+    screenShake = Math.max(screenShake, 3);
+    sfx('clash', 0.8, 0.6); sfx('hitBig', 0.6, 1.3);
+    spawnSparks(x, y - 4, 1, 8, ['#ffffff', '#ffe86b', '#8fd8ff']);
+  }
+  function fortuneOnKill(m, dropY) {
+    const T = m.T;
+    const heal = (hasRelic('nightthorn') ? 2 : 0) + (stats.thirst || 0);
+    if (heal && stats.health > 0) {
+      stats.health = Math.min(stats.maxHealth, stats.health + heal);
+      addDamageNumber(sidePlayer.x + 8, sidePlayer.y - 70, '+' + heal, '#ff6a8a');
+    }
+    if (m.elite) {
+      spawnSparks(m.x, m.y - T.bodyH * 0.5, 1, 14, [m.elite.color, '#ffffff', m.elite.color]);
+      spawnSparks(m.x, m.y - T.bodyH * 0.5, -1, 14, [m.elite.color, '#ffffff', m.elite.color]);
+      combatFx.push({ kind: 'ring', x: m.x, y: m.y - T.bodyH * 0.5, life: 0.35, max: 0.35, vx: 0, vy: 0 });
+      addDamageNumber(m.x, mobTop(m) - 22, 'ELITE SLAIN', m.elite.color);
+      stats.elites = (stats.elites || 0) + 1;
+    }
+    const chance = T.boss ? 1 : m.elite ? 0.3 + (m.elite.gold ? 0.25 : 0) : 0.025;
+    if (Math.random() < chance + luckValue() * 0.02) {
+      dropRelic(m.x, dropY, rollRarity(T.boss ? 0.8 : m.elite ? 0.4 : 0, T.boss ? 'rare' : 'common'));
+    }
+  }
+  function phoenixRevive() {
+    if (!hasRelic('phoenix') || fortune.phoenixUsed) return false;
+    fortune.phoenixUsed = true;
+    stats.health = Math.ceil(stats.maxHealth * 0.5);
+    sidePlayer.invulnTime = 2.2;
+    for (let i = 0; i < 3; i++) spawnSparks(sidePlayer.x, sidePlayer.y - 24, i % 2 ? 1 : -1, 14, ['#ff6a2a', '#ffc94a', '#fff6d0']);
+    combatFx.push({ kind: 'ring', x: sidePlayer.x, y: sidePlayer.y - 24, life: 0.5, max: 0.5, vx: 0, vy: 0 });
+    fortuneFx.push({ kind: 'phoenix', x: sidePlayer.x, y: sidePlayer.y, life: 1.2, max: 1.2 });
+    flashUntil = time + 0.15; hitStop = 0.25; screenShake = 6;
+    sfx('fire', 0.9); sfx('victory', 0.5); padRumble(1, 1, 500);
+    return true;
+  }
+  function onPerfectDodge() {
+    if (!hasRelic('hourglass')) return;
+    if (time > witchUntil) { addDamageNumber(sidePlayer.x, sidePlayer.y - 66, 'TIME SLOWS', '#ffe3a1'); sfx('magic', 0.8, 0.5); }
+    witchUntil = time + 1.8;
+  }
+  function emberRoll(r) {
+    if (!hasRelic('emberheart')) return;
+    r.burned = r.burned || new Set();
+    sideMobs.forEach(m => {
+      if (m.dead || m.dormant || r.burned.has(m)) return;
+      if (Math.abs(m.x - sidePlayer.x) > m.T.width / 2 + 10) return;
+      if (m.y < sidePlayer.y - 46 || mobTop(m) > sidePlayer.y + 4) return;
+      r.burned.add(m);
+      spawnSparks(m.x, m.y - m.T.bodyH * 0.4, r.dir, 10, ['#ff6a2a', '#ffb347', '#fff6d0']);
+      damageMob(m, 2, r.dir, 40, false, false);
+    });
+    if (Math.random() < 0.7) combatFx.push({ kind: 'spark', x: sidePlayer.x - r.dir * 6, y: sidePlayer.y - 3 - Math.random() * 8, vx: -r.dir * 20, vy: -40, color: Math.random() < 0.5 ? '#ff6a2a' : '#ffc94a', life: 0.35, max: 0.35 });
+  }
+  function tryAirJump() {
+    if (!hasRelic('crowquill') || sidePlayer.airJumped || sidePlayer.onGround) return false;
+    sidePlayer.airJumped = true;
+    sidePlayer.vy = -262;
+    for (let i = 0; i < 8; i++) combatFx.push({ kind: 'spark', x: sidePlayer.x + (Math.random() - 0.5) * 14, y: sidePlayer.y - 2, vx: (Math.random() - 0.5) * 90, vy: 20 + Math.random() * 40, color: i % 2 ? '#a89ee0' : '#3a3452', life: 0.45, max: 0.45 });
+    combatFx.push({ kind: 'ring', x: sidePlayer.x, y: sidePlayer.y - 2, life: 0.2, max: 0.2, vx: 0, vy: 0 });
+    sfx('swoosh', 0.6, 1.4); sfx('cloth', 0.5, 1.5);
+    return true;
+  }
+
+  // ---- Treasure chests (re-rolled every time you rest at a fire) ----
+  const CHEST_SPOTS = { forest: [1150, 2250, 3200], hollow: [1050, 1500, 2350], pass: [1050, 2150, 2800, 3450], gloam: [980, 1650, 2750, 3500] };
+  const chestRolls = {};
+  function rollChests(scene) {
+    chestRolls[scene] = (CHEST_SPOTS[scene] || []).filter(() => Math.random() < 0.6).map(x => {
+      const rarity = rollRarity();
+      return { x: x + Math.round((Math.random() - 0.5) * 40), rarity, mimic: rarity !== 'legend' && Math.random() < 0.12, open: false, t: 0, looted: false };
+    });
+  }
+  function sceneChests() { if (!REGIONS[platformScene]) return []; if (!chestRolls[platformScene]) rollChests(platformScene); return chestRolls[platformScene]; }
+  function nearChest() { return sceneChests().find(c => !c.open && Math.abs(sidePlayer.x - c.x) < 22); }
+  function openChest(c) {
+    c.open = true; c.t = time;
+    if (c.mimic) {
+      sfx('roar', 0.8, 1.5); sfx('squish', 0.8); screenShake = 5; padRumble(0.8, 0.8, 300); hitStop = 0.12;
+      notice = 'MIMIC! The chest was hungry.'; noticeUntil = time + 2.4;
+      spawnSparks(c.x, SIDE_GROUND_Y - 10, 1, 10, ['#c8324a', '#ff8090', '#ffffff']);
+      if (Math.abs(sidePlayer.x - c.x) < 28 && canHitPlayer()) hurtSidePlayer(3, sidePlayer.x < c.x ? -1 : 1, 'The mimic');
+      const types = Array.from(new Set((SCENE_MOBS[platformScene] || []).map(s => s[0]))).filter(t => !MOB_TYPES[t].riser);
+      [-56, 56].forEach((off, k) => {
+        const type = types[Math.floor(Math.random() * types.length)];
+        const g = makeMob(type, clamp(c.x + off, 40, sideWorldWidth() - 40), 70, k);
+        makeElite(g, ELITE_AFFIXES[3]); g.respawn = Infinity; g.flash = 0.3; g.attackCooldown = 0.9;
+        sideMobs.push(g);
+        spawnSparks(g.x, SIDE_GROUND_Y - 20, k ? 1 : -1, 12, ['#f2c14e', '#ffffff']);
+      });
+      return;
+    }
+    c.lootAt = time + 0.45;
+    sfx('latch'); sfx('creak', 0.6, 1.3);
+    if (c.rarity === 'legend') { notice = 'A LEGENDARY CHEST!'; noticeUntil = time + 2; }
+  }
+  function dropChestLoot(c) {
+    c.looted = true;
+    const R = { common: [6, 12, 0.12], rare: [12, 22, 0.38], epic: [24, 40, 0.78], legend: [40, 70, 1] }[c.rarity];
+    const y = SIDE_GROUND_Y - 16;
+    const coins = Math.round((R[0] + Math.random() * (R[1] - R[0])) * (hasRelic('giltooth') ? 1.6 : 1));
+    for (let i = 0; i < coins; i++) pickups.push({ type: 'coin', amount: 1, x: c.x, y, vx: (Math.random() - 0.5) * 170, vy: -190 - Math.random() * 120, age: Math.random() * 0.2 });
+    const items = { common: ['berries', 'bread'], rare: ['tonic', 'bread'], epic: ['tonic', 'tonic', 'bread'], legend: ['tonic', 'tonic', 'tonic'] }[c.rarity];
+    items.forEach((it, k) => { if (c.rarity !== 'common' || Math.random() < 0.6) pickups.push({ type: it, amount: 1, x: c.x, y, vx: (k % 2 ? -1 : 1) * (30 + k * 25), vy: -240, age: 0 }); });
+    if (Math.random() < R[2] + luckValue() * 0.05) dropRelic(c.x, y - 4, rollRarity(c.rarity === 'legend' ? 1 : c.rarity === 'epic' ? 0.5 : 0, c.rarity === 'legend' ? 'epic' : c.rarity === 'epic' ? 'rare' : 'common'));
+    screenShake = Math.max(screenShake, c.rarity === 'legend' ? 5 : c.rarity === 'epic' ? 3 : 1.5);
+    spawnSparks(c.x, y, 1, 10, [RARITY[c.rarity].color, '#ffffff']);
+    spawnSparks(c.x, y, -1, 10, [RARITY[c.rarity].color, '#ffffff']);
+    sfx(c.rarity === 'epic' || c.rarity === 'legend' ? 'victory' : 'coins', 0.7);
+    stats.chests = (stats.chests || 0) + 1;
+  }
+  const CHEST_BAND = { common: ['#6f7280', '#b9bcc8'], rare: ['#2f5fa8', '#8fc4ff'], epic: ['#6a2fa0', '#d9a8ff'], legend: ['#a8741a', '#ffe08a'] };
+  function drawChest(c) {
+    const x = Math.round(c.x), gy = SIDE_GROUND_Y, [band, bandHi] = CHEST_BAND[c.rarity], R = RARITY[c.rarity];
+    const age = c.open ? time - c.t : 0;
+    // Glow and beam.
+    if (!c.open && (c.rarity === 'epic' || c.rarity === 'legend')) {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(x, gy - 8, 2, x, gy - 8, 30);
+      g.addColorStop(0, 'rgba(' + R.glow + ',' + (0.25 + Math.sin(time * 3) * 0.08) + ')'); g.addColorStop(1, 'rgba(' + R.glow + ',0)');
+      ctx.fillStyle = g; ctx.fillRect(x - 30, gy - 38, 60, 60); ctx.restore();
+    }
+    if (c.open && !c.mimic && age < 2.2) {
+      const a = age < 0.45 ? age / 0.45 : Math.max(0, 1 - (age - 0.45) / 1.75);
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      const bw = 8 + age * 6;
+      const g = ctx.createLinearGradient(0, gy - 160, 0, gy);
+      g.addColorStop(0, 'rgba(' + R.glow + ',0)'); g.addColorStop(1, 'rgba(' + R.glow + ',' + 0.55 * a + ')');
+      ctx.fillStyle = g; ctx.fillRect(x - bw / 2, gy - 160, bw, 152);
+      ctx.fillStyle = 'rgba(255,255,255,' + 0.5 * a + ')'; ctx.fillRect(x - 1, gy - 150, 2, 142);
+      ctx.restore();
+    }
+    // Mimic: a tiny tremble now and then gives it away.
+    let jx = 0, jy = 0;
+    if (c.mimic && !c.open && Math.sin(time * 1.3 + c.x) > 0.97) jx = Math.round(Math.sin(time * 60));
+    if (c.mimic && c.open) jy = -Math.round(Math.abs(Math.sin(age * 9)) * 4 * Math.max(0, 1 - age / 1.6));
+    const bx = x - 9 + jx, by = gy - 12 + jy;
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(x - 10, gy - 1, 20, 2);
+    // Body.
+    ctx.fillStyle = '#1a0f0a'; ctx.fillRect(bx - 1, by + 4, 20, 9);
+    ctx.fillStyle = '#6b4226'; ctx.fillRect(bx, by + 5, 18, 7);
+    ctx.fillStyle = '#8a5a34'; ctx.fillRect(bx, by + 5, 18, 1);
+    ctx.fillStyle = '#3a2414'; ctx.fillRect(bx + 5, by + 6, 1, 6); ctx.fillRect(bx + 12, by + 6, 1, 6);
+    ctx.fillStyle = band; ctx.fillRect(bx, by + 5, 2, 7); ctx.fillRect(bx + 16, by + 5, 2, 7);
+    ctx.fillStyle = bandHi; ctx.fillRect(bx, by + 5, 1, 7); ctx.fillRect(bx + 16, by + 5, 1, 1);
+    if (!c.open) {
+      // Closed lid.
+      ctx.fillStyle = '#1a0f0a'; ctx.fillRect(bx - 1, by - 1, 20, 7);
+      ctx.fillStyle = '#7a4c2c'; ctx.fillRect(bx, by, 18, 5);
+      ctx.fillStyle = '#9a6a40'; ctx.fillRect(bx + 1, by, 16, 1);
+      ctx.fillStyle = band; ctx.fillRect(bx, by, 2, 5); ctx.fillRect(bx + 16, by, 2, 5); ctx.fillRect(bx, by + 4, 18, 1);
+      ctx.fillStyle = bandHi; ctx.fillRect(bx + 7, by + 3, 4, 4); ctx.fillStyle = '#1a0f0a'; ctx.fillRect(bx + 8, by + 5, 2, 1);
+      if (Math.floor(time * 2 + c.x) % 5 === 0) { ctx.fillStyle = '#ffffff'; ctx.fillRect(bx + 14 - Math.floor((time * 10) % 4), by + 1, 1, 1); }
+    } else if (c.mimic) {
+      // Gaping mouth, teeth and tongue.
+      const open = Math.min(1, age * 5);
+      const ly = by - 1 - Math.round(open * 6);
+      ctx.fillStyle = '#3a0610'; ctx.fillRect(bx, ly + 5, 18, by + 5 - (ly + 5));
+      ctx.fillStyle = '#c8324a'; ctx.fillRect(bx + 5, by + 2, 8, 3);
+      ctx.fillStyle = '#fff6e6';
+      for (let t = 0; t < 4; t++) { ctx.fillRect(bx + 2 + t * 4, by + 4, 2, 2); ctx.fillRect(bx + 3 + t * 4, ly + 5, 2, 2); }
+      ctx.fillStyle = '#1a0f0a'; ctx.fillRect(bx - 1, ly - 1, 20, 7);
+      ctx.fillStyle = '#7a4c2c'; ctx.fillRect(bx, ly, 18, 5);
+      ctx.fillStyle = band; ctx.fillRect(bx, ly, 2, 5); ctx.fillRect(bx + 16, ly, 2, 5);
+      ctx.fillStyle = Math.floor(time * 6) % 2 ? '#ff3a3a' : '#ffcc40'; ctx.fillRect(bx + 5, ly + 2, 2, 1); ctx.fillRect(bx + 11, ly + 2, 2, 1);
+    } else {
+      // Lid tipped back.
+      ctx.fillStyle = '#1a0f0a'; ctx.fillRect(bx - 1, by - 5, 20, 6);
+      ctx.fillStyle = '#5a361e'; ctx.fillRect(bx, by - 4, 18, 4);
+      ctx.fillStyle = band; ctx.fillRect(bx, by - 4, 2, 4); ctx.fillRect(bx + 16, by - 4, 2, 4);
+      ctx.fillStyle = c.looted ? '#2a1a12' : bandHi; ctx.fillRect(bx + 2, by + 4, 14, 2);
+    }
+  }
+  function drawChests() { sceneChests().forEach(drawChest); }
+
+  // ---- Fortune fx (lightning, phoenix) ----
+  function updateFortune(dt) {
+    for (let i = fortuneFx.length - 1; i >= 0; i--) { fortuneFx[i].life -= dt; if (fortuneFx[i].life <= 0) fortuneFx.splice(i, 1); }
+    sceneChests().forEach(c => { if (c.open && !c.mimic && !c.looted && time >= c.lootAt) dropChestLoot(c); });
+  }
+  function drawFortuneFx() {
+    if (!fortuneFx.length) return;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    fortuneFx.forEach(f => {
+      const a = Math.max(0, f.life / f.max);
+      if (f.kind === 'bolt') {
+        [[5, 'rgba(143,216,255,' + 0.35 * a + ')'], [2, 'rgba(255,240,170,' + a + ')'], [1, 'rgba(255,255,255,' + a + ')']].forEach(([lw, col]) => {
+          ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath();
+          f.pts.forEach(([px, py], k) => (k ? ctx.lineTo(px, py) : ctx.moveTo(px, py))); ctx.stroke();
+        });
+        const g = ctx.createRadialGradient(f.x, f.y, 1, f.x, f.y, 28);
+        g.addColorStop(0, 'rgba(255,240,170,' + 0.6 * a + ')'); g.addColorStop(1, 'rgba(255,240,170,0)');
+        ctx.fillStyle = g; ctx.fillRect(f.x - 28, f.y - 28, 56, 56);
+      } else if (f.kind === 'phoenix') {
+        const p = 1 - a, wing = 30 + p * 40, y = f.y - 30 - p * 30;
+        ctx.globalAlpha = a;
+        ctx.fillStyle = '#ff6a2a';
+        for (let s = -1; s <= 1; s += 2) {
+          ctx.beginPath(); ctx.moveTo(f.x, y);
+          ctx.quadraticCurveTo(f.x + s * wing * 0.6, y - 26, f.x + s * wing, y - 6);
+          ctx.quadraticCurveTo(f.x + s * wing * 0.5, y - 4, f.x, y + 8); ctx.fill();
+        }
+        ctx.fillStyle = '#ffe08a'; ctx.fillRect(f.x - 2, y - 8, 4, 18);
+        ctx.globalAlpha = 1;
+      }
+    });
+    ctx.restore();
+  }
+
+  // ---- Blood Moon ----
+  function maybeBloodMoon(chance) {
+    if (bloodMoon || !REGIONS[platformScene] || Math.random() >= chance) return;
+    startBloodMoon();
+  }
+  function startBloodMoon() {
+    bloodMoon = true; bloodMoonAt = time;
+    sideMobs.forEach(m => { if (!m.dead && Math.random() < 0.25) rollElite(m); });
+    sfx('roar', 0.8, 0.55); sfx('demon', 0.4, 0.8); screenShake = 5; padRumble(0.7, 0.9, 600);
+  }
+  function drawBloodMoonOverlay() {
+    const W = canvas.width, H = canvas.height;
+    if (bloodMoon) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = 'rgba(255,120,120,1)'; ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'source-over';
+      const g = ctx.createLinearGradient(0, 0, 0, 120);
+      g.addColorStop(0, 'rgba(120,0,16,.4)'); g.addColorStop(1, 'rgba(120,0,16,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, 120);
+      for (let i = 0; i < 22; i++) {
+        const x = (i * 53 + time * 9 * (1 + i % 3)) % W, y = H - ((i * 37 + time * 16 * (1 + i % 2)) % H);
+        ctx.fillStyle = i % 3 ? 'rgba(255,70,70,.55)' : 'rgba(255,170,150,.5)'; ctx.fillRect(Math.round(x), Math.round(y), 1, i % 4 ? 1 : 2);
+      }
+      ctx.restore();
+      const t = time - bloodMoonAt;
+      if (t < 4) {
+        const a = t < 0.4 ? t / 0.4 : t > 3.2 ? (4 - t) / 0.8 : 1;
+        ctx.save(); ctx.globalAlpha = a;
+        ctx.fillStyle = 'rgba(20,0,4,.7)'; ctx.fillRect(0, 64, W, 50);
+        ctx.fillStyle = '#c8324a'; ctx.fillRect(0, 64, W, 1); ctx.fillRect(0, 113, W, 1);
+        // The red moon swells behind the words.
+        const r = 14 + Math.min(1, t * 2) * 6;
+        const mg = ctx.createRadialGradient(160, 88, 2, 160, 88, r * 2.2);
+        mg.addColorStop(0, 'rgba(255,60,70,.5)'); mg.addColorStop(1, 'rgba(255,60,70,0)');
+        ctx.fillStyle = mg; ctx.fillRect(160 - r * 2.2, 88 - r * 2.2, r * 4.4, r * 4.4);
+        const text = 'THE BLOOD MOON RISES';
+        ctx.font = 'bold 13px monospace'; ctx.textAlign = 'left';
+        const tw = ctx.measureText(text).width; let cx = 160 - tw / 2;
+        for (let i = 0; i < text.length; i++) {
+          const ch = text[i], cw = ctx.measureText(ch).width, d = Math.max(0, Math.min(1, (t - i * 0.035) * 4));
+          const dy = (1 - d) * -14;
+          ctx.globalAlpha = a * d;
+          ctx.fillStyle = '#2a0006'; ctx.fillText(ch, cx + 1, 89 + dy + 1);
+          ctx.fillStyle = Math.floor(time * 10 + i) % 9 === 0 ? '#ffd0d0' : '#ff3a4a'; ctx.fillText(ch, cx, 89 + dy);
+          cx += cw;
+        }
+        ctx.globalAlpha = a * Math.min(1, Math.max(0, t - 0.9) * 2);
+        ctx.font = '6px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#f3c6c6';
+        ctx.fillText('ELITES HUNT  -  DOUBLE XP  -  RICHER LOOT  -  REST TO END IT', 160, 104);
+        ctx.restore();
+      }
+    }
+    if (time < witchUntil) {
+      const a = Math.min(1, (witchUntil - time) * 2, 1);
+      ctx.save();
+      ctx.fillStyle = 'rgba(60,110,200,' + 0.16 * a + ')'; ctx.fillRect(0, 0, W, H);
+      const vg = ctx.createRadialGradient(160, 120, 70, 160, 120, 210);
+      vg.addColorStop(0, 'rgba(20,30,80,0)'); vg.addColorStop(1, 'rgba(20,30,80,' + 0.5 * a + ')');
+      ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+  }
+  function drawFortuneHUD() {
+    // Equipped relics next to the quick slot; the Blood Moon marker after them.
+    const n = fortune.slots;
+    for (let i = 0; i < n; i++) {
+      const x = 167 + i * 12, y = 4, id = fortune.equipped[i];
+      ctx.fillStyle = 'rgba(9,10,20,.8)'; ctx.fillRect(x, y, 11, 11);
+      ctx.fillStyle = id ? RARITY[RELICS[id].rarity].color : '#3a3042'; ctx.fillRect(x, y + 10, 11, 1);
+      if (id) {
+        drawRelicIcon(id, x + 1.5, y + 1, 1);
+        if (id === 'phoenix' && fortune.phoenixUsed) { ctx.fillStyle = 'rgba(9,10,20,.65)'; ctx.fillRect(x, y, 11, 10); }
+      }
+    }
+    if (bloodMoon) {
+      const x = 167 + n * 12 + 6, y = 9;
+      ctx.fillStyle = 'rgba(255,40,60,' + (0.25 + Math.sin(time * 3) * 0.1) + ')'; ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#c8324a'; ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff7080'; ctx.fillRect(x - 2, y - 2, 2, 1);
+    }
+  }
+
+  // ---- Level-up blessings: pick 1 of 3 random cards ----
+  const PERKS = [
+    { id: 'vigor', name: 'VIGOR', rarity: 'common', icon: 'heart', pal: ['#2a0a0e', '#e2584f', '#ff9a90', '#fff'], desc: '+6 max HP and a full heal.', give: () => { stats.maxHealth += 6; stats.health = stats.maxHealth; } },
+    { id: 'might', name: 'MIGHT', rarity: 'common', icon: 'blade', pal: ['#1a1410', '#d6b477', '#fff1c4', '#8a5a34'], desc: '+3 attack.', give: () => { stats.perkAtk = (stats.perkAtk || 0) + 3; } },
+    { id: 'bulwark', name: 'BULWARK', rarity: 'common', icon: 'shield', pal: ['#14161e', '#6f7280', '#b9bcc8', '#5fa8ff'], desc: '+1 defense.', give: () => { stats.perkDef = (stats.perkDef || 0) + 1; } },
+    { id: 'endure', name: 'ENDURANCE', rarity: 'common', icon: 'feather', pal: ['#0e2410', '#3f9a3a', '#9be37a', '#fff'], desc: '+20 max stamina.', give: () => { stats.maxStamina += 20; stats.stamina = stats.maxStamina; } },
+    { id: 'gold', name: 'GOLD RUSH', rarity: 'common', icon: 'bag', pal: ['#3a2410', '#8a5a34', '#f2c14e', '#fff1a8'], desc: '+45 coins, right now.', give: () => { inventory.coins = (inventory.coins || 0) + 45; sfx('coins'); } },
+    { id: 'keen', name: 'KEEN EYE', rarity: 'rare', icon: 'eye', pal: ['#1a1410', '#a8741a', '#ffe08a', '#1a0408'], desc: '+5% critical hit chance.', give: () => { stats.critUp = (stats.critUp || 0) + 1; }, max: () => (stats.critUp || 0) < 6 },
+    { id: 'luck', name: 'FORTUNE', rarity: 'rare', icon: 'clover', pal: ['#0e2410', '#3f9a3a', '#9be37a', '#f2c14e'], desc: 'Luck up. Rarer chests, more relics.', give: () => { stats.luck = (stats.luck || 0) + 1; }, max: () => (stats.luck || 0) < 5 },
+    { id: 'thirst', name: 'BLOODTHIRST', rarity: 'rare', icon: 'rose', pal: ['#1a0a12', '#a0244a', '#ff6a8a', '#3f9a3a'], desc: 'Heal 1 HP for every kill.', give: () => { stats.thirst = (stats.thirst || 0) + 1; }, max: () => (stats.thirst || 0) < 3 },
+    { id: 'moon', name: 'MOONBORN', rarity: 'rare', icon: 'moon', pal: ['#0a1430', '#7fb8ff', '#e6f6ff', '#fff'], desc: 'Moonblade charges 20% faster.', give: () => { stats.chargeUp = (stats.chargeUp || 0) + 1; }, max: () => (stats.chargeUp || 0) < 3 },
+    { id: 'slot', name: 'RELIC SLOT', rarity: 'epic', icon: 'star', pal: ['#2a1a40', '#c77dff', '#f0d8ff', '#fff'], desc: 'Wear one more relic.', give: () => { fortune.slots = Math.min(4, fortune.slots + 1); }, max: () => fortune.slots < 4 },
+    { id: 'gamble', name: "GAMBLER'S COIN", rarity: 'epic', icon: 'coin', pal: ['#2a1a40', '#c77dff', '#f0d8ff', '#fff'], desc: 'Receive a random relic now.', give: () => { const id = randomRelic(rollRarity(0.6, 'rare')); if (id) setTimeout(() => grantRelic(id), 450); else inventory.coins = (inventory.coins || 0) + 80; }, max: () => fortune.owned.length < RELIC_ORDER.length }
+  ];
+  function rollPerks() {
+    const L = luckValue(), w = { common: 55, rare: 33 * (1 + L * 0.5), epic: 12 * (1 + L) };
+    const pool = PERKS.filter(p => !p.max || p.max()), out = [];
+    while (out.length < 3 && pool.length) {
+      let roll = Math.random() * pool.reduce((s, p) => s + w[p.rarity], 0), pick = pool[0];
+      for (const p of pool) { roll -= w[p.rarity]; if (roll <= 0) { pick = p; break; } }
+      out.push(pick); pool.splice(pool.indexOf(pick), 1);
+    }
+    return out;
+  }
+  function openPerks() {
+    pendingPerks--;
+    perkOffer = { cards: rollPerks(), sel: 1, t: time, picked: -1, pickT: 0, level: stats.level - pendingPerks };
+    openPanel('perk');
+    sfx('bookOpen', 0.7); sfx('magic', 0.5, 1.2);
+  }
+  function pickPerk() {
+    const o = perkOffer;
+    if (!o || o.picked >= 0 || time - o.t < 0.9) return;
+    o.picked = o.sel; o.pickT = time;
+    o.cards[o.sel].give();
+    sfx('level', 0.6); sfx('uiConfirm'); padRumble(0.4, 0.6, 180);
+    setTimeout(() => { if (panel === 'perk') { panel = null; perkOffer = null; if (onSave) onSave(getSaveData()); } }, 900);
+  }
+  function cardRect(i) { return { x: 160 + (i - 1) * 96 - 42, y: 64, w: 84, h: 116 }; }
+  function drawPerkPanel() {
+    const o = perkOffer; if (!o) { panel = null; return; }
+    const t = time - o.t, W = canvas.width;
+    ctx.save();
+    ctx.fillStyle = 'rgba(4,4,10,' + Math.min(0.86, t * 3) + ')'; ctx.fillRect(0, 0, W, canvas.height);
+    drawRays(160, 120, '242,193,78', Math.min(1, t * 2) * 0.8, 16, 220, 0.12);
+    const ta = Math.min(1, t * 3);
+    ctx.globalAlpha = ta;
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 15px monospace'; ctx.fillStyle = '#2a1a12'; ctx.fillText('LEVEL ' + o.level, 161, 32 + (1 - ta) * -10);
+    ctx.fillStyle = '#ffe3a1'; ctx.fillText('LEVEL ' + o.level, 160, 31 + (1 - ta) * -10);
+    ctx.font = '7px monospace'; ctx.fillStyle = '#d9cdb8'; ctx.fillText('THE MOON OFFERS A BLESSING. CHOOSE ONE.', 160, 45);
+    ctx.fillStyle = '#d6b477'; ctx.fillRect(90, 50, 140, 1);
+    ctx.globalAlpha = 1;
+    o.cards.forEach((p, i) => {
+      const r = cardRect(i), start = 0.3 + i * 0.16, k = clamp((t - start) / 0.4, 0, 1);
+      if (k <= 0) return;
+      const sel = i === o.sel && o.picked < 0, R = RARITY[p.rarity];
+      let lift = sel ? -6 + Math.sin(time * 4) * 1.5 : 0, alpha = 1, grow = 1;
+      if (o.picked >= 0) {
+        const pt = time - o.pickT;
+        if (i === o.picked) { grow = 1 + Math.min(0.12, pt * 0.4); lift = -8; }
+        else { alpha = Math.max(0, 1 - pt * 3); lift = pt * 60; }
+      }
+      const flip = Math.abs(Math.cos(k * Math.PI)), front = k >= 0.5;
+      const cx = r.x + r.w / 2, cy = r.y + r.h / 2 + lift + (1 - Math.min(1, k * 2)) * 30;
+      ctx.save(); ctx.globalAlpha = alpha * Math.min(1, k * 3);
+      ctx.translate(cx, cy); ctx.scale(flip * grow, grow);
+      const x = -r.w / 2, y = -r.h / 2;
+      if (sel || i === o.picked) {
+        ctx.fillStyle = 'rgba(' + R.glow + ',' + (0.25 + Math.sin(time * 6) * 0.1) + ')'; ctx.fillRect(x - 4, y - 4, r.w + 8, r.h + 8);
+      }
+      ctx.fillStyle = '#0a080d'; ctx.fillRect(x - 1, y - 1, r.w + 2, r.h + 2);
+      if (!front) {
+        ctx.fillStyle = '#231a2c'; ctx.fillRect(x, y, r.w, r.h);
+        ctx.strokeStyle = '#d6b477'; ctx.lineWidth = 1; ctx.strokeRect(x + 3.5, y + 3.5, r.w - 7, r.h - 7);
+        ctx.fillStyle = '#d6b477'; ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#231a2c'; ctx.beginPath(); ctx.arc(5, -3, 12, 0, Math.PI * 2); ctx.fill();
+      } else {
+        const g = ctx.createLinearGradient(0, y, 0, y + r.h);
+        g.addColorStop(0, '#2c2236'); g.addColorStop(1, '#141018');
+        ctx.fillStyle = g; ctx.fillRect(x, y, r.w, r.h);
+        ctx.fillStyle = R.color; ctx.fillRect(x, y, r.w, 2); ctx.fillRect(x, y + r.h - 2, r.w, 2); ctx.fillRect(x, y, 1, r.h); ctx.fillRect(x + r.w - 1, y, 1, r.h);
+        ctx.font = 'bold 5px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = R.color; ctx.fillText(R.name, 0, y + 11);
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        const ig = ctx.createRadialGradient(0, y + 36, 2, 0, y + 36, 24);
+        ig.addColorStop(0, 'rgba(' + R.glow + ',.45)'); ig.addColorStop(1, 'rgba(' + R.glow + ',0)');
+        ctx.fillStyle = ig; ctx.fillRect(-24, y + 12, 48, 48); ctx.restore();
+        drawRelicIcon(null, -16, y + 20 + Math.round(Math.sin(time * 3 + i) * 1.5), 4, false, p.icon, p.pal);
+        ctx.font = 'bold 7px monospace'; ctx.fillStyle = '#fff1c4'; ctx.textAlign = 'center';
+        ctx.fillText(p.name, 0, y + 66);
+        ctx.fillStyle = '#d6b477'; ctx.fillRect(-20, y + 70, 40, 1);
+        wrapText(p.desc, r.w - 12, '6px monospace').slice(0, 4).forEach((ln, j) => { ctx.font = '6px monospace'; ctx.fillStyle = '#d9cdb8'; ctx.fillText(ln, 0, y + 81 + j * 8); });
+      }
+      if (i === o.picked && time - o.pickT < 0.25) { ctx.fillStyle = 'rgba(255,255,255,' + (1 - (time - o.pickT) * 4) + ')'; ctx.fillRect(x, y, r.w, r.h); }
+      ctx.restore();
+    });
+    if (t > 0.9 && o.picked < 0) {
+      ctx.textAlign = 'center'; ctx.font = '6px monospace'; ctx.fillStyle = '#c9bca6';
+      ctx.fillText(inputMode === 'pad' ? '✥ CHOOSE     ✕ TAKE BLESSING' : 'LEFT / RIGHT CHOOSE     E TAKE BLESSING', 160, 204);
+    }
+    ctx.restore();
+  }
+
+  // ---- Relic found ----
+  function drawRelicReveal() {
+    const v = relicReveal; if (!v) { panel = null; return; }
+    const R = RELICS[v.id], RR = RARITY[R.rarity], t = time - v.t, W = canvas.width;
+    ctx.save();
+    ctx.fillStyle = 'rgba(4,4,10,' + Math.min(0.85, t * 3) + ')'; ctx.fillRect(0, 0, W, canvas.height);
+    const pop = Math.min(1, t * 2.4);
+    drawRays(160, 92, RR.glow, pop, 14, 200, 0.3);
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 7px monospace'; ctx.fillStyle = RR.color; ctx.globalAlpha = pop;
+    ctx.fillText('- ' + RR.name + ' RELIC -', 160, 36);
+    ctx.globalAlpha = 1;
+    const s = Math.max(1, Math.round(6 * (t < 0.25 ? 0.6 + t * 1.6 : 1)));
+    const bob = Math.round(Math.sin(time * 2.5) * 2);
+    drawRelicIcon(v.id, 160 - 4 * s, 92 - 4 * s + bob, s);
+    if (t < 0.2) { ctx.fillStyle = 'rgba(255,255,255,' + (1 - t * 5) + ')'; ctx.fillRect(0, 0, W, canvas.height); }
+    const ta = clamp((t - 0.3) * 3, 0, 1);
+    ctx.globalAlpha = ta;
+    ctx.font = 'bold 12px monospace'; ctx.fillStyle = '#1a0e1a'; ctx.fillText(R.name.toUpperCase(), 161, 145);
+    ctx.fillStyle = RR.color; ctx.fillText(R.name.toUpperCase(), 160, 144);
+    ctx.font = 'bold 7px monospace'; ctx.fillStyle = '#fff1c4'; ctx.fillText(R.desc, 160, 157);
+    ctx.font = '6px monospace'; ctx.fillStyle = '#b3a796';
+    wrapText(R.lore, 230, '6px monospace').slice(0, 3).forEach((ln, i) => ctx.fillText(ln, 160, 170 + i * 8));
+    ctx.font = 'bold 6px monospace';
+    ctx.fillStyle = v.equipped ? '#9be37a' : '#ffb347';
+    ctx.fillText(v.equipped ? 'EQUIPPED' : 'RELIC SLOTS FULL - SWAP IN BAG > RELICS', 160, 200);
+    if (t > 0.8) { ctx.font = '6px monospace'; ctx.fillStyle = '#8f8478'; ctx.fillText(inputMode === 'pad' ? '✕ CONTINUE' : 'E CONTINUE', 160, 214); }
+    ctx.restore();
+  }
+
+  // ---- Bram's Fortune Wheel ----
+  const WHEEL_COST = 20;
+  const WHEEL_PRIZES = [
+    { label: '100c', color: '#f2c14e', ink: '#2a1a12', w: 2, give: () => { inventory.coins += 100; sfx('coins'); return 'JACKPOT! 100 coins!'; } },
+    { label: 'NOTHING', color: '#2a2331', ink: '#8f8478', w: 18, give: () => { sfx('uiError'); return 'Nothing. The wheel is a cruel mistress.'; } },
+    { label: 'TONIC x2', color: '#a0244a', ink: '#ffe0e8', w: 12, give: () => { inventory.tonic = (inventory.tonic || 0) + 2; sfx('pickup'); return 'Two Red Tonics. Not bad.'; } },
+    { label: '30c', color: '#d6b477', ink: '#2a1a12', w: 20, give: () => { inventory.coins += 30; sfx('coins'); return '30 coins. You won a little.'; } },
+    { label: 'RELIC', color: '#5fa8ff', ink: '#0a1430', w: 5, give: () => { const id = randomRelic(rollRarity(0.3)); if (!id) { inventory.coins += 60; return 'You own every relic. Have 60 coins.'; } setTimeout(() => grantRelic(id), 500); return 'A RELIC! The wheel smiles on you.'; } },
+    { label: 'BREAD x3', color: '#8a5a34', ink: '#fff1c4', w: 16, give: () => { inventory.bread = (inventory.bread || 0) + 3; sfx('pickup'); return 'Three loaves. Fresh. Mostly.'; } },
+    { label: '60 XP', color: '#3f9a3a', ink: '#eaffd8', w: 14, give: () => { gainXp(60); return '60 experience. Wisdom of the wheel.'; } },
+    { label: 'BLOOD', color: '#5a0610', ink: '#ff8090', w: 8, give: () => { if (bloodMoon) { inventory.coins += 40; return 'The moon is already red. Have 40 coins.'; } setTimeout(startBloodMoon, 300); return 'The BLOOD MOON. Bram goes very pale.'; } }
+  ];
+  function openWheel() {
+    wheel = { angle: wheel ? wheel.angle : 0, spin: null, line: 'Twenty coins a spin. The house always wins, knight.', flash: -10, last: -1 };
+    openPanel('wheel'); sfx('uiOpen');
+  }
+  function spinWheel() {
+    if (!wheel || wheel.spin) return;
+    if ((inventory.coins || 0) < WHEEL_COST) { sfx('uiError'); wheel.line = 'No coin, no spin. Come back richer.'; return; }
+    inventory.coins -= WHEEL_COST; sfx('coin');
+    let roll = Math.random() * WHEEL_PRIZES.reduce((s, p) => s + p.w, 0), idx = 0;
+    for (let i = 0; i < WHEEL_PRIZES.length; i++) { roll -= WHEEL_PRIZES[i].w; if (roll <= 0) { idx = i; break; } }
+    const seg = Math.PI * 2 / WHEEL_PRIZES.length, jitter = (Math.random() - 0.5) * seg * 0.7;
+    const target = -Math.PI / 2 - (idx + 0.5) * seg - jitter;
+    const from = wheel.angle;
+    let delta = ((target - from) % (Math.PI * 2) + Math.PI * 4) % (Math.PI * 2);
+    wheel.spin = { from, to: from + Math.PI * 2 * (5 + Math.floor(Math.random() * 2)) + delta, t0: time, dur: 3.6, idx };
+    wheel.line = 'Round and round she goes...';
+  }
+  function updateWheel() {
+    const s = wheel && wheel.spin; if (!s) return;
+    const k = clamp((time - s.t0) / s.dur, 0, 1), e = 1 - Math.pow(1 - k, 4);
+    wheel.angle = s.from + (s.to - s.from) * e;
+    const seg = Math.PI * 2 / WHEEL_PRIZES.length, cur = Math.floor((wheel.angle + Math.PI / 2) / seg);
+    if (cur !== wheel.last) { wheel.last = cur; sfx('tick', 0.6, 1.2 + Math.random() * 0.2); }
+    if (k >= 1) {
+      wheel.spin = null; wheel.flash = time; wheel.won = s.idx;
+      wheel.line = WHEEL_PRIZES[s.idx].give();
+      if (s.idx === 0 || s.idx === 4) { sfx('victory', 0.7); padRumble(0.6, 0.8, 300); }
+      if (onSave) onSave(getSaveData());
+    }
+  }
+  function drawWheel() {
+    if (!wheel) { panel = null; return; }
+    updateWheel();
+    const W = canvas.width, cx = 160, cy = 120, r = 64, n = WHEEL_PRIZES.length, seg = Math.PI * 2 / n;
+    ctx.save();
+    ctx.fillStyle = 'rgba(4,4,10,.84)'; ctx.fillRect(0, 0, W, canvas.height);
+    drawRays(cx, cy, '242,193,78', 0.6, 16, 200, 0.15);
+    ctx.textAlign = 'center'; ctx.font = 'bold 12px monospace';
+    ctx.fillStyle = '#2a1a12'; ctx.fillText("BRAM'S FORTUNE WHEEL", 161, 25); ctx.fillStyle = '#ffe3a1'; ctx.fillText("BRAM'S FORTUNE WHEEL", 160, 24);
+    ctx.font = '6px monospace'; ctx.fillStyle = '#c9e39a'; ctx.fillText(wheel.line, 160, 36);
+    // Rim and segments.
+    ctx.fillStyle = '#0a080d'; ctx.beginPath(); ctx.arc(cx, cy, r + 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#7a5a22'; ctx.beginPath(); ctx.arc(cx, cy, r + 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#d6b477'; ctx.beginPath(); ctx.arc(cx, cy, r + 4, 0, Math.PI * 2); ctx.fill();
+    WHEEL_PRIZES.forEach((p, i) => {
+      const a0 = wheel.angle + i * seg, a1 = a0 + seg;
+      const win = wheel.won === i && time - wheel.flash < 2 && Math.floor((time - wheel.flash) * 8) % 2 === 0;
+      ctx.fillStyle = win ? '#ffffff' : p.color;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r, a0, a1); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#0a080d'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a0) * r, cy + Math.sin(a0) * r); ctx.stroke();
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(a0 + seg / 2);
+      ctx.font = 'bold 6px monospace'; ctx.textAlign = 'right'; ctx.fillStyle = win ? '#2a1a12' : p.ink;
+      ctx.fillText(p.label, r - 6, 2); ctx.restore();
+    });
+    // Bulbs.
+    for (let i = 0; i < 16; i++) {
+      const a = i * Math.PI / 8, on = (Math.floor(time * (wheel.spin ? 12 : 3)) + i) % 2 === 0;
+      ctx.fillStyle = on ? '#fff6c8' : '#7a5a22';
+      ctx.fillRect(Math.round(cx + Math.cos(a) * (r + 4)) - 1, Math.round(cy + Math.sin(a) * (r + 4)) - 1, 2, 2);
+    }
+    // Hub with a little moon.
+    ctx.fillStyle = '#0a080d'; ctx.beginPath(); ctx.arc(cx, cy, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#d6b477'; ctx.beginPath(); ctx.arc(cx, cy, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff1c4'; ctx.beginPath(); ctx.arc(cx - 1, cy, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#d6b477'; ctx.beginPath(); ctx.arc(cx + 1, cy - 1, 4, 0, Math.PI * 2); ctx.fill();
+    // Pointer at the top, it kicks on every tick.
+    const kick = wheel.spin ? Math.sin(time * 40) * 1.5 : 0;
+    ctx.fillStyle = '#0a080d'; ctx.beginPath(); ctx.moveTo(cx - 7, cy - r - 12); ctx.lineTo(cx + 7, cy - r - 12); ctx.lineTo(cx + kick, cy - r + 4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ff4a3a'; ctx.beginPath(); ctx.moveTo(cx - 5, cy - r - 11); ctx.lineTo(cx + 5, cy - r - 11); ctx.lineTo(cx + kick, cy - r + 2); ctx.closePath(); ctx.fill();
+    // Coins and controls.
+    drawItemIcon('coin', 254, 8, 1);
+    invText(String(inventory.coins || 0), 290, 17, time - wheel.flash < 0.4 ? '#ffffff' : '#ffe3a1', 'bold 7px monospace', 'right');
+    invText(inputMode === 'pad' ? '✕ SPIN (' + WHEEL_COST + 'c)    ○ LEAVE' : 'E SPIN (' + WHEEL_COST + 'c)    ESC LEAVE', 160, 214, '#c9bca6', '6px monospace', 'center');
+    ctx.restore();
+  }
+
+  // ---- Panel input for the fortune screens ----
+  function fortunePanel() { return panel === 'perk' || panel === 'relic' || panel === 'wheel'; }
+  function fortuneInput(act) {
+    if (panel === 'perk') {
+      const o = perkOffer; if (!o || o.picked >= 0) return;
+      if (act === 'left') { o.sel = (o.sel + 2) % 3; sfx('uiMove'); }
+      else if (act === 'right') { o.sel = (o.sel + 1) % 3; sfx('uiMove'); }
+      else if (act === 'ok') pickPerk();
+    } else if (panel === 'relic') {
+      if ((act === 'ok' || act === 'back') && relicReveal && time - relicReveal.t > 0.8) { panel = null; relicReveal = null; sfx('uiConfirm'); }
+    } else if (panel === 'wheel') {
+      if (act === 'ok') spinWheel();
+      else if (act === 'back' && !(wheel && wheel.spin)) { panel = null; openShop(); }
+    }
+  }
+  function fortuneKey(k) {
+    if (k === 'arrowleft' || k === 'a') fortuneInput('left');
+    else if (k === 'arrowright' || k === 'd') fortuneInput('right');
+    else if (k === 'e' || k === 'enter' || k === ' ' || k === 'j') fortuneInput('ok');
+    else if (k === 'escape' || k === 'x' || k === 'backspace' || k === 'i') fortuneInput('back');
+  }
+  function fortunePad(action) {
+    if (action === 'primary' || action === 'attack') fortuneInput('ok');
+    else if (action === 'back' || action === 'inventory') fortuneInput('back');
+  }
+  function fortunePointer(p) {
+    if (panel === 'perk' && perkOffer) {
+      for (let i = 0; i < 3; i++) {
+        const r = cardRect(i);
+        if (p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y - 8 && p.y <= r.y + r.h) { if (perkOffer.sel === i) pickPerk(); else { perkOffer.sel = i; sfx('uiMove'); } return; }
+      }
+    } else fortuneInput('ok');
+  }
+  function maybeOpenPerks() {
+    if (pendingPerks > 0 && !panel && !dialogue && !bossOutro && !(bossFight && (bossFight.cine || bossFight.intro)) && sidePlayer.deadTime <= 0 && !sidePlayer.pray) openPerks();
+  }
+
+  // ---- Bag > RELICS tab ----
+  function relicSlotRect(i) { return { x: 122 + (i % 7) * 26, y: 84 + Math.floor(i / 7) * 26, w: 22, h: 22 }; }
+  function toggleRelic() {
+    const id = RELIC_ORDER[relicSel];
+    if (!fortune.owned.includes(id)) { sfx('uiError'); invShake = time; return; }
+    const at = fortune.equipped.indexOf(id);
+    if (at >= 0) { fortune.equipped.splice(at, 1); sfx('uiBack'); }
+    else if (fortune.equipped.length < fortune.slots) { fortune.equipped.push(id); sfx('armor', 0.6); sfx('magic', 0.4, 1.4); }
+    else { sfx('uiError'); invShake = time; }
+    if (onSave) onSave(getSaveData());
+  }
+  function drawRelicsTab(x, y, w) {
+    invText('EQUIPPED  ' + fortune.equipped.length + '/' + fortune.slots, x + 4, y + 8, '#ffe3a1', 'bold 7px monospace');
+    for (let i = 0; i < 4; i++) {
+      const sx = x + 4 + i * 26, sy = y + 12, id = fortune.equipped[i], locked = i >= fortune.slots;
+      invBox(sx, sy, 22, 22, locked ? '#100c14' : '#231d2a', id ? RARITY[RELICS[id].rarity].color : '#4b3d35');
+      if (locked) { ctx.fillStyle = '#3a3042'; ctx.fillRect(sx + 8, sy + 10, 6, 5); ctx.fillRect(sx + 9, sy + 7, 4, 3); ctx.fillStyle = '#100c14'; ctx.fillRect(sx + 10, sy + 8, 2, 2); }
+      else if (id) drawRelicIcon(id, sx + 3, sy + 3, 2);
+    }
+    invText('CRIT ' + Math.round(critChance() * 100) + '%', x + w - 4, y + 18, '#ffb347', '6px monospace', 'right');
+    invText('LUCK +' + Math.round(luckValue() * 100) + '%', x + w - 4, y + 27, '#9be37a', '6px monospace', 'right');
+    if (bloodMoon) invText('BLOOD MOON', x + w - 4, y + 36, '#ff5a6a', 'bold 6px monospace', 'right');
+    invText('COLLECTION  ' + fortune.owned.length + '/' + RELIC_ORDER.length, x + 4, y + 41, '#b3a796', '6px monospace');
+    RELIC_ORDER.forEach((id, i) => {
+      const r = relicSlotRect(i), owned = fortune.owned.includes(id), eq = fortune.equipped.includes(id);
+      invBox(r.x, r.y, r.w, r.h, eq ? '#2c2433' : '#1d1824', owned ? RARITY[RELICS[id].rarity].color : '#3a3042');
+      drawRelicIcon(id, r.x + 3, r.y + 3, 2, !owned);
+      if (eq) { ctx.fillStyle = '#9be37a'; ctx.fillRect(r.x + r.w - 4, r.y + 1, 3, 3); }
+      if (i === relicSel) invCursor(r.x, r.y, r.w, r.h);
+    });
+    const id = RELIC_ORDER[relicSel], R = RELICS[id], owned = fortune.owned.includes(id);
+    const shake = time - invShake < 0.25 ? Math.round(Math.sin(time * 80) * 2) : 0;
+    invBox(x + 2 + shake, y + 98, w - 4, 70, '#1b1621', '#4b3d35');
+    if (owned) {
+      invText(R.name.toUpperCase(), x + 8 + shake, y + 109, RARITY[R.rarity].color, 'bold 7px monospace');
+      invText(RARITY[R.rarity].name, x + w - 8 + shake, y + 109, RARITY[R.rarity].color, '5px monospace', 'right');
+      invText(R.desc, x + 8 + shake, y + 119, '#fff1c4', '6px monospace');
+      wrapText(R.lore, w - 18, '6px monospace').slice(0, 4).forEach((ln, i) => invText(ln, x + 8 + shake, y + 130 + i * 8, '#a99f9a', '6px monospace'));
+      invText(fortune.equipped.includes(id) ? 'EQUIPPED' : fortune.equipped.length < fortune.slots ? 'READY TO EQUIP' : 'SLOTS FULL', x + w - 8 + shake, y + 164, fortune.equipped.includes(id) ? '#9be37a' : '#8f8478', 'bold 5px monospace', 'right');
+    } else {
+      invText('??? - ' + RARITY[R.rarity].name, x + 8 + shake, y + 109, '#6f6670', 'bold 7px monospace');
+      ['Not yet found. Relics hide in treasure', 'chests and drop from elite monsters,', 'bosses and the Fortune Wheel.'].forEach((ln, i) => invText(ln, x + 8 + shake, y + 122 + i * 9, '#8f8478', '6px monospace'));
+    }
+  }
+
   // ---- Old Bram's shop ----
   const SHOP_ITEMS = [
     { name: 'Camp Bread', icon: 'bread', info: 'Heals 10 HP', price: () => 5, give: () => { inventory.bread = (inventory.bread || 0) + 1; } },
     { name: 'Red Tonic', icon: 'tonic', info: 'Full heal', price: () => 12, give: () => { inventory.tonic = (inventory.tonic || 0) + 1; } },
     { name: 'Whetstone', icon: 'whetstone', info: () => 'Sword ATK +1  (' + (stats.atkUp || 0) + '/3)', price: () => 30 + (stats.atkUp || 0) * 15, can: () => (stats.atkUp || 0) < 3, give: () => { stats.atkUp = (stats.atkUp || 0) + 1; } },
     { name: 'Iron Plating', icon: 'plate', info: () => 'Armor DEF +1  (' + (stats.defUp || 0) + '/3)', price: () => 30 + (stats.defUp || 0) * 15, can: () => (stats.defUp || 0) < 3, give: () => { stats.defUp = (stats.defUp || 0) + 1; } },
+    { name: 'Fortune Wheel', icon: 'coin', info: 'Spin for prizes... or nothing', price: () => WHEEL_COST, wheel: true },
     { name: 'Sell All Loot', icon: 'coin', info: () => sellValue() ? 'Trophies & materials: +' + sellValue() + 'c' : 'Nothing to sell', sell: true },
     { name: 'Leave', icon: null, info: '', leave: true }
   ];
@@ -5031,6 +5874,7 @@ const Overworld = (() => {
   function buyShopItem(i) {
     const it = SHOP_ITEMS[i];
     if (it.leave) { closeCurrentPanel(); sfx('uiClose'); return; }
+    if (it.wheel) { openWheel(); return; }
     if (it.sell) {
       const v = sellValue();
       if (!v) { sfx('uiError'); shopLine = 'Bring me fangs, bones and wisps. I pay fair.'; return; }
@@ -5064,17 +5908,17 @@ const Overworld = (() => {
     drawItemIcon('coin', 222, 30, 1);
     invText(String(inventory.coins || 0), 256, 39, time - shopFlash < 0.3 ? '#ffffff' : '#ffe3a1', 'bold 7px monospace', 'right');
     SHOP_ITEMS.forEach((it, i) => {
-      const ry = 76 + i * 20, sel = i === shopSel;
+      const ry = 74 + i * 18, sel = i === shopSel;
       const price = it.price ? it.price() : 0;
       const locked = it.can && !it.can();
       const poor = it.price && (inventory.coins || 0) < price;
-      invBox(66, ry, 188, 18, sel ? '#2c2433' : '#211b28', sel ? '#d6b477' : '#4b3d35');
-      if (it.icon) drawItemIcon(it.icon, 69, ry + 3, 1);
-      invText(it.name, 86, ry + 8, locked ? '#6f6670' : '#f3e7c9', 'bold 7px monospace');
+      invBox(66, ry, 188, 16, sel ? '#2c2433' : '#211b28', sel ? '#d6b477' : '#4b3d35');
+      if (it.icon) drawItemIcon(it.icon, 69, ry + 2, 1);
+      invText(it.name, 86, ry + 7, locked ? '#6f6670' : '#f3e7c9', 'bold 7px monospace');
       const info = typeof it.info === 'function' ? it.info() : it.info;
-      invText(info, 86, ry + 15, '#8f8478', '5px monospace');
-      if (it.price) invText(locked ? 'MAX' : price + 'c', 248, ry + 11, locked ? '#6f6670' : poor ? '#e2584f' : '#ffe3a1', 'bold 7px monospace', 'right');
-      if (sel) invCursor(66, ry, 188, 18);
+      invText(info, 86, ry + 14, '#8f8478', '5px monospace');
+      if (it.price) invText(locked ? 'MAX' : price + 'c', 248, ry + 10, locked ? '#6f6670' : poor ? '#e2584f' : '#ffe3a1', 'bold 7px monospace', 'right');
+      if (sel) invCursor(66, ry, 188, 16);
     });
     invText(inputMode === 'pad' ? '✥ CHOOSE   ✕ BUY   ○ LEAVE' : 'ARROWS CHOOSE   E BUY   ESC LEAVE', 160, 210, '#8f8478', '6px monospace', 'center');
     ctx.restore();
@@ -5599,6 +6443,8 @@ const Overworld = (() => {
     }
     const fire = fireHere();
     if (fire) return { label: 'REST BY THE FIRE', act: () => restAtFire(fire) };
+    const chest = nearChest();
+    if (chest) return { label: 'OPEN ' + RARITY[chest.rarity].name + ' CHEST', act: () => openChest(chest) };
     if (platformScene === 'forest') {
       if (x < 100) return { label: 'RETURN HOME', act: 'home' };
       if (Math.abs(x - CAMP.bram) < 28) return { label: 'TRADE WITH BRAM', act: openShop };
@@ -5639,6 +6485,9 @@ const Overworld = (() => {
     }
     noticeUntil = time + 2.8;
     sidePlayer.pray = { t: 0 }; sidePlayer.vx = 0;
+    fortune.phoenixUsed = false;
+    Object.keys(chestRolls).forEach(k => delete chestRolls[k]);
+    if (bloodMoon) { bloodMoon = false; notice = 'The blood moon fades. Treasure has returned to the land.'; } else if (story.rested) notice += '  New treasure stirs.';
     sfx('rest'); padRumble(0.1, 0.2, 200);
     restFlash = time;
     if (onSave) onSave(getSaveData());
@@ -5654,6 +6503,7 @@ const Overworld = (() => {
     sidePlayer.roll = null; sidePlayer.charge = null; sidePlayer.atk = null; sidePlayer.pray = null;
     sideCameraX = clamp(sidePlayer.x - canvas.width * 0.43, 0, Math.max(0, sideWorldWidth() - canvas.width));
     pickups.length = 0; bossWaves.length = 0; mobShots.length = 0; groundFires.length = 0; playerWaves.length = 0; ambient.length = 0;
+    if (from !== scene) maybeBloodMoon(questChapter() > 1 || story.bossDefeated ? 0.12 : 0.06);
     loadSceneMobs(scene);
     placeNpcs();
     if (from !== scene) { sfx('creak'); sceneTitle = { text: scene === 'forest' && x > CAMP.start ? "BRAM'S CAMP" : region().name, sub: REGION_SUBS[scene], t: time }; }
@@ -6008,10 +6858,12 @@ const Overworld = (() => {
     FIRES.filter(f => f.scene === 'pass').forEach(f => drawCampfire(f.x));
     drawLoreSpots();
     drawWren();
+    drawChests();
     drawSideMobs();
     drawSidePlayer();
     drawPlayerWaves();
     drawCombatFx();
+    drawFortuneFx();
     drawAmbient();
     ctx.restore();
     const vg = ctx.createRadialGradient(160, 120, 110, 160, 120, 230);
@@ -6098,10 +6950,12 @@ const Overworld = (() => {
     FIRES.filter(f => f.scene === 'gloam').forEach(f => drawCampfire(f.x));
     drawLoreSpots();
     drawWren();
+    drawChests();
     drawSideMobs();
     drawSidePlayer();
     drawPlayerWaves();
     drawCombatFx();
+    drawFortuneFx();
     drawAmbient();
     ctx.restore();
     const px = sidePlayer.x - sideCameraX, py = sidePlayer.y - 24;
@@ -6195,10 +7049,12 @@ const Overworld = (() => {
     drawLoreSpots();
     drawDad();
     if (story.ch2Started) drawSignpost(HOLLOW_SIDE_WIDTH - 34, 'ASHEN PASS', 1);
+    drawChests();
     drawSideMobs();
     drawSidePlayer();
     drawPlayerWaves();
     drawCombatFx();
+    drawFortuneFx();
     drawAmbient();
     // Low mist drifting in front.
     hollowMist.forEach(m => {
@@ -6329,6 +7185,7 @@ const Overworld = (() => {
   function drawSideOverlays(label) {
     if (bossFight && bossFight.cine) { drawBossCine(); return; }
     const W = canvas.width;
+    drawBloodMoonOverlay();
     if (sidePlayer.deadTime > 0 && sidePlayer.deadTime < 0.7) {
       ctx.fillStyle = 'rgba(0,0,0,' + (1 - sidePlayer.deadTime / 0.7) + ')'; ctx.fillRect(0, 0, W, canvas.height);
     }
@@ -6415,6 +7272,7 @@ const Overworld = (() => {
       ctx.fillStyle = '#ffe3a1'; ctx.font = 'bold 5px monospace'; ctx.textAlign = 'left'; ctx.fillText(inputMode === 'pad' ? 'TP' : 'H', 144, 10);
       if (time - invUseFlash < 0.3) { ctx.fillStyle = 'rgba(155,227,122,.5)'; ctx.fillRect(142, 4, 22, 22); }
       ctx.textAlign = 'left'; ctx.font = '6px monospace';
+      drawFortuneHUD();
     }
     if (comboTimer > 0 || (sidePlayer.atk && sidePlayer.atk.name !== 'slash1')) {
       const step = sidePlayer.atk ? ({ slash1: 1, slash2: 2, finisher: 3, thrust: 1, air: 1 })[sidePlayer.atk.name] : ({ slash1: 1, slash2: 2 })[lastMove] || 0;
@@ -6679,6 +7537,9 @@ const Overworld = (() => {
     if (panel === 'inventory') { drawInventoryScreen(); return; }
     if (panel === 'shop') { drawShop(); return; }
     if (panel === 'chapter') { drawChapterPanel(); return; }
+    if (panel === 'perk') { drawPerkPanel(); return; }
+    if (panel === 'relic') { drawRelicReveal(); return; }
+    if (panel === 'wheel') { drawWheel(); return; }
     ctx.fillStyle = 'rgba(10, 12, 22, 0.94)';
     ctx.fillRect(43, 37, 234, 164);
     ctx.strokeStyle = '#d9b56b'; ctx.lineWidth = 2;
@@ -6839,6 +7700,7 @@ const Overworld = (() => {
       if (entry && story.pages.includes(entry.id)) { sfx('bookFlip'); invInspect = { lore: entry.id, t: time }; }
       else sfx('uiError');
     } else if (invTab === 5) mapConfirm();
+    else if (invTab === 6) toggleRelic();
     else sfx('uiError');
   }
   function toggleWeapon() {
@@ -6885,6 +7747,8 @@ const Overworld = (() => {
       loreSel = clamp(loreSel + dy + dx, 0, LORE.length - 1);
     } else if (invTab === 5) {
       mapSel = clamp(mapSel + dy + dx, 0, Math.max(0, mapFires().length - 1));
+    } else if (invTab === 6) {
+      relicSel = clamp(relicSel + dx + dy * 7, 0, RELIC_ORDER.length - 1);
     } else return;
     sfx('uiMove');
   }
@@ -6930,8 +7794,9 @@ const Overworld = (() => {
     const p = canvasPoint(e);
     const inside = (x, y, w, h) => p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + h;
     if (dialogue) { advanceDialogue(); e.preventDefault(); return; }
+    if (fortunePanel()) { fortunePointer(p); e.preventDefault(); return; }
     if (panel === 'shop') {
-      SHOP_ITEMS.forEach((it, i) => { if (inside(66, 76 + i * 20, 188, 18)) { if (shopSel === i) buyShopItem(i); else { shopSel = i; sfx('uiMove'); } } });
+      SHOP_ITEMS.forEach((it, i) => { if (inside(66, 74 + i * 18, 188, 16)) { if (shopSel === i) buyShopItem(i); else { shopSel = i; sfx('uiMove'); } } });
       e.preventDefault(); return;
     }
     if (panel !== 'inventory') return;
@@ -6962,6 +7827,8 @@ const Overworld = (() => {
     } else if (invTab === 5) {
       const fl = mapFires();
       for (let i = 0; i < fl.length; i++) if (inside(120, 168 + i * 12, 182, 11)) { if (mapSel === i) mapConfirm(); else { mapSel = i; sfx('uiMove'); } return; }
+    } else if (invTab === 6) {
+      for (let i = 0; i < RELIC_ORDER.length; i++) { const r = relicSlotRect(i); if (inside(r.x, r.y, r.w, r.h)) { if (relicSel === i) toggleRelic(); else { relicSel = i; sfx('uiMove'); } return; } }
     }
     if (inside(18, 17, 92, 130) && equipment.armor) { invSwing = time; sfx('swing'); }
   }
@@ -7088,21 +7955,22 @@ const Overworld = (() => {
     else if (invTab === 2) drawStatsTab(RX, RY, RW);
     else if (invTab === 3) drawQuestTab(RX, RY, RW);
     else if (invTab === 4) drawLoreTab(RX, RY, RW);
-    else drawMapTab(RX, RY, RW);
+    else if (invTab === 5) drawMapTab(RX, RY, RW);
+    else drawRelicsTab(RX, RY, RW);
     if (invMenu) drawItemMenu();
 
     // Footer hints.
     ctx.fillStyle = '#0f0c13'; ctx.fillRect(116, 211, W - 132, 14);
-    const acts = invTab === 0 || invTab === 4 || invTab === 5 || (invTab === 1 && gearSel === 3);
+    const acts = invTab === 0 || invTab === 4 || invTab === 5 || invTab === 6 || (invTab === 1 && gearSel === 3);
     const hint = invMenu ? (pad ? '✥ CHOOSE   ✕ OK   ○ BACK' : 'ARROWS CHOOSE   E OK   X BACK')
-      : pad ? (acts ? '✥ SELECT  ✕ ' + (invTab === 4 ? 'READ' : invTab === 5 ? 'TRAVEL' : 'ACTIONS') + '  □ SWING  ○ CLOSE' : 'L1/R1 TAB   □ SWING   ○ CLOSE')
-      : (acts ? 'ARROWS  E ' + (invTab === 4 ? 'READ' : invTab === 5 ? 'TRAVEL' : 'ACTIONS') + '  J SWING  Q/R TAB  I CLOSE' : 'Q/R TAB   J SWING   I / ESC CLOSE');
+      : pad ? (acts ? '✥ SELECT  ✕ ' + (invTab === 4 ? 'READ' : invTab === 5 ? 'TRAVEL' : invTab === 6 ? 'EQUIP' : 'ACTIONS') + '  □ SWING  ○ CLOSE' : 'L1/R1 TAB   □ SWING   ○ CLOSE')
+      : (acts ? 'ARROWS  E ' + (invTab === 4 ? 'READ' : invTab === 5 ? 'TRAVEL' : invTab === 6 ? 'EQUIP' : 'ACTIONS') + '  J SWING  Q/R TAB  I CLOSE' : 'Q/R TAB   J SWING   I / ESC CLOSE');
     invText(hint, 116 + (W - 132) / 2, 221, '#c9bca6', '6px monospace', 'center');
     if (invInspect) drawInspect();
     ctx.restore();
   }
 
-  const INV_TAB_W = 28, INV_TAB_X0 = 120;
+  const INV_TAB_W = 24, INV_TAB_X0 = 120;
   const loreSeen = new Set();
   function itemOffset() { return Math.max(0, Math.floor(invSel / 6) - 2) * 6; }
   function itemSlotRect(i) {
@@ -7292,7 +8160,8 @@ const Overworld = (() => {
       ['DEFENSE', String(totalDefense())],
       ['MONSTERS / GOBLINS', (stats.kills || 0) + ' / ' + (stats.goblinKills || 0)],
       ['STEPS', String(stats.steps)],
-      ['PLAY TIME', Math.floor(stats.playTime / 60) + ':' + String(Math.floor(stats.playTime % 60)).padStart(2, '0')]
+      ['PLAY TIME', Math.floor(stats.playTime / 60) + ':' + String(Math.floor(stats.playTime % 60)).padStart(2, '0')],
+      ['CRIT / LUCK / ELITES', Math.round(critChance() * 100) + '% / +' + Math.round(luckValue() * 100) + '% / ' + (stats.elites || 0)]
     ];
     invBox(x + 2, y + 2, w - 4, 52, '#201a26', '#4b3d35');
     invText('HEALTH', x + 10, y + 14, '#f0a29a', '7px monospace');
@@ -7305,10 +8174,10 @@ const Overworld = (() => {
     invText((stats.xp || 0) + ' / ' + xpForNext(stats.level), x + w - 10, y + 46, '#f3e7c9', '7px monospace', 'right');
     invBar(x + 10, y + 49, w - 20, 3, stats.xp || 0, xpForNext(stats.level), '#f2c14e', '#3b2e14');
     rows.forEach(([label, value], i) => {
-      const ry = y + 60 + i * 17;
-      ctx.fillStyle = i % 2 ? '#1d1824' : '#231d2a'; ctx.fillRect(x + 2, ry, w - 4, 15);
-      invText(label, x + 10, ry + 10, '#b9ad9c', '7px monospace');
-      invText(value, x + w - 10, ry + 10, '#ffe3a1', 'bold 7px monospace', 'right');
+      const ry = y + 60 + i * 15;
+      ctx.fillStyle = i % 2 ? '#1d1824' : '#231d2a'; ctx.fillRect(x + 2, ry, w - 4, 13);
+      invText(label, x + 10, ry + 9, '#b9ad9c', '7px monospace');
+      invText(value, x + w - 10, ry + 9, '#ffe3a1', 'bold 7px monospace', 'right');
     });
   }
 
@@ -7702,7 +8571,9 @@ const Overworld = (() => {
       area: REGIONS[platformScene] && platformScene !== 'forest' ? REGIONS[platformScene].name : platformScene === 'forest' ? (sidePlayer.x > CAMP.start ? "BRAM'S CAMP" : 'WOODLAND') : 'HOME',
       quickSlot,
       newItems: Array.from(newItems),
-      loreSeen: Array.from(loreSeen)
+      loreSeen: Array.from(loreSeen),
+      relics: { owned: fortune.owned.slice(), equipped: fortune.equipped.slice(), slots: fortune.slots },
+      pendingPerks
     };
   }
 
@@ -7717,7 +8588,9 @@ const Overworld = (() => {
     Object.assign(story, STORY_DEFAULTS, { pages: [], fires: [], lastFire: null });
     dialogue = null; bossFight = null; bossOutro = null; dad = null; bossWaves.length = 0;
     armorTutorialPending = false; armorQuestActive = false; dadNoteRead = false;
-    Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0, xp: 0, kills: 0, goblinKills: 0, atkUp: 0, defUp: 0 });
+    Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0, xp: 0, kills: 0, goblinKills: 0, atkUp: 0, defUp: 0, perkAtk: 0, perkDef: 0, critUp: 0, luck: 0, thirst: 0, chargeUp: 0, elites: 0, chests: 0 });
+    fortune.owned = []; fortune.equipped = []; fortune.slots = 2; fortune.phoenixUsed = false; pendingPerks = 0; perkOffer = null; relicReveal = null; wheel = null;
+    bloodMoon = false; witchUntil = 0; Object.keys(chestRolls).forEach(k => delete chestRolls[k]); fortuneFx.length = 0;
     stepDistance = 0;
     worldClock = 0.28;
     // A genuinely new slot begins in the kid's bedroom.
@@ -7748,6 +8621,12 @@ const Overworld = (() => {
     else if (saveData.quickSlot === null) quickSlot = null;
     if (Array.isArray(saveData.newItems)) saveData.newItems.forEach(k => { if (ITEM_DEFS[k]) newItems.add(k); });
     if (Array.isArray(saveData.loreSeen)) saveData.loreSeen.forEach(k => loreSeen.add(k));
+    if (saveData.relics && typeof saveData.relics === 'object') {
+      if (Array.isArray(saveData.relics.owned)) fortune.owned = saveData.relics.owned.filter(id => RELICS[id]);
+      if (Number.isFinite(saveData.relics.slots)) fortune.slots = clamp(Math.floor(saveData.relics.slots), 2, 4);
+      if (Array.isArray(saveData.relics.equipped)) fortune.equipped = saveData.relics.equipped.filter(id => fortune.owned.includes(id)).slice(0, fortune.slots);
+    }
+    if (Number.isFinite(saveData.pendingPerks)) pendingPerks = clamp(Math.floor(saveData.pendingPerks), 0, 20);
     dadNoteRead = saveData.sideNoteRead === true;
     if (typeof saveData.armorQuestActive === 'boolean') armorQuestActive = saveData.armorQuestActive;
     else armorQuestActive = false;
@@ -7806,6 +8685,7 @@ const Overworld = (() => {
       if (!e.repeat && ['e', 'enter', ' ', 'j', 'k', 'f', 'escape', 'x'].includes(k)) advanceDialogue();
       e.preventDefault(); e.stopPropagation(); return;
     }
+    if (fortunePanel() && !paused) { if (!e.repeat) fortuneKey(k); e.preventDefault(); e.stopPropagation(); return; }
     if (panel === 'shop') { if (!e.repeat || k.startsWith('arrow')) shopKey(k); e.preventDefault(); e.stopPropagation(); return; }
     if (panel === 'chapter') {
       if (!e.repeat && ['e', 'enter', ' ', 'escape', 'x'].includes(k) && time - invOpenTime > 1.5) { panel = null; sfx('uiConfirm'); if (onSave) onSave(getSaveData()); }
@@ -8013,6 +8893,7 @@ const Overworld = (() => {
     if (introActive) { finishIntro(); return; }
     if (bossFight && bossFight.cine && !paused) { if (action === 'primary' || action === 'attack' || action === 'back') skipBossCine(); return; }
     if (dialogue && !paused) { if (action === 'primary' || action === 'attack' || action === 'back') advanceDialogue(); return; }
+    if (fortunePanel() && !paused) { fortunePad(action); return; }
     if (panel === 'shop' && !paused) {
       if (action === 'primary') buyShopItem(shopSel);
       else if (action === 'back' || action === 'inventory') { closeCurrentPanel(); sfx('uiClose'); }
