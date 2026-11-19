@@ -14,8 +14,13 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
 - **Wildlife:** fish jump in the water, rabbits run away when approached, and wolves appear at night.
 - **Wolf encounters:** wolves can trigger a battle when you get close. Choose to fight or attempt to run.
 - **Player stats:** health, stamina, level, strength, defense, steps, and play time.
-- **Inventory:** full-screen bag with ITEMS / GEAR / STATS / QUEST tabs. Use berries, fish, or tonics to heal; goblins drop coins, fangs, and tonics.
-- **Combat:** tap attack for a 3-hit combo (slash, slash, heavy finisher), attack while sprinting for a dash thrust, or attack in the air. Hits have hit-pause, knockback, sparks, damage numbers, and XP/level-ups.
+- **Story:** follow Dad's trail through the forest to Bram's camp and into the Hollow, collect 6 journal pages and lore stones, defeat Grukk the Hollow King, and find Dad. Chapter 1 ends with a tease for Chapter 2.
+- **Areas:** the house, the forest, Bram's camp (campfire rest point and shop), and the Hollow, a haunted area with its own boss arena.
+- **Enemies:** goblins, mushrooms, and flying eyes in the forest. Skeletons (they block with a shield) and ghosts in the Hollow. A two-phase ogre boss that sends out shockwaves and calls ghosts when below half HP.
+- **Inventory:** full-screen bag with ITEMS / GEAR / STATS / QUEST / LORE tabs. Each item has an action menu (use, set as quick item, inspect, equip, drop), plus rarity colors, NEW tags, and a rotating inspect view with item lore. Mouse/touch clicks work too.
+- **Quick item:** set food or a tonic as the quick item and use it mid-fight without opening the bag.
+- **Combat:** tap attack for a 3-hit combo (slash, slash, heavy finisher), attack while sprinting for a dash thrust, or attack in the air for a plunge that slams to the ground with a shockwave. The plunge only triggers when you are well above the ground. Hits have hit-pause, knockback, sparks, damage numbers, and XP/level-ups.
+- **Sound and music:** sampled sword, footstep, monster, and UI sound effects, plus music for each area that crossfades between scenes, with a boss theme.
 - **Saving:** browser save slots; optional account sign-in enables cloud saves.
 - **Device support:** keyboard controls and on-screen touch controls for phones and tablets.
 
@@ -26,12 +31,16 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
 | Move | WASD or Arrow keys | Left stick or D-pad | Direction pad |
 | Jump (forest) | Space / W / Up | ✕ Cross | — |
 | Attack (forest) | J / K / F | □ Square (or R2) | — |
+| Plunge attack | J while in the air | □ while in the air | — |
+| Quick item (forest/Hollow) | H | Touchpad | — |
+| Talk / read / rest / shop | E | ✕ Cross | E |
 | Interact / confirm | E / Enter | ✕ Cross | E |
 | Back / close | Escape | ○ Circle | — |
 | Run | Hold Shift | Hold L1, R1, or L2 | RUN |
 | Inventory | I | △ Triangle | BAG |
-| Inventory: select / use / switch tab | Arrows / E / Q, R, Tab | D-pad / ✕ / L1, R1 | — |
-| Stats | C | Touchpad or Create | STATS |
+| Inventory: select / actions / switch tab | Arrows / E / Q, R, Tab | D-pad / ✕ / L1, R1 | tap |
+| Inventory: back out of a menu | Escape / X / Backspace | ○ Circle | — |
+| Stats | C | Touchpad (indoors) or Create | STATS |
 | Pause | Escape / P | Options | — |
 | Fight / escape encounter | 1 / 2 | ✕ or □ / ○ | FIGHT / RUN |
 | Skip opening cinematic | Any key | Any button | Tap |

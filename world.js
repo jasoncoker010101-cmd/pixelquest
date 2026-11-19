@@ -48,16 +48,67 @@ const Overworld = (() => {
     { x: 2700, y: 132, w: 110, h: 10 },
     { x: 2910, y: 160, w: 124, h: 10 },
     { x: 3150, y: 130, w: 110, h: 10 },
-    { x: 3370, y: 154, w: 140, h: 10 },
-    { x: 3670, y: 136, w: 126, h: 10 }
+    { x: 3370, y: 154, w: 140, h: 10 }
   ];
-  const sideGoblins = [
-    { x: 1370, home: 1370, min: 1280, max: 1470, dir: -1, patrolDir: -1, phase: 0 },
-    { x: 2050, home: 2050, min: 1960, max: 2140, dir: 1, patrolDir: 1, phase: 1.3 },
-    { x: 2760, home: 2760, min: 2660, max: 2860, dir: 1, patrolDir: 1, phase: 2.7 },
-    { x: 3350, home: 3350, min: 3260, max: 3440, dir: -1, patrolDir: -1, phase: 4.1 },
-    { x: 3560, home: 3560, min: 3500, max: 3620, dir: 1, patrolDir: 1, phase: 5.2 }
-  ].map(gob => Object.assign(gob, { runUntil: 0, hp: 5, maxHp: 5, attackCooldown: 0, attackTime: 0, attackHit: false, hurtTime: 0, deadTime: 0, dead: false, respawn: 0, moving: false, kvx: 0, flash: 0, walk: 0, showHpUntil: 0 }));
+  const HOLLOW_SIDE_WIDTH = 3300;
+  // The Hollow: a haunted wood past the forest camp, ending in the Hollow King's arena.
+  const HOLLOW_SIDE_PLATFORMS = [
+    { x: 0, y: SIDE_GROUND_Y, w: HOLLOW_SIDE_WIDTH, h: 44 },
+    { x: 300, y: 158, w: 128, h: 10 },
+    { x: 560, y: 132, w: 112, h: 10 },
+    { x: 980, y: 150, w: 144, h: 10 },
+    { x: 1240, y: 124, w: 112, h: 10 },
+    { x: 1700, y: 156, w: 128, h: 10 },
+    { x: 1960, y: 130, w: 112, h: 10 },
+    { x: 2280, y: 150, w: 144, h: 10 }
+  ];
+  const BOSS_ARENA = { left: 2640, right: 3200, trigger: 2700 };
+  // Monster roster. Sheets are single-row strips; ax/ay is the feet anchor inside a cell.
+  // LuizMelo's "Monsters Creatures Fantasy" creatures face right, Ansimuz's ghost and ogre face left.
+  const MOB_TYPES = {
+    goblin:   { name: 'Goblin', src: 'mobs/goblin/', anims: { idle: ['idle', 4, 8], move: ['run', 8, 13], attack: ['attack', 8], hurt: ['take_hit', 4], death: ['death', 4] },
+                fw: 150, fh: 150, ax: 75, ay: 101, scale: 1.12, bodyH: 40, width: 20, hp: 5, speed: 82, chase: 230, reach: 46, dmg: 4,
+                atkTime: 0.72, hit: [0.7, 0.92], cd: [1.3, 1.8], xp: 12, coins: [2, 5], drops: [['fang', 0.6], ['tonic', 0.16], ['bread', 0.14]], voice: 'goblin', kind: 'goblin' },
+    skeleton: { name: 'Skeleton', src: 'mobs/skeleton/', anims: { idle: ['idle', 4, 6], move: ['walk', 4, 7], attack: ['attack', 8], hurt: ['take_hit', 4], death: ['death', 4], block: ['shield', 4] },
+                fw: 150, fh: 150, ax: 78, ay: 101, scale: 1.0, bodyH: 50, width: 22, hp: 9, speed: 50, chase: 220, reach: 54, dmg: 5,
+                atkTime: 0.95, hit: [0.72, 0.92], cd: [1.6, 2.2], xp: 20, coins: [3, 6], drops: [['bone', 0.65], ['boneblade', 0.12]], voice: 'bones', block: 0.28 },
+    mushroom: { name: 'Shroom', src: 'mobs/mushroom/', anims: { idle: ['idle', 4, 6], move: ['run', 8, 11], attack: ['attack', 8], hurt: ['take_hit', 4], death: ['death', 4] },
+                fw: 150, fh: 150, ax: 75, ay: 101, scale: 1.0, bodyH: 36, width: 18, hp: 7, speed: 46, chase: 180, reach: 38, dmg: 3,
+                atkTime: 0.8, hit: [0.72, 0.92], cd: [1.4, 2.0], xp: 14, coins: [1, 4], drops: [['spore', 0.6], ['berries', 0.3]], voice: 'squish' },
+    eye:      { name: 'Watcher', src: 'mobs/flying_eye/', anims: { idle: ['flight', 8, 12], move: ['flight', 8, 15], attack: ['attack', 8], hurt: ['take_hit', 4], death: ['death', 4] },
+                fw: 150, fh: 150, ax: 77, ay: 92, scale: 0.9, bodyH: 28, width: 18, fly: 50, hp: 4, speed: 96, chase: 240, reach: 40, dmg: 3,
+                atkTime: 0.7, hit: [0.7, 0.92], cd: [1.4, 2.0], xp: 15, coins: [1, 4], drops: [['eye', 0.5]], voice: 'eye' },
+    ghost:    { name: 'Wraith', src: 'hollow/', anims: { idle: ['ghost-idle', 7, 8], move: ['ghost-chase', 4, 9], attack: ['ghost-shriek', 4], hurt: null, death: ['ghost-vanish', 7] },
+                fw: 64, fh: 80, ax: 32, ay: 61, faceLeft: true, scale: 1.0, bodyH: 40, width: 18, fly: 14, alpha: 0.88, hp: 6, speed: 66, chase: 260, reach: 42, dmg: 4,
+                atkTime: 0.8, hit: [0.45, 0.85], cd: [1.5, 2.1], xp: 18, coins: [2, 5], drops: [['wisp', 0.5]], voice: 'ghost' },
+    ogre:     { name: 'Grukk, the Hollow King', boss: true, src: 'hollow/', anims: { idle: ['ogre-idle', 4, 6], move: ['ogre-walk', 6, 8], attack: ['ogre-attack', 7], hurt: null, death: null },
+                fw: 144, fh: 80, ax: 62, ay: 80, faceLeft: true, scale: 1.35, bodyH: 76, width: 36, hp: 70, speed: 40, chase: 700, reach: 70, dmg: 8,
+                atkTime: 1.25, hit: [0.57, 0.72], cd: [1.0, 1.6], xp: 150, coins: [25, 30], drops: [['crown', 1]], voice: 'ogre', armor: true }
+  };
+  const SCENE_MOBS = {
+    forest: [['mushroom', 900, 70], ['goblin', 1370, 90], ['eye', 1750, 110], ['goblin', 2050, 90], ['mushroom', 2450, 80],
+             ['goblin', 2620, 70], ['goblin', 2900, 100], ['eye', 3150, 110], ['goblin', 3350, 90]],
+    hollow: [['skeleton', 520, 90], ['ghost', 820, 120], ['mushroom', 1080, 80], ['skeleton', 1380, 90], ['eye', 1620, 120],
+             ['ghost', 1900, 120], ['skeleton', 2160, 100], ['eye', 2400, 110], ['skeleton', 2500, 60]]
+  };
+  let sideMobs = [];
+  function makeMob(type, x, range, i) {
+    const T = MOB_TYPES[type];
+    const dir = i % 2 ? 1 : -1;
+    return { type, T, x, y: SIDE_GROUND_Y - (T.fly || 0), home: x, min: x - range, max: x + range, dir, patrolDir: dir, phase: i * 1.3,
+      runUntil: 0, hp: T.hp, maxHp: T.hp, attackCooldown: 0.8 + i * 0.3, attackTime: 0, attackHit: true, hurtTime: 0, deadTime: 0, dead: false,
+      respawn: 0, moving: false, kvx: 0, flash: 0, walk: 0, showHpUntil: 0, blockTime: 0, bob: Math.random() * 6 };
+  }
+  function loadSceneMobs(scene) {
+    sideMobs = (SCENE_MOBS[scene] || []).map(([type, x, range], i) => makeMob(type, x, range, i));
+    if (scene === 'hollow' && !story.bossDefeated) {
+      const boss = makeMob('ogre', 3020, 120, 0);
+      boss.dir = -1; boss.patrolDir = -1; boss.dormant = true;
+      sideMobs.push(boss);
+    }
+  }
+  // Story flags that persist in the save slot.
+  const story = { campReached: false, hollowEntered: false, bossStarted: false, bossDefeated: false, dadFound: false, chapterDone: false, pages: [] };
 
   // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
   let introActive = false, introTime = 0, introAudio = null, introSoundChar = 0, introTextSegment = '', introLastReveal = 0, introWolfHowlOne = false, introWolfHowlTwo = false, introWolfHowlEcho = false;
@@ -1115,6 +1166,8 @@ const Overworld = (() => {
 
   let camX = 0, camY = 0;
   let panel = null;
+  let dialogue = null;   // { lines: [{name, text, color}], i, shown, onDone }
+  let bossFight = null;  // { active, intro, t }
   let paused = false;
   let pauseSelection = 0;
   let notice = '';
@@ -1137,19 +1190,26 @@ const Overworld = (() => {
   });
   knightSprites.air = new Image();
   knightSprites.air.src = pqAsset('./assets/knight/attack_from_air.png');
-  // Goblin Scout sheet: five horizontal animation rows, each made of
-  // 600x500 cells. The werewolf sheets remain reserved for the intro.
-  const goblinScoutSheet = new Image();
-  goblinScoutSheet.src = pqAsset('./assets/goblinpack/GoblinScout-Sheet.png');
-  const GOBLIN_FRAME_WIDTH = 600;
-  const GOBLIN_FRAME_HEIGHT = 500;
-  const GOBLIN_ANIMATIONS = {
-    idle: { row: 0, frames: 9 },
-    attack: { row: 1, frames: 6 },
-    hit: { row: 2, frames: 4 },
-    walk: { row: 3, frames: 6 },
-    death: { row: 4, frames: 9 }
+  // Monster sheets (single-row strips). Loaded once per file.
+  const mobSheets = {};
+  function mobSheet(T, anim) {
+    const key = T.src + anim[0];
+    if (!mobSheets[key]) {
+      const img = new Image();
+      img.src = pqAsset('./assets/' + T.src + anim[0] + '.png');
+      mobSheets[key] = img;
+    }
+    return mobSheets[key];
+  }
+  Object.values(MOB_TYPES).forEach(T => Object.values(T.anims).forEach(an => { if (an) mobSheet(T, an); }));
+  function loadImg(path) { const i = new Image(); i.src = pqAsset('./assets/' + path); return i; }
+  const hollowArt = {
+    back: loadImg('hollow/back.png'), middle: loadImg('hollow/middle.png'), ground: loadImg('hollow/ground.png'), log: loadImg('hollow/log.png'),
+    dadIdle: loadImg('hollow/dad-idle.png'), dadRun: loadImg('hollow/dad-run.png'), dadSlash: loadImg('hollow/dad-slash.png')
   };
+  // Mini knight used in the top-down house once Dad's armor is on (2 cols x 4 rows of 90x45).
+  const miniKnight = { idle: loadImg('knight/mini-idle.png'), run: loadImg('knight/mini-run.png') };
+  function imgReady(i) { return i && i.complete && i.naturalWidth > 0; }
 
   // Forest pack artwork: separate terrain tiles and large transparent decorations.
   const forestTilesSheet = new Image();
@@ -1172,10 +1232,12 @@ const Overworld = (() => {
   sideForestBackground.onerror = () => { sideForestBackgroundReady = false; };
   sideForestBackground.src = pqAsset('./assets/free_forest/Free Pixel Art Forest/Preview/Background.png');
 
-  const inventory = { berries: 3, wood: 0, fish: 0, fang: 0, tonic: 0, coins: 0 };
+  const inventory = { berries: 3, wood: 0, fish: 0, fang: 0, tonic: 0, coins: 0, bread: 0, bone: 0, spore: 0, eye: 0, wisp: 0, boneblade: 0, crown: 0 };
   // Dad's armor is a cosmetic outfit set. It is saved with the player and shown in the world and inventory.
-  const equipment = { armor: false };
-  const stats = { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0, xp: 0, kills: 0 };
+  const equipment = { armor: false, weapon: 'sword' };
+  let quickSlot = 'berries';
+  const newItems = new Set();
+  const stats = { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0, xp: 0, kills: 0, goblinKills: 0, atkUp: 0, defUp: 0 };
 
   const bunnies = [
     { x: 17 * TILE, y: 10 * TILE, vx: 0, vy: 0, flee: 0, hop: 0 },
@@ -2034,6 +2096,24 @@ const Overworld = (() => {
     }
     ctx.restore();
   }
+  // In the top-down house, Rowan wears the same knight armor as outside: a
+  // scaled-down copy of the knight sheets (2 x 4 grid of 90 x 45 cells).
+  function drawHouseKnight(sx, sy) {
+    const moving = interiorPlayer.moving;
+    const sheet = moving && imgReady(miniKnight.run) ? miniKnight.run : miniKnight.idle;
+    const f = moving ? Math.floor(interiorPlayer.walk * 0.9) % 8 : Math.floor(time * 7) % 8;
+    const col = f % 2, row = Math.floor(f / 2);
+    let face = interiorPlayer.hf || 1;
+    if (interiorPlayer.facing === 'left') face = -1; else if (interiorPlayer.facing === 'right') face = 1;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(sx + 1, sy + 14, 14, 2);
+    ctx.translate(sx + 8, sy + 16);
+    if (face < 0) ctx.scale(-1, 1);
+    ctx.drawImage(sheet, col * 90, row * 45, 90, 45, -44, -45, 90, 45);
+    ctx.restore();
+  }
   function beginBattle(w) {
     if (battle) return;
     battle = { wolf:w, wolfHP:12, maxWolfHP:12, phase:'intro', fade:0, message:'A wild wolf appeared!', menu:0, turn:0 };
@@ -2382,7 +2462,8 @@ const Overworld = (() => {
       player.facing = interiorPlayer.facing;
       player.moving = interiorPlayer.moving;
       player.walk = interiorPlayer.walk;
-      drawPlayer(Math.round(interiorPlayer.x), Math.round(interiorPlayer.y));
+      if (equipment.armor && imgReady(miniKnight.idle)) drawHouseKnight(Math.round(interiorPlayer.x), Math.round(interiorPlayer.y));
+      else drawPlayer(Math.round(interiorPlayer.x), Math.round(interiorPlayer.y));
       player.facing = oldFacing; player.moving = oldMoving; player.walk = oldWalk;
     }
 
@@ -2472,15 +2553,17 @@ const Overworld = (() => {
 
 
   function sidePlatforms() {
-    return platformScene === 'house' ? HOUSE_SIDE_PLATFORMS : FOREST_SIDE_PLATFORMS;
+    return platformScene === 'house' ? HOUSE_SIDE_PLATFORMS : platformScene === 'hollow' ? HOLLOW_SIDE_PLATFORMS : FOREST_SIDE_PLATFORMS;
   }
+  function outdoorScene() { return platformScene === 'forest' || platformScene === 'hollow'; }
 
   function sideWorldWidth() {
-    return platformScene === 'house' ? HOUSE_SIDE_WIDTH : FOREST_SIDE_WIDTH;
+    return platformScene === 'house' ? HOUSE_SIDE_WIDTH : platformScene === 'hollow' ? HOLLOW_SIDE_WIDTH : FOREST_SIDE_WIDTH;
   }
 
   function updateSideCamera(dt) {
-    const target = clamp(sidePlayer.x - canvas.width * 0.43, 0, Math.max(0, sideWorldWidth() - canvas.width));
+    let target = clamp(sidePlayer.x - canvas.width * 0.43, 0, Math.max(0, sideWorldWidth() - canvas.width));
+    if (bossFight && (bossFight.active || bossFight.intro)) target = clamp((BOSS_ARENA.left + BOSS_ARENA.right) / 2 - canvas.width / 2 + (sidePlayer.x - (BOSS_ARENA.left + BOSS_ARENA.right) / 2) * 0.5, BOSS_ARENA.left - 20, BOSS_ARENA.right - canvas.width + 20);
     sideCameraX += (target - sideCameraX) * Math.min(1, dt * 7);
   }
 
@@ -2497,15 +2580,36 @@ const Overworld = (() => {
     thrust:   { sheet: 'attacks', cols: 8, frames: [10, 11, 12, 13, 14], fps: 16, active: [1, 2, 3], reach: 56, dmg: 2, knock: 170, lunge: 190, next: 'slash2', shake: 1.5, stamina: 12 },
     air:      { sheet: 'air', cols: 2, frames: [2, 3, 4, 5, 6], fps: 16, active: [1, 2, 3], reach: 52, dmg: 2, knock: 90, lunge: 0, next: null, air: true, stamina: 8 }
   };
+  // rarity: common / uncommon / rare / legend. value: what Old Bram pays per item.
   const ITEM_DEFS = {
-    berries: { name: 'Wild Berries', type: 'CONSUMABLE', desc: ['Sweet and juicy berries', 'from the meadow.'], heal: 4, icon: 'berry' },
-    fish:    { name: 'River Fish', type: 'CONSUMABLE', desc: ['Fresh from the lake.', 'Hearty and filling.'], heal: 8, icon: 'fish' },
-    tonic:   { name: 'Red Tonic', type: 'CONSUMABLE', desc: ['A bubbling goblin brew.', 'Restores all health.'], heal: 999, icon: 'tonic' },
-    wood:    { name: 'Firewood', type: 'MATERIAL', desc: ['Dry split logs. Useful', 'for a campfire later.'], icon: 'wood' },
-    fang:    { name: 'Goblin Fang', type: 'TROPHY', desc: ['Proof you bested a', 'goblin scout.'], icon: 'fang' }
+    berries:   { name: 'Wild Berries', type: 'CONSUMABLE', rarity: 'common', value: 1, heal: 4, icon: 'berry',
+                 desc: ['Sweet and juicy berries', 'from the meadow.'], lore: 'Mom used to bake these into pies every harvest. The bushes behind the house still remember her.' },
+    bread:     { name: 'Camp Bread', type: 'CONSUMABLE', rarity: 'common', value: 2, heal: 10, icon: 'bread',
+                 desc: ['A crusty loaf from', 'Old Bram\'s cart.'], lore: 'Baked on a hot stone by the campfire. Bram swears the secret is a pinch of ash.' },
+    fish:      { name: 'River Fish', type: 'CONSUMABLE', rarity: 'common', value: 2, heal: 8, icon: 'fish',
+                 desc: ['Fresh from the lake.', 'Hearty and filling.'], lore: 'Silver-scaled and still cold from the lake. Dad taught you to catch these.' },
+    tonic:     { name: 'Red Tonic', type: 'CONSUMABLE', rarity: 'uncommon', value: 6, heal: 999, icon: 'tonic',
+                 desc: ['A bubbling goblin brew.', 'Restores all health.'], lore: 'Goblins steal these from travellers. It smells awful and works perfectly.' },
+    wood:      { name: 'Firewood', type: 'MATERIAL', rarity: 'common', value: 1, icon: 'wood',
+                 desc: ['Dry split logs. Useful', 'for a campfire.'], lore: 'Split by Dad the morning before he left. The axe is still in the stump.' },
+    fang:      { name: 'Goblin Fang', type: 'TROPHY', rarity: 'common', value: 3, icon: 'fang',
+                 desc: ['Proof you bested a', 'goblin.'], lore: 'Yellowed and sharp. Goblins file their teeth before a raid.' },
+    spore:     { name: 'Glow Spore', type: 'MATERIAL', rarity: 'common', value: 2, icon: 'spore',
+                 desc: ['Shed by a walking', 'mushroom. Faintly warm.'], lore: 'The shrooms only started walking after the Moonfall. Nobody knows why.' },
+    eye:       { name: 'Watcher Eye', type: 'TROPHY', rarity: 'uncommon', value: 4, icon: 'eye',
+                 desc: ['It still seems to', 'follow you.'], lore: 'Watchers are the Hollow King\'s spies. Whatever one sees, he sees.' },
+    bone:      { name: 'Old Bone', type: 'MATERIAL', rarity: 'common', value: 3, icon: 'bone',
+                 desc: ['From a risen soldier', 'of the Hollow.'], lore: 'Some of these skeletons still wear Silver Watch badges. They were knights once.' },
+    wisp:      { name: 'Hollow Wisp', type: 'MATERIAL', rarity: 'rare', value: 6, icon: 'wisp',
+                 desc: ['A cold blue light', 'left by a wraith.'], lore: 'A piece of a soul the Hollow could not keep. It hums when you hold it close.' },
+    boneblade: { name: 'Bone Blade', type: 'WEAPON', rarity: 'rare', value: 15, icon: 'boneblade', atk: 3,
+                 desc: ['A sword of fused bone.', 'ATK +3. Equip in GEAR.'], lore: 'Carved by the dead for the dead. Heavier than steel, and it never dulls.' },
+    crown:     { name: 'Hollow Crown', type: 'KEY ITEM', rarity: 'legend', value: 0, icon: 'crown',
+                 desc: ['Grukk\'s rusted crown.', 'The curse clings to it.'], lore: 'Iron, bone and moonstone. Dad says it was forged from the first Moonfall shard.' }
   };
-  const ITEM_ORDER = ['berries', 'fish', 'tonic', 'wood', 'fang'];
-  const INV_TABS = ['ITEMS', 'GEAR', 'STATS', 'QUEST'];
+  const ITEM_ORDER = ['berries', 'bread', 'fish', 'tonic', 'wood', 'fang', 'spore', 'eye', 'bone', 'wisp', 'boneblade', 'crown'];
+  const RARITY_COLOR = { common: '#8a7a68', uncommon: '#5fbf6a', rare: '#5fa8ff', legend: '#f2c14e' };
+  const INV_TABS = ['ITEMS', 'GEAR', 'STATS', 'QUEST', 'LORE'];
   const ARMOR_DEFENSE = 3, SWORD_ATTACK = 2;
   let invTab = 0, invSel = 0, gearSel = 0, invOpenTime = 0;
   let hitStop = 0, screenShake = 0, comboTimer = 0, lastMove = null, landTime = 0;
@@ -2513,12 +2617,148 @@ const Overworld = (() => {
   let levelUpUntil = 0;
 
   function xpForNext(level) { return 20 + level * 15; }
-  function totalDefense() { return stats.defense + (equipment.armor ? ARMOR_DEFENSE : 0); }
-  function totalAttack() { return stats.strength + (equipment.armor ? SWORD_ATTACK : 0); }
+  function totalDefense() { return stats.defense + (stats.defUp || 0) + (equipment.armor ? ARMOR_DEFENSE : 0); }
+  function totalAttack() { return stats.strength + (stats.atkUp || 0) + (equipment.armor ? (equipment.weapon === 'boneblade' && inventory.boneblade > 0 ? 3 : SWORD_ATTACK) : 0); }
 
-  // Short synthesized sound effects so combat has weight even before the
-  // licensed sword/footstep packs are wired in. Kept quiet on purpose.
-  function sfx(name) {
+  // ---------- Audio: recorded CC0 sound effects + area music ----------
+  const SFX_BANK = {
+    swing: [['swing1', 'swing2', 'swing3', 'swing4'], 0.55],
+    swingBig: [['swing_heavy'], 0.7],
+    swoosh: [['swing1', 'swing2', 'swing3', 'swing4'], 0.55],
+    swooshBig: [['swing_heavy'], 0.7],
+    hit: [['hit0', 'hit1', 'slash_flesh'], 0.7],
+    hitBig: [['hit_heavy', 'slash_flesh'], 0.85],
+    clash: [['clash0', 'clash1'], 0.6],
+    slam: [['hit_heavy'], 0.95],
+    hurt: [['player_hurt'], 0.75],
+    pickup: [['item_get'], 0.5],
+    use: [['drink'], 0.7],
+    eat: [['chop'], 0.5],
+    level: [['levelup'], 0.6],
+    tick: [['coin'], 0.35],
+    coin: [['coin'], 0.35],
+    coins: [['coins'], 0.6],
+    gem: [['gem'], 0.55],
+    land: [['land'], 0.4],
+    stepGrass: [['step_grass0', 'step_grass1', 'step_grass2', 'step_grass3', 'step_grass4'], 0.22],
+    stepWood: [['step_wood0', 'step_wood1', 'step_wood2', 'step_wood3', 'step_wood4'], 0.2],
+    doorOpen: [['door_open'], 0.6], doorClose: [['door_close'], 0.6],
+    armor: [['armor_clank'], 0.7], cloth: [['cloth'], 0.6], belt: [['belt'], 0.6],
+    draw: [['draw_sword'], 0.6],
+    bookOpen: [['book_open'], 0.6], bookFlip: [['book_flip'], 0.55], bookClose: [['book_close'], 0.55],
+    uiMove: [['ui_move'], 0.35], uiTab: [['ui_tab'], 0.45], uiOpen: [['ui_open'], 0.5], uiClose: [['ui_close'], 0.5],
+    uiConfirm: [['ui_confirm'], 0.5], uiError: [['ui_error'], 0.45], uiBack: [['ui_back'], 0.45],
+    goblin: [['goblin1', 'goblin3', 'goblin5', 'goblin9'], 0.5],
+    goblinHurt: [['goblin12', 'goblin15'], 0.55],
+    monster: [['monster1', 'monster2', 'monster3'], 0.45],
+    monsterHurt: [['monster5', 'monster11'], 0.5],
+    ghost: [['monster14'], 0.45],
+    die: [['creature_die'], 0.6],
+    roar: [['roar'], 0.9],
+    squish: [['squish'], 0.55],
+    latch: [['latch'], 0.6], magic: [['magic'], 0.55], fire: [['fire'], 0.5], creak: [['creak'], 0.5],
+    victory: [['victory'], 0.7], gameover: [['gameover'], 0.6]
+  };
+  const sfxBuffers = {}, sfxLoading = {};
+  let sfxPreloaded = false;
+  function audioCtx() {
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) return null;
+    if (!introAudio) introAudio = new AudioCtor();
+    if (introAudio.state === 'suspended') introAudio.resume();
+    return introAudio;
+  }
+  function loadSfxFile(file) {
+    if (sfxBuffers[file] || sfxLoading[file]) return;
+    const ac = audioCtx(); if (!ac || !window.fetch) return;
+    sfxLoading[file] = fetch(pqAsset('./assets/audio/sfx/' + file + '.mp3'))
+      .then(r => r.arrayBuffer())
+      .then(b => new Promise((res, rej) => ac.decodeAudioData(b, res, rej)))
+      .then(buf => { sfxBuffers[file] = buf; })
+      .catch(() => {});
+  }
+  function preloadSfx() {
+    if (sfxPreloaded) return; sfxPreloaded = true;
+    Object.values(SFX_BANK).forEach(([files]) => files.forEach(loadSfxFile));
+  }
+  function sfx(name, vol = 1, rate = 1) {
+    if (typeof settings !== 'undefined' && settings && settings.sound === false) return;
+    const entry = SFX_BANK[name];
+    if (!entry) { synthSfx(name); return; }
+    try {
+      const ac = audioCtx(); if (!ac) return;
+      preloadSfx();
+      const files = entry[0];
+      const file = files[Math.floor(Math.random() * files.length)];
+      const buf = sfxBuffers[file];
+      if (!buf) { loadSfxFile(file); synthSfx(name); return; }
+      const src = ac.createBufferSource(); src.buffer = buf;
+      src.playbackRate.value = rate * (0.94 + Math.random() * 0.12);
+      const g = ac.createGain(); g.gain.value = entry[1] * vol;
+      src.connect(g); g.connect(ac.destination); src.start();
+    } catch (_) {}
+  }
+  function mobVoice(m, kind) {
+    const v = m.T.voice;
+    if (v === 'goblin') sfx(kind === 'death' ? 'die' : kind === 'hurt' ? 'goblinHurt' : 'goblin', 0.9, kind === 'death' ? 1.3 : 1);
+    else if (v === 'ogre') sfx(kind === 'death' ? 'roar' : kind === 'hurt' ? 'monsterHurt' : 'monster', 1, 0.7);
+    else if (v === 'ghost') sfx(kind === 'death' ? 'magic' : 'ghost', 0.8, 1.2);
+    else if (v === 'squish') sfx(kind === 'death' ? 'squish' : 'squish', 0.8, kind === 'hurt' ? 1.2 : 1);
+    else if (v === 'eye') sfx(kind === 'death' ? 'die' : 'monster', 0.6, 1.5);
+    else sfx(kind === 'death' ? 'die' : 'monsterHurt', 0.7, 0.9);
+  }
+
+  // Music: looping tracks per area, cross-faded every frame.
+  const MUSIC_FILES = { house: 'house', forest: 'forest', ambience: 'forest_ambience', hollow: 'hollow', boss: 'boss', camp: 'camp' };
+  const MUSIC_VOL = { house: 0.32, forest: 0.34, ambience: 0.22, hollow: 0.38, boss: 0.42, camp: 0.34 };
+  const musicTracks = {};
+  function musicTrack(key) {
+    if (!musicTracks[key]) {
+      const a = new Audio(pqAsset('./assets/audio/music/' + MUSIC_FILES[key] + '.mp3'));
+      a.loop = true; a.preload = 'auto'; a.volume = 0;
+      musicTracks[key] = { a, v: 0, playing: false };
+    }
+    return musicTracks[key];
+  }
+  function desiredMusic() {
+    if (introActive) return {};
+    if (!platformMode && insideHouse) return { house: 1 };
+    if (!platformMode) return { forest: 1, ambience: 1 };
+    if (platformScene === 'house') return { house: 1 };
+    if (platformScene === 'hollow') {
+      if (bossFight && bossFight.active) return { boss: 1 };
+      if (story.chapterDone) return { camp: 1 };
+      return { hollow: 1, ambience: 0.5 };
+    }
+    if (sidePlayer.x > 3560) return { camp: 1, ambience: 0.6 };
+    return { forest: 1, ambience: 1 };
+  }
+  let musicUnlocked = false;
+  function updateMusic(dt) {
+    const on = typeof settings === 'undefined' || !settings || settings.music !== false;
+    const want = on && musicUnlocked ? desiredMusic() : {};
+    const duck = paused ? 0.3 : panel || dialogue ? 0.55 : 1;
+    Object.keys(MUSIC_FILES).forEach(key => {
+      const target = (want[key] || 0) * MUSIC_VOL[key] * duck;
+      if (!target && !musicTracks[key]) return;
+      const t = musicTrack(key);
+      t.v += (target - t.v) * Math.min(1, dt * 1.6);
+      if (Math.abs(target - t.v) < 0.002) t.v = target;
+      if (t.v > 0.001 && !t.playing) {
+        t.playing = true;
+        const p = t.a.play(); if (p && p.catch) p.catch(() => { t.playing = false; });
+      } else if (t.v <= 0.001 && t.playing && !target) {
+        t.playing = false; t.a.pause();
+      }
+      try { t.a.volume = Math.max(0, Math.min(1, t.v)); } catch (_) {}
+    });
+  }
+  function unlockAudio() {
+    musicUnlocked = true;
+    audioCtx(); preloadSfx();
+  }
+
+  function synthSfx(name) {
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtor) return;
     if (typeof settings !== 'undefined' && settings && settings.sound === false) return;
@@ -2594,8 +2834,19 @@ const Overworld = (() => {
     damageNumbers.push({ x, y, text: String(text), color, life: 0.8, vy: -48 });
   }
 
+  // Distance from the knight's feet to the first surface below him.
+  function groundBelowDistance() {
+    let best = Infinity;
+    for (const pl of sidePlatforms()) {
+      if (sidePlayer.x + 10 > pl.x && sidePlayer.x - 10 < pl.x + pl.w && pl.y >= sidePlayer.y - 1) best = Math.min(best, pl.y - sidePlayer.y);
+    }
+    return best;
+  }
+
   function chooseOpeningMove() {
-    if (!sidePlayer.onGround) return 'air';
+    // High enough off the ground: a plunging strike that drives the knight down
+    // and hits on landing. Too close to the ground: just slash and land.
+    if (!sidePlayer.onGround) return groundBelowDistance() > 22 ? 'air' : 'slash1';
     if (comboTimer > 0 && lastMove && KNIGHT_MOVES[lastMove].next) return KNIGHT_MOVES[lastMove].next;
     if (Math.abs(sidePlayer.vx) > 132) return 'thrust';
     return 'slash1';
@@ -2607,11 +2858,35 @@ const Overworld = (() => {
     if (keys.has('arrowleft') || keys.has('a')) dir -= 1;
     if (keys.has('arrowright') || keys.has('d')) dir += 1;
     if (dir) sidePlayer.facing = dir;
-    sidePlayer.atk = { name, t: 0, hit: new Set(), queued: null, swooshed: false };
+    sidePlayer.atk = { name, t: 0, hit: new Set(), queued: null, swooshed: false, phase: move.air ? 'hang' : null };
     if (sidePlayer.onGround && move.lunge) sidePlayer.vx = sidePlayer.facing * move.lunge;
-    if (move.air && sidePlayer.vy > 0) sidePlayer.vy *= 0.35;
+    if (move.air) { sidePlayer.vy = Math.min(sidePlayer.vy, -40); sidePlayer.vx *= 0.3; }
     stats.stamina = Math.max(0, stats.stamina - (move.stamina || 0));
     comboTimer = 0;
+  }
+
+  // Plunging strike: a short hang, a fast dive, then the ground-impact frames
+  // and shockwave play only once the knight's feet are on solid ground.
+  function updatePlunge(atk, dt) {
+    atk.t += dt;
+    if (atk.phase === 'hang') {
+      sidePlayer.vy = Math.min(sidePlayer.vy, 0) * 0.5;
+      if (atk.t > 0.09) { atk.phase = 'dive'; atk.t = 0; sfx('swingBig'); }
+    } else if (atk.phase === 'dive') {
+      sidePlayer.vy = 560; sidePlayer.vx *= Math.max(0, 1 - dt * 10);
+      if (sidePlayer.onGround) {
+        atk.phase = 'impact'; atk.t = 0;
+        screenShake = Math.max(screenShake, 4); hitStop = 0.05;
+        spawnDust(sidePlayer.x - 10, sidePlayer.y, 6); spawnDust(sidePlayer.x + 10, sidePlayer.y, 6);
+        combatFx.push({ kind: 'shock', x: sidePlayer.x, y: sidePlayer.y, life: 0.32, max: 0.32 });
+        sfx('slam'); padRumble(0.8, 0.9, 160);
+        plungeHitCheck();
+      }
+    } else if (atk.phase === 'impact') {
+      sidePlayer.vx = 0;
+      if (atk.t >= 4 / 14) { sidePlayer.atk = null; sidePlayer.attackCooldown = 0.16; lastMove = 'air'; comboTimer = 0; }
+    }
+    sidePlayer.attackTime = 1;
   }
 
   function updateKnightAttack(dt) {
@@ -2627,14 +2902,13 @@ const Overworld = (() => {
     const atk = sidePlayer.atk;
     if (!atk) { sidePlayer.attackTime = 0; return; }
     const move = KNIGHT_MOVES[atk.name];
+    if (move.air) { updatePlunge(atk, dt); return; }
     atk.t += dt;
     const idx = Math.floor(atk.t * move.fps);
     if (!atk.swooshed && idx >= move.active[0]) {
       atk.swooshed = true;
-      sfx(atk.name === 'finisher' || atk.name === 'thrust' ? 'swooshBig' : 'swoosh');
+      sfx(atk.name === 'finisher' || atk.name === 'thrust' ? 'swingBig' : 'swing');
     }
-    // Landing ends an air attack early so the knight never slides on the ground mid-dive.
-    if (move.air && sidePlayer.onGround && atk.t > 0.06) { sidePlayer.atk = null; sidePlayer.attackCooldown = 0.08; return; }
     if (idx >= move.frames.length) {
       const queued = atk.queued;
       sidePlayer.atk = null;
@@ -2645,50 +2919,85 @@ const Overworld = (() => {
       return;
     }
     sidePlayer.attackTime = 1;
-    if (platformScene === 'forest' && move.active.includes(idx)) knightHitCheck(atk, move);
+    if (outdoorScene() && move.active.includes(idx)) knightHitCheck(atk, move);
+  }
+
+  function mobTop(m) { return m.y - m.T.bodyH; }
+  function weaponAttack() { return equipment.weapon === 'boneblade' ? 3 : 2; }
+
+  function damageMob(m, dmg, f, knock, big, crit) {
+    // Skeletons sometimes raise their shield against hits from the front.
+    if (m.T.block && !m.dead && m.attackTime <= 0 && m.hurtTime <= 0 && Math.random() < m.T.block && Math.sign(sidePlayer.x - m.x) === m.dir) {
+      m.blockTime = 0.4; m.flash = 0.04; m.kvx = f * knock * 0.4;
+      spawnSparks(m.x - f * 10, m.y - m.T.bodyH * 0.6, f, 6, ['#ffffff', '#c9d6ff']);
+      addDamageNumber(m.x, mobTop(m) - 8, 'BLOCK', '#c9d6ff');
+      sfx('clash'); hitStop = 0.04; return;
+    }
+    dmg = Math.max(1, dmg);
+    m.hp = Math.max(0, m.hp - dmg);
+    m.flash = 0.07; m.showHpUntil = time + 3;
+    if (!m.T.armor) {
+      m.hurtTime = 0.3; m.kvx = f * knock; m.attackTime = 0; m.attackHit = true;
+      m.attackCooldown = Math.max(m.attackCooldown, 0.55); m.dir = -f;
+    } else {
+      m.kvx = f * knock * 0.12;
+    }
+    hitStop = big ? 0.075 : 0.05;
+    screenShake = Math.max(screenShake, big ? 2.5 : 1.2);
+    spawnSparks(m.x - f * 8, m.y - m.T.bodyH * 0.6, f, big ? 12 : 7, m.type === 'ghost' ? ['#d8fbff', '#7fe3ff', '#ffffff'] : ['#fff6d0', '#ffd27a', '#ff9a4a']);
+    addDamageNumber(m.x, mobTop(m) - 10, crit ? dmg + '!' : dmg, crit ? '#ffdf6b' : '#ffffff');
+    sfx(big ? 'hitBig' : 'hit');
+    mobVoice(m, 'hurt');
+    padRumble(big ? 0.7 : 0.35, big ? 0.9 : 0.6, big ? 140 : 80);
+    if (m.hp <= 0) defeatMob(m, f);
   }
 
   function knightHitCheck(atk, move) {
     const f = sidePlayer.facing;
     const near = sidePlayer.x + f * 4, far = sidePlayer.x + f * move.reach;
     const lo = Math.min(near, far) - 12, hi = Math.max(near, far) + 12;
-    const vertical = move.air ? 62 : 34;
-    sideGoblins.forEach((goblin, i) => {
-      if (goblin.dead || atk.hit.has(i)) return;
-      if (goblin.x < lo || goblin.x > hi) return;
-      if (Math.abs(sidePlayer.y - SIDE_GROUND_Y) > vertical) return;
+    // The sword sweeps roughly the knight's own height: feet to helmet plus a little.
+    const swingTop = sidePlayer.y - 46, swingBottom = sidePlayer.y + 4;
+    sideMobs.forEach((m, i) => {
+      if (m.dead || m.dormant || atk.hit.has(i)) return;
+      if (m.x + m.T.width / 2 < lo || m.x - m.T.width / 2 > hi) return;
+      if (m.y < swingTop || mobTop(m) > swingBottom) return;
       atk.hit.add(i);
       const bonus = Math.floor((totalAttack() - 5) / 4);
       const crit = Math.random() < 0.12;
-      const dmg = move.dmg + bonus + (crit ? 1 : 0);
-      goblin.hp = Math.max(0, goblin.hp - dmg);
-      goblin.hurtTime = 0.3; goblin.flash = 0.07;
-      goblin.kvx = f * move.knock;
-      goblin.attackTime = 0; goblin.attackHit = true;
-      goblin.attackCooldown = Math.max(goblin.attackCooldown, 0.55);
-      goblin.showHpUntil = time + 3;
-      goblin.dir = -f;
       const big = atk.name === 'finisher' || atk.name === 'thrust' || crit;
-      hitStop = move.stop || (big ? 0.075 : 0.05);
-      screenShake = Math.max(screenShake, move.shake || 1.2);
-      spawnSparks(goblin.x - f * 8, SIDE_GROUND_Y - 30, f, big ? 12 : 7, ['#fff6d0', '#ffd27a', '#ff9a4a']);
-      addDamageNumber(goblin.x, SIDE_GROUND_Y - 72, crit ? dmg + '!' : dmg, crit ? '#ffdf6b' : '#ffffff');
-      sfx(big ? 'hitBig' : 'hit');
-      padRumble(big ? 0.7 : 0.35, big ? 0.9 : 0.6, big ? 140 : 80);
-      if (goblin.hp <= 0) defeatGoblin(goblin, f);
+      damageMob(m, move.dmg + bonus + (crit ? 1 : 0), f, move.knock, big, crit);
     });
   }
 
-  function defeatGoblin(goblin, f) {
-    goblin.dead = true; goblin.deadTime = 0; goblin.respawn = 22; goblin.attackTime = 0;
-    goblin.kvx = f * 160;
-    hitStop = 0.11; screenShake = Math.max(screenShake, 3.5);
+  function plungeHitCheck() {
+    sideMobs.forEach(m => {
+      if (m.dead || m.dormant) return;
+      const dx = m.x - sidePlayer.x;
+      if (Math.abs(dx) > 62 + m.T.width / 2) return;
+      if (Math.abs(m.y - sidePlayer.y) > 34 + (m.T.fly || 0)) return;
+      const f = dx < 0 ? -1 : 1;
+      const bonus = Math.floor((totalAttack() - 5) / 4);
+      damageMob(m, 3 + bonus, f, 200, true, false);
+    });
+  }
+
+  function defeatMob(m, f) {
+    const T = m.T;
+    m.dead = true; m.deadTime = 0; m.respawn = T.boss ? Infinity : 24; m.attackTime = 0;
+    m.kvx = T.armor ? 0 : f * 160;
+    hitStop = T.boss ? 0.3 : 0.11; screenShake = Math.max(screenShake, T.boss ? 7 : 3.5);
     stats.kills = (stats.kills || 0) + 1;
-    const coins = 2 + Math.floor(Math.random() * 4);
-    for (let i = 0; i < coins; i++) pickups.push({ type: 'coin', amount: 1, x: goblin.x, y: SIDE_GROUND_Y - 30, vx: (Math.random() - 0.5) * 140, vy: -150 - Math.random() * 90, age: 0 });
-    if (Math.random() < 0.7) pickups.push({ type: 'fang', amount: 1, x: goblin.x, y: SIDE_GROUND_Y - 30, vx: f * 60, vy: -190, age: 0 });
-    if (Math.random() < 0.25) pickups.push({ type: 'tonic', amount: 1, x: goblin.x, y: SIDE_GROUND_Y - 30, vx: -f * 50, vy: -210, age: 0 });
-    gainXp(12);
+    if (m.type === 'goblin') stats.goblinKills = (stats.goblinKills || 0) + 1;
+    mobVoice(m, 'death');
+    const dropY = m.y - T.bodyH * 0.6;
+    const coins = T.coins[0] + Math.floor(Math.random() * (T.coins[1] - T.coins[0] + 1));
+    for (let i = 0; i < coins; i++) pickups.push({ type: 'coin', amount: 1, x: m.x, y: dropY, vx: (Math.random() - 0.5) * 140, vy: -150 - Math.random() * 90, age: 0 });
+    T.drops.forEach(([item, chance], k) => {
+      if (Math.random() < chance) pickups.push({ type: item, amount: 1, x: m.x, y: dropY, vx: (k % 2 ? -1 : 1) * f * 60, vy: -190 - k * 20, age: 0 });
+    });
+    gainXp(T.xp);
+    if (T.boss) onBossDefeated(m);
   }
 
   function gainXp(amount) {
@@ -2707,7 +3016,7 @@ const Overworld = (() => {
     }
   }
 
-  function hurtSidePlayer(amount, fromDir) {
+  function hurtSidePlayer(amount, fromDir, who) {
     stats.health = Math.max(0, stats.health - amount);
     sidePlayer.hurtTime = 0.36; sidePlayer.invulnTime = 1.1;
     sidePlayer.atk = null; sidePlayer.attackTime = 0; comboTimer = 0;
@@ -2720,7 +3029,7 @@ const Overworld = (() => {
     if (stats.health <= 0) {
       sidePlayer.deadTime = 1.9; sidePlayer.deathAge = 0;
       notice = 'You were overwhelmed. Returning to the trail...'; noticeUntil = time + 2.2;
-    } else { notice = 'A goblin hit you!'; noticeUntil = time + 1.2; }
+    } else { notice = (who || 'Something') + ' hit you!'; noticeUntil = time + 1.2; }
   }
 
   function updateCombatFx(dt) {
@@ -2730,7 +3039,7 @@ const Overworld = (() => {
     for (let i = combatFx.length - 1; i >= 0; i--) {
       const p = combatFx[i];
       p.life -= dt;
-      if (p.kind !== 'ring') { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += (p.kind === 'dust' ? 30 : 420) * dt; }
+      if (p.kind !== 'ring' && p.kind !== 'shock') { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += (p.kind === 'dust' ? 30 : 420) * dt; }
       if (p.life <= 0) combatFx.splice(i, 1);
     }
     for (let i = damageNumbers.length - 1; i >= 0; i--) {
@@ -2756,7 +3065,9 @@ const Overworld = (() => {
         if (p.type === 'coin') { inventory.coins = (inventory.coins || 0) + p.amount; sfx('tick'); }
         else {
           inventory[p.type] = (inventory[p.type] || 0) + p.amount;
-          notice = '+1 ' + ITEM_DEFS[p.type].name; noticeUntil = time + 1.6; sfx('pickup');
+          if (!newItems.has(p.type) && (inventory[p.type] || 0) === p.amount) newItems.add(p.type);
+          notice = '+1 ' + ITEM_DEFS[p.type].name; noticeUntil = time + 1.6;
+          sfx(ITEM_DEFS[p.type].rarity === 'rare' || ITEM_DEFS[p.type].rarity === 'legend' ? 'gem' : 'pickup');
         }
         pickups.splice(i, 1);
       } else if (p.age > 30) pickups.splice(i, 1);
@@ -2767,7 +3078,13 @@ const Overworld = (() => {
     ctx.save();
     combatFx.forEach(p => {
       const a = Math.max(0, p.life / p.max);
-      if (p.kind === 'ring') {
+      if (p.kind === 'shock') {
+        const r = 6 + (1 - a) * 58;
+        ctx.strokeStyle = 'rgba(255,236,190,' + a * 0.9 + ')'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(p.x, p.y, r, r * 0.22, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = 'rgba(160,220,255,' + a * 0.6 + ')'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.ellipse(p.x, p.y, r * 0.7, r * 0.16, 0, 0, Math.PI * 2); ctx.stroke();
+      } else if (p.kind === 'ring') {
         ctx.strokeStyle = 'rgba(255,240,200,' + a + ')'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(p.x, p.y, 4 + (1 - a) * 14, 0, Math.PI * 2); ctx.stroke();
       } else {
@@ -2809,9 +3126,140 @@ const Overworld = (() => {
     r: '#c8324a', R: '#ff8090', p: '#74173a', g: '#4f9a3a', G: '#9bd96f',
     b: '#7a4a2a', B: '#ad7444', l: '#e3bd84', d: '#4b2b18',
     c: '#4f8fd1', C: '#a9d6ff', n: '#28487f', w: '#f4efe0', W: '#ffffff', s: '#a89c84',
-    m: '#7b8e9c', M: '#d3dde0', h: '#45586a', u: '#c49a55', t: '#5a3a24', v: '#8fd0ff'
+    m: '#7b8e9c', M: '#d3dde0', h: '#45586a', u: '#c49a55', t: '#5a3a24', v: '#8fd0ff',
+    e: '#7a4cc0', E: '#c9a8ff', q: '#2fbfa0', Q: '#b8fff0', f: '#d8cfb4', F: '#a0947a', x: '#e8542e'
   };
   const ICONS = {
+    bread: [
+      '............',
+      '............',
+      '....kkkk....',
+      '..kkBllBkk..',
+      '.kBllBBllBk.',
+      'kBlBBllBBlBk',
+      'kBBlBBBlBBBk',
+      'kbBBBBBBBBbk',
+      'kbbbbbbbbbbk',
+      '.kkbbbbbbkk.',
+      '...kkkkkk...',
+      '............'],
+    bone: [
+      '............',
+      '.kk......kk.',
+      'kffk....kffk',
+      'kfFfk..kfFfk',
+      '.kffkkkkffk.',
+      '..kffffffk..',
+      '..kFFFFFFk..',
+      '.kffkkkkffk.',
+      'kfFfk..kfFfk',
+      'kffk....kffk',
+      '.kk......kk.',
+      '............'],
+    spore: [
+      '............',
+      '...kkkkkk...',
+      '..kxxwxxxk..',
+      '.kxwxxxwxxk.',
+      'kxxxxwxxxxxk',
+      'kkkkkkkkkkkk',
+      '....kffk....',
+      '....kfFk....',
+      '....kffk....',
+      '...kfffFk...',
+      '...kkkkkk...',
+      '............'],
+    eye: [
+      '............',
+      '...kkkkkk...',
+      '..kwwwwwwk..',
+      '.kwwrrrrwwk.',
+      'kwwrRkkrrwwk',
+      'kwwrkkkkrwwk',
+      'kwwrkkkkrwwk',
+      'kwwrrkkrrwwk',
+      '.kwwrrrrwwk.',
+      '..kwwwwwwk..',
+      '...kkkkkk...',
+      '............'],
+    wisp: [
+      '.....kk.....',
+      '....kQQk....',
+      '...kQvQk....',
+      '...kvQvvk...',
+      '..kvQQvvk...',
+      '..kvQWQvvk..',
+      '.kvQWWQvck..',
+      '.kcvQQvcck..',
+      '.kccvvccnk..',
+      '..kncccnk...',
+      '...kkkkk....',
+      '............'],
+    boneblade: [
+      '..........kk',
+      '.........kfk',
+      '........kfFk',
+      '.......kfFk.',
+      '......kfFk..',
+      '.....kfFk...',
+      '..k.kfFk....',
+      '..kkfFk.....',
+      '...kFk......',
+      '..kbkkk.....',
+      '.kbk........',
+      '.kk.........'],
+    crown: [
+      '............',
+      '............',
+      '.k...kk...k.',
+      'kyk.kyyk.kyk',
+      'kyykyyyykyyk',
+      'kyyyyeyyyyyk',
+      'kyoyyEyyoyyk',
+      'kyyyyyyyyyyk',
+      'koyoyoyoyoyk',
+      'kkkkkkkkkkkk',
+      '............',
+      '............'],
+    page: [
+      '............',
+      '..kkkkkkk...',
+      '..kwwwwwwk..',
+      '..kwsssswkk.',
+      '..kwwwwwwwk.',
+      '..kwsssssswk',
+      '..kwwwwwwwwk',
+      '..kwssssswwk',
+      '..kwwwwwwwwk',
+      '..kwsssswwwk',
+      '..kkkkkkkkkk',
+      '............'],
+    whetstone: [
+      '............',
+      '............',
+      '............',
+      '....kkkkkk..',
+      '..kkmMMMmk..',
+      '.kmMMMMmmhk.',
+      'kmmmmmmhhhk.',
+      'khhhhhhhhk..',
+      '.kkkkkkkk...',
+      '............',
+      '............',
+      '............'],
+    plate: [
+      '............',
+      '..kkkkkkkk..',
+      '.kmMMMMMMmk.',
+      '.kmMmmmmMmk.',
+      '.kmmmmmmmhk.',
+      '.kmmmuummhk.',
+      '.kmmmuummhk.',
+      '.khmmmmmhhk.',
+      '..khmmmmhk..',
+      '...khhhhk...',
+      '....kkkk....',
+      '............'],
     berry: [
       '.....gg.....',
       '....gGg.....',
@@ -2958,7 +3406,7 @@ const Overworld = (() => {
   }
 
   function updatePlatformer(dt) {
-    if (hitStop > 0) { hitStop -= dt; sideGoblins.forEach(g => { g.flash = Math.max(0, (g.flash || 0) - dt); }); updateSideCamera(dt); return; }
+    if (hitStop > 0) { hitStop -= dt; sideMobs.forEach(g => { g.flash = Math.max(0, (g.flash || 0) - dt); }); updateSideCamera(dt); return; }
     time += dt;
     saveTimer += dt;
     if (saveTimer >= 5) {
@@ -2977,13 +3425,24 @@ const Overworld = (() => {
       sidePlayer.x = clamp(sidePlayer.x + sidePlayer.vx * dt, 16, sideWorldWidth() - 16);
       if (sidePlayer.y < SIDE_GROUND_Y) { sidePlayer.vy += 820 * dt; sidePlayer.y = Math.min(SIDE_GROUND_Y, sidePlayer.y + sidePlayer.vy * dt); } else sidePlayer.vy = 0;
       if (sidePlayer.deadTime <= 0) {
-        sidePlayer.x = 72; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0;
+        if (bossFight) endBossFight(false);
+        sidePlayer.x = platformScene === 'hollow' ? 130 : 72; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0;
         sidePlayer.onGround = true; sidePlayer.invulnTime = 1.6; sidePlayer.atk = null; sidePlayer.hurtTime = 0; sidePlayer.facing = 1;
         pickups.length = 0;
         stats.health = Math.max(1, Math.ceil(stats.maxHealth * 0.65));
-        notice = 'You made it back to the forest entrance.'; noticeUntil = time + 2.5;
+        notice = platformScene === 'hollow' ? 'You wake at the edge of the Hollow.' : 'You made it back to the forest entrance.'; noticeUntil = time + 2.5;
       }
       sideAttackQueued = false; sideJumpQueued = false; updateSideCamera(dt); return;
+    }
+    if (dialogue || (bossFight && bossFight.intro)) {
+      sidePlayer.vx = 0; sidePlayer.moving = false; sidePlayer.atk = null;
+      sideJumpQueued = false; sideAttackQueued = false;
+      if (dialogue) updateDialogue(dt);
+      if (bossFight) updateBossIntro(dt);
+      updateDad(dt);
+      if (!sidePlayer.onGround) { sidePlayer.vy += 820 * dt; sidePlayer.y = Math.min(SIDE_GROUND_Y, sidePlayer.y + sidePlayer.vy * dt); if (sidePlayer.y >= SIDE_GROUND_Y) { sidePlayer.onGround = true; sidePlayer.vy = 0; } }
+      updateSideCamera(dt);
+      return;
     }
     if (armorTutorialPending) {
       sidePlayer.vx = 0; sidePlayer.moving = false;
@@ -3020,10 +3479,15 @@ const Overworld = (() => {
         sidePlayer.vy = -292;
         sidePlayer.onGround = false;
         spawnDust(sidePlayer.x, sidePlayer.y, 4);
+        sfx('cloth', 0.5, 1.2);
       }
       if (sprinting) stats.stamina = Math.max(0, stats.stamina - 20 * dt);
       else stats.stamina = Math.min(stats.maxStamina, stats.stamina + 13 * dt);
-      if (sidePlayer.moving) sidePlayer.walk += Math.abs(sidePlayer.vx) * dt / 7.5;
+      if (sidePlayer.moving) {
+        const before = Math.floor(sidePlayer.walk / 4);
+        sidePlayer.walk += Math.abs(sidePlayer.vx) * dt / 7.5;
+        if (sidePlayer.onGround && Math.floor(sidePlayer.walk / 4) !== before) sfx('stepGrass', 0.8 + (sprinting ? 0.3 : 0));
+      }
     } else {
       sidePlayer.vx *= Math.max(0, 1 - dt * 18);
       sidePlayer.moving = false;
@@ -3032,7 +3496,8 @@ const Overworld = (() => {
     updateKnightAttack(dt);
 
     const oldFeet = sidePlayer.y;
-    const nextX = clamp(sidePlayer.x + sidePlayer.vx * dt, 16, sideWorldWidth() - 16);
+    let nextX = clamp(sidePlayer.x + sidePlayer.vx * dt, 16, sideWorldWidth() - 16);
+    if (bossFight && bossFight.active) nextX = clamp(nextX, BOSS_ARENA.left + 12, BOSS_ARENA.right - 12);
     sidePlayer.x = nextX;
     sidePlayer.vy += 820 * dt;
     const nextFeet = sidePlayer.y + sidePlayer.vy * dt;
@@ -3046,7 +3511,7 @@ const Overworld = (() => {
       }
     }
     if (landing) {
-      if (!sidePlayer.onGround && sidePlayer.vy > 180) { landTime = 0.08; spawnDust(sidePlayer.x, landing.y, 5); }
+      if (!sidePlayer.onGround && sidePlayer.vy > 180) { landTime = 0.08; spawnDust(sidePlayer.x, landing.y, 5); if (!(sidePlayer.atk && sidePlayer.atk.phase === 'dive')) sfx('land', 0.7); }
       sidePlayer.y = landing.y;
       sidePlayer.vy = 0;
       sidePlayer.onGround = true;
@@ -3070,7 +3535,7 @@ const Overworld = (() => {
     stepDistance += moved;
     while (stepDistance >= 20) { stats.steps++; stepDistance -= 20; }
 
-    if (platformScene === 'forest') updateForestCombat(dt);
+    if (outdoorScene()) { updateForestCombat(dt); updateStory(dt); }
     updateSideCamera(dt);
   }
 
@@ -3135,75 +3600,198 @@ const Overworld = (() => {
     pixel(18, 28, 3, 2, steel);
   }
 
-  const GOBLIN_ATTACK_TIME = 0.72;
+  const bossWaves = [];   // ground shockwaves from the Hollow King's club
+  function playerBodyOverlaps(top, bottom) { return sidePlayer.y - 40 < bottom && sidePlayer.y > top; }
   function updateForestCombat(dt) {
-    for (const goblin of sideGoblins) {
-      goblin.flash = Math.max(0, (goblin.flash || 0) - dt);
-      // Knockback slides the scout back and bleeds off quickly.
-      if (goblin.kvx) {
-        goblin.x += goblin.kvx * dt;
-        goblin.kvx *= Math.max(0, 1 - dt * 9);
-        if (Math.abs(goblin.kvx) < 4) goblin.kvx = 0;
-        goblin.x = clamp(goblin.x, 30, FOREST_SIDE_WIDTH - 30);
+    const playerAlive = sidePlayer.deadTime <= 0;
+    for (const m of sideMobs) {
+      const T = m.T;
+      m.flash = Math.max(0, (m.flash || 0) - dt);
+      m.blockTime = Math.max(0, m.blockTime - dt);
+      m.bob += dt;
+      if (m.kvx) {
+        m.x += m.kvx * dt;
+        m.kvx *= Math.max(0, 1 - dt * 9);
+        if (Math.abs(m.kvx) < 4) m.kvx = 0;
       }
-      if (goblin.dead) {
-        goblin.deadTime += dt; goblin.respawn -= dt;
-        // Respawn out of sight so a scout never pops in on top of the player.
-        if (goblin.respawn <= 0 && Math.abs(sidePlayer.x - goblin.home) > 220) {
-          goblin.dead = false; goblin.deadTime = 0; goblin.hp = goblin.maxHp; goblin.kvx = 0;
-          goblin.x = goblin.home; goblin.attackCooldown = 1.2; goblin.moving = false;
+      m.x = clamp(m.x, 30, platformScene === 'forest' ? 3540 : platformScene === 'hollow' && !T.boss && !m.summoned ? BOSS_ARENA.left - 40 : sideWorldWidth() - 30);
+      if (!T.boss && m.summoned) m.x = clamp(m.x, BOSS_ARENA.left + 20, BOSS_ARENA.right - 20);
+      if (T.boss && bossFight && bossFight.active) m.x = clamp(m.x, BOSS_ARENA.left + 30, BOSS_ARENA.right - 30);
+      if (m.dead) {
+        m.deadTime += dt; m.respawn -= dt;
+        if (m.respawn <= 0 && Math.abs(sidePlayer.x - m.home) > 240) {
+          Object.assign(m, makeMob(m.type, m.home, (m.max - m.min) / 2, 1), { patrolDir: m.patrolDir });
         }
         continue;
       }
-      goblin.attackCooldown = Math.max(0, goblin.attackCooldown - dt);
-      goblin.attackTime = Math.max(0, goblin.attackTime - dt);
-      goblin.hurtTime = Math.max(0, goblin.hurtTime - dt);
-      const dx = sidePlayer.x - goblin.x;
+      if (m.dormant) { m.walk += dt * 6; continue; }
+      const enraged = T.boss && m.hp <= m.maxHp / 2;
+      if (enraged && !m.enraged) {
+        m.enraged = true; m.attackTime = 0; m.attackCooldown = 1.2;
+        sfx('roar', 1, 0.8); screenShake = 6; padRumble(1, 1, 500);
+        notice = 'Grukk roars and the Hollow answers...'; noticeUntil = time + 2.4;
+        [BOSS_ARENA.left + 60, BOSS_ARENA.right - 60].forEach((x, k) => {
+          const g = makeMob('ghost', x, 60, k); g.respawn = Infinity; g.summoned = true; g.flash = 0.3; sideMobs.push(g);
+        });
+      }
+      m.attackCooldown = Math.max(0, m.attackCooldown - dt);
+      m.attackTime = Math.max(0, m.attackTime - dt);
+      m.hurtTime = Math.max(0, m.hurtTime - dt);
+      const dx = sidePlayer.x - m.x;
       const distance = Math.abs(dx);
-      goblin.moving = false;
-      const playerAlive = sidePlayer.deadTime <= 0;
-      if (goblin.hurtTime > 0 || goblin.kvx) {
-        // Staggered: no movement or new attacks.
-      } else if (goblin.attackTime > 0) {
-        // Commit to the swing direction once the wind-up starts.
-      } else if (playerAlive && distance < 230) {
-        goblin.dir = dx < 0 ? -1 : 1;
-        goblin.runUntil = Math.max(goblin.runUntil, time + 0.25);
-        if (distance > 40) {
-          const speed = 74;
-          goblin.x += goblin.dir * speed * dt;
-          goblin.walk = (goblin.walk || 0) + speed * dt / 6;
-          goblin.moving = true;
-        } else if (goblin.attackCooldown <= 0) {
-          goblin.attackTime = GOBLIN_ATTACK_TIME; goblin.attackCooldown = 1.5 + Math.random() * 0.5; goblin.attackHit = false;
+      const speedMul = enraged ? 1.45 : 1;
+      m.moving = false;
+      if (m.hurtTime > 0 || m.kvx || m.blockTime > 0) {
+        // Staggered.
+      } else if (m.attackTime > 0) {
+        if (T.fly && m.type === 'eye') m.x += m.dir * 60 * dt;   // the eye lunges through its bite
+      } else if (playerAlive && !safeZone() && distance < T.chase && Math.abs(sidePlayer.y - SIDE_GROUND_Y) < 120) {
+        m.dir = dx < 0 ? -1 : 1;
+        m.runUntil = Math.max(m.runUntil, time + 0.25);
+        if (distance > T.reach - 8) {
+          const speed = T.speed * speedMul;
+          m.x += m.dir * speed * dt;
+          m.walk += speed * dt / 6;
+          m.moving = true;
+        } else if (m.attackCooldown <= 0) {
+          m.attackTime = T.atkTime / speedMul; m.atkLen = m.attackTime; m.attackHit = false; m.waveDone = false;
+          m.attackCooldown = (T.cd[0] + Math.random() * (T.cd[1] - T.cd[0])) / speedMul;
+          if (Math.random() < 0.6) mobVoice(m, 'attack');
         }
       } else {
-        const speed = time < goblin.runUntil ? 90 : 20;
-        goblin.dir = goblin.patrolDir;
-        goblin.x += goblin.patrolDir * speed * dt;
-        goblin.walk = (goblin.walk || 0) + speed * dt / 6;
-        goblin.moving = true;
-        if (goblin.x < goblin.min) { goblin.x = goblin.min; goblin.patrolDir = 1; goblin.dir = 1; }
-        if (goblin.x > goblin.max) { goblin.x = goblin.max; goblin.patrolDir = -1; goblin.dir = -1; }
+        const speed = (time < m.runUntil ? T.speed : T.speed * 0.3);
+        m.dir = m.patrolDir;
+        m.x += m.patrolDir * speed * dt;
+        m.walk += speed * dt / 6;
+        m.moving = true;
+        if (m.x < m.min) { m.x = m.min; m.patrolDir = 1; m.dir = 1; }
+        if (m.x > m.max) { m.x = m.max; m.patrolDir = -1; m.dir = -1; }
       }
-      // The dagger connects on the attack's 4th-5th frame, after a readable wind-up.
-      const elapsed = GOBLIN_ATTACK_TIME - goblin.attackTime;
-      if (goblin.attackTime > 0 && elapsed > 0.4 && elapsed < 0.52 && !goblin.attackHit) {
-        const facingPlayer = Math.sign(sidePlayer.x - goblin.x) === goblin.dir || distance < 10;
-        if (distance < 50 && facingPlayer && Math.abs(sidePlayer.y - SIDE_GROUND_Y) < 26 && sidePlayer.invulnTime <= 0 && playerAlive) {
-          goblin.attackHit = true;
-          const dmg = Math.max(1, 4 - Math.floor(totalDefense() / 2));
-          hurtSidePlayer(dmg, goblin.dir);
+      // Height: walkers stand on the ground, fliers hover and dive while biting.
+      if (T.fly) {
+        let hover = SIDE_GROUND_Y - T.fly + Math.sin(m.bob * 3) * 4;
+        if (m.attackTime > 0 && m.type === 'eye') {
+          const p = 1 - m.attackTime / m.atkLen;
+          hover += Math.sin(Math.min(1, p) * Math.PI) * (T.fly - 18);
+        }
+        m.y += (hover - m.y) * Math.min(1, dt * 10);
+      } else m.y = SIDE_GROUND_Y;
+      // Damage window, measured as a share of the swing so animation and hit agree.
+      if (m.attackTime > 0 && !m.attackHit) {
+        const p = 1 - m.attackTime / m.atkLen;
+        if (p >= T.hit[0] && p <= T.hit[1]) {
+          if (T.boss && !m.waveDone) {
+            m.waveDone = true;
+            screenShake = Math.max(screenShake, 5); padRumble(0.9, 0.9, 220); sfx('slam', 1, 0.75);
+            spawnDust(m.x + m.dir * 60, SIDE_GROUND_Y, 10);
+            bossWaves.push({ x: m.x + m.dir * 58, dir: m.dir, life: enraged ? 2.6 : 1.9, hit: false });
+            if (enraged) bossWaves.push({ x: m.x - m.dir * 30, dir: -m.dir, life: 1.6, hit: false });
+          }
+          const facing = Math.sign(dx) === m.dir || distance < 12;
+          if (distance < T.reach + 4 && facing && playerBodyOverlaps(m.y - T.bodyH - 6, m.y + 4) && sidePlayer.invulnTime <= 0 && playerAlive) {
+            m.attackHit = true;
+            hurtSidePlayer(Math.max(1, T.dmg - Math.floor(totalDefense() / 2)), m.dir, T.boss ? 'Grukk' : 'The ' + T.name.toLowerCase());
+          }
+        } else if (p > T.hit[1]) m.attackHit = true;
+      }
+      // Ground walkers block the knight's path; fliers and ghosts drift through.
+      if (!T.fly) {
+        const gap = sidePlayer.x - m.x, half = T.width / 2 + 9;
+        if (Math.abs(gap) < half && Math.abs(sidePlayer.y - SIDE_GROUND_Y) < 8 && !sidePlayer.atk) {
+          sidePlayer.x = m.x + (gap < 0 ? -half : half);
+          sidePlayer.vx = 0;
         }
       }
-      if (goblin.attackTime <= 0 || elapsed >= 0.52) goblin.attackHit = true;
-      // Keep the player from walking through a living scout.
-      const bodyGap = sidePlayer.x - goblin.x;
-      if (Math.abs(bodyGap) < 20 && Math.abs(sidePlayer.y - SIDE_GROUND_Y) < 8 && !sidePlayer.atk) {
-        sidePlayer.x = goblin.x + (bodyGap < 0 ? -20 : 20);
-        sidePlayer.vx = 0;
-      }
     }
+    for (let i = sideMobs.length - 1; i >= 0; i--) if (sideMobs[i].summoned && sideMobs[i].dead && sideMobs[i].deadTime > 1.5) sideMobs.splice(i, 1);
+    for (let i = bossWaves.length - 1; i >= 0; i--) {
+      const w = bossWaves[i];
+      w.x += w.dir * 175 * dt; w.life -= dt;
+      if (Math.random() < 0.5) spawnDust(w.x, SIDE_GROUND_Y, 1);
+      if (!w.hit && Math.abs(w.x - sidePlayer.x) < 12 && sidePlayer.y > SIDE_GROUND_Y - 12 && sidePlayer.invulnTime <= 0 && playerAlive) {
+        w.hit = true; hurtSidePlayer(Math.max(1, 5 - Math.floor(totalDefense() / 2)), w.dir, 'The shockwave');
+      }
+      if (w.life <= 0 || w.x < BOSS_ARENA.left || w.x > BOSS_ARENA.right) bossWaves.splice(i, 1);
+    }
+  }
+
+  // Generic monster renderer: picks the animation from state, anchors feet,
+  // flips to face the target, and flashes white on hit.
+  const mobFlashCanvas = document.createElement('canvas');
+  const mobFlashCtx = mobFlashCanvas.getContext('2d');
+  function mobFrame(m) {
+    const T = m.T, A = T.anims;
+    if (m.dead) {
+      if (A.death) { const n = A.death[1]; return [A.death, Math.min(n - 1, Math.floor(m.deadTime * 9))]; }
+      return [A.idle, 0];
+    }
+    if (m.blockTime > 0 && A.block) return [A.block, Math.min(A.block[1] - 1, Math.floor((0.4 - m.blockTime) * 10))];
+    if (m.hurtTime > 0 && A.hurt) return [A.hurt, Math.min(A.hurt[1] - 1, Math.floor((0.3 - m.hurtTime) / 0.3 * A.hurt[1]))];
+    if (m.attackTime > 0) { const n = A.attack[1]; return [A.attack, Math.min(n - 1, Math.floor((1 - m.attackTime / m.atkLen) * n))]; }
+    if (m.moving && !m.dormant) { const an = A.move; return [an, Math.floor(m.walk * an[2] / 14) % an[1]]; }
+    return [A.idle, Math.floor(time * A.idle[2]) % A.idle[1]];
+  }
+  function drawMob(m) {
+    const T = m.T;
+    const [anim, frame] = mobFrame(m);
+    const img = mobSheet(T, anim);
+    if (!imgReady(img)) return;
+    let alpha = T.alpha || 1;
+    if (m.dead) {
+      const fadeStart = T.boss ? 1.6 : (anim[1] / 9 + 0.5);
+      alpha *= Math.max(0, 1 - Math.max(0, m.deadTime - fadeStart) / 0.6);
+      if (T.boss) alpha *= m.deadTime < 1.6 ? (Math.floor(m.deadTime * 14) % 2 ? 0.5 : 1) : 1;
+      if (alpha <= 0) return;
+    }
+    const sc = T.scale, w = T.fw * sc, h = T.fh * sc;
+    const flip = T.faceLeft ? m.dir > 0 : m.dir < 0;
+    const sink = T.boss && m.dead ? Math.min(14, m.deadTime * 6) : 0;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(Math.round(m.x), Math.round(m.y + sink));
+    if (flip) ctx.scale(-1, 1);
+    ctx.drawImage(img, frame * T.fw, 0, T.fw, T.fh, -T.ax * sc, -T.ay * sc, w, h);
+    if (m.flash > 0) {
+      mobFlashCanvas.width = T.fw; mobFlashCanvas.height = T.fh;
+      mobFlashCtx.clearRect(0, 0, T.fw, T.fh);
+      mobFlashCtx.drawImage(img, frame * T.fw, 0, T.fw, T.fh, 0, 0, T.fw, T.fh);
+      mobFlashCtx.globalCompositeOperation = 'source-in';
+      mobFlashCtx.fillStyle = '#ffffff'; mobFlashCtx.fillRect(0, 0, T.fw, T.fh);
+      mobFlashCtx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = alpha * 0.85;
+      ctx.drawImage(mobFlashCanvas, -T.ax * sc, -T.ay * sc, w, h);
+    }
+    ctx.restore();
+  }
+  function drawSideMobs() {
+    sideMobs.forEach(m => {
+      if (m.dead && m.deadTime > 3) return;
+      // ground shadow
+      const dist = SIDE_GROUND_Y - m.y;
+      ctx.fillStyle = 'rgba(0,0,0,' + Math.max(0.08, 0.3 - dist / 300) + ')';
+      ctx.beginPath(); ctx.ellipse(Math.round(m.x), SIDE_GROUND_Y + 1, m.T.width * (m.T.boss ? 1.1 : 0.8), 3, 0, 0, Math.PI * 2); ctx.fill();
+      drawMob(m);
+      // Telegraph: a red glint before a heavy swing.
+      if (!m.dead && m.attackTime > 0 && (1 - m.attackTime / m.atkLen) < m.T.hit[0] && Math.floor(time * 16) % 2) {
+        ctx.fillStyle = '#ff5050';
+        ctx.fillRect(Math.round(m.x + m.dir * (m.T.width / 2 + 2)), Math.round(mobTop(m) + 4), 2, 2);
+      }
+      if (!m.dead && !m.T.boss && !m.dormant && (time < m.showHpUntil || m.hp < m.maxHp)) {
+        const bw = 22, bx = Math.round(m.x - bw / 2), by = Math.round(mobTop(m) - 7);
+        ctx.fillStyle = '#120c14'; ctx.fillRect(bx - 1, by - 1, bw + 2, 4);
+        ctx.fillStyle = '#4a1820'; ctx.fillRect(bx, by, bw, 2);
+        ctx.fillStyle = '#e04848'; ctx.fillRect(bx, by, Math.round(bw * m.hp / m.maxHp), 2);
+      }
+    });
+    bossWaves.forEach(w => {
+      const a = Math.min(1, w.life * 2);
+      ctx.fillStyle = 'rgba(255,190,120,' + a * 0.85 + ')';
+      ctx.fillRect(Math.round(w.x) - 4, SIDE_GROUND_Y - 9, 8, 9);
+      ctx.fillStyle = 'rgba(255,240,200,' + a + ')';
+      ctx.fillRect(Math.round(w.x) - 2, SIDE_GROUND_Y - 13, 4, 13);
+      ctx.fillStyle = 'rgba(120,70,40,' + a * 0.8 + ')';
+      ctx.fillRect(Math.round(w.x) - w.dir * 10, SIDE_GROUND_Y - 4, 6, 4);
+    });
   }
 
   // Draws one full 128 x 64 knight cell. The knight's body sits at x ~62 in
@@ -3231,9 +3819,15 @@ const Overworld = (() => {
       return { sheet: ks.hurt, cols: 2, frame: Math.min(2, Math.floor((0.36 - sidePlayer.hurtTime) / 0.36 * 3)) };
     }
     if (sidePlayer.atk) {
-      const move = KNIGHT_MOVES[sidePlayer.atk.name];
-      const idx = Math.min(move.frames.length - 1, Math.floor(sidePlayer.atk.t * move.fps));
-      return { sheet: move.sheet === 'air' ? ks.air : ks.attacks, cols: move.cols, frame: move.frames[idx] };
+      const atk = sidePlayer.atk, move = KNIGHT_MOVES[atk.name];
+      if (move.air) {
+        // attack_from_air: frames 0-2 dive, 3 impact, 4-6 shockwave and recover.
+        if (atk.phase === 'impact') return { sheet: ks.air, cols: 2, frame: Math.min(6, 3 + Math.floor(atk.t * 14)) };
+        if (atk.phase === 'hang') return { sheet: ks.air, cols: 2, frame: 0 };
+        return { sheet: ks.air, cols: 2, frame: 1 + Math.floor(atk.t * 16) % 2 };
+      }
+      const idx = Math.min(move.frames.length - 1, Math.floor(atk.t * move.fps));
+      return { sheet: ks.attacks, cols: move.cols, frame: move.frames[idx] };
     }
     if (!sidePlayer.onGround) {
       const vy = sidePlayer.vy;
@@ -3250,7 +3844,7 @@ const Overworld = (() => {
     const y = Math.round(sidePlayer.y);
     // The knight sheets are used whenever they are loaded so attacks always
     // animate; the story requires Dad's armor before the forest anyway.
-    const useKnight = (equipment.armor || platformScene === 'forest') && knightSprites.idle && knightSprites.idle.complete && knightSprites.idle.naturalWidth;
+    const useKnight = (equipment.armor || outdoorScene()) && knightSprites.idle && knightSprites.idle.complete && knightSprites.idle.naturalWidth;
     // Ground shadow shrinks while airborne.
     const air = Math.max(0, SIDE_GROUND_Y - y);
     const groundBelow = sidePlayer.onGround ? y : SIDE_GROUND_Y;
@@ -3288,70 +3882,6 @@ const Overworld = (() => {
 
   // Offscreen buffer used to flash goblins white on impact.
   let flashCanvas = null, flashCtx = null;
-  function drawGoblinSprite(sx, sy, x, dir, size, alpha, flash) {
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(Math.round(x), 0);
-    ctx.scale(dir < 0 ? -1 : 1, 1);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(goblinScoutSheet, sx, sy, 500, GOBLIN_FRAME_HEIGHT, -size / 2, SIDE_GROUND_Y - size, size, size);
-    if (flash > 0) {
-      if (!flashCanvas) { flashCanvas = document.createElement('canvas'); flashCanvas.width = 72; flashCanvas.height = 72; flashCtx = flashCanvas.getContext('2d'); }
-      flashCtx.globalCompositeOperation = 'source-over';
-      flashCtx.clearRect(0, 0, 72, 72);
-      flashCtx.imageSmoothingEnabled = false;
-      flashCtx.drawImage(goblinScoutSheet, sx, sy, 500, GOBLIN_FRAME_HEIGHT, 0, 0, 72, 72);
-      flashCtx.globalCompositeOperation = 'source-in';
-      flashCtx.fillStyle = '#ffffff'; flashCtx.fillRect(0, 0, 72, 72);
-      ctx.globalAlpha = alpha * Math.min(1, flash / 0.06);
-      ctx.drawImage(flashCanvas, -size / 2, SIDE_GROUND_Y - size, size, size);
-    }
-    ctx.restore();
-  }
-
-  function drawSideGoblins() {
-    if (!(goblinScoutSheet.complete && goblinScoutSheet.naturalWidth >= GOBLIN_FRAME_WIDTH * 9)) return;
-    sideGoblins.forEach(goblin => {
-      if (goblin.dead && goblin.deadTime > 2.2) return;
-      if (goblin.x < sideCameraX - 60 || goblin.x > sideCameraX + canvas.width + 60) return;
-      let animation = GOBLIN_ANIMATIONS.idle;
-      let frame = Math.floor(time * 7 + goblin.phase) % animation.frames;
-      if (goblin.dead) {
-        animation = GOBLIN_ANIMATIONS.death;
-        frame = Math.min(animation.frames - 1, Math.floor(goblin.deadTime * 9));
-      } else if (goblin.hurtTime > 0) {
-        animation = GOBLIN_ANIMATIONS.hit;
-        frame = Math.min(animation.frames - 1, Math.floor((0.3 - goblin.hurtTime) / 0.3 * animation.frames));
-      } else if (goblin.attackTime > 0) {
-        animation = GOBLIN_ANIMATIONS.attack;
-        frame = Math.min(animation.frames - 1, Math.floor((GOBLIN_ATTACK_TIME - goblin.attackTime) / GOBLIN_ATTACK_TIME * animation.frames));
-      } else if (goblin.moving) {
-        animation = GOBLIN_ANIMATIONS.walk;
-        frame = Math.floor(goblin.walk || 0) % animation.frames;
-      }
-      const alpha = goblin.dead ? Math.max(0, Math.min(1, (2.2 - goblin.deadTime) / 0.6)) : 1;
-      ctx.fillStyle = 'rgba(0,0,0,' + (0.26 * alpha) + ')';
-      ctx.fillRect(Math.round(goblin.x) - 11, SIDE_GROUND_Y - 1, 22, 2);
-      drawGoblinSprite(frame * GOBLIN_FRAME_WIDTH + 50, animation.row * GOBLIN_FRAME_HEIGHT, goblin.x, goblin.dir, 72, alpha, goblin.flash || 0);
-
-      // Attack wind-up tell: a small spark over the scout's head.
-      if (!goblin.dead && goblin.attackTime > GOBLIN_ATTACK_TIME - 0.3) {
-        const blink = Math.floor(time * 20) % 2 === 0;
-        ctx.fillStyle = blink ? '#ffef9a' : '#ff8a4a';
-        ctx.fillRect(Math.round(goblin.x) - 1, SIDE_GROUND_Y - 80, 2, 6);
-        ctx.fillRect(Math.round(goblin.x) - 1, SIDE_GROUND_Y - 72, 2, 2);
-      }
-      const near = Math.abs(sidePlayer.x - goblin.x) < 150;
-      if (!goblin.dead && (near || time < (goblin.showHpUntil || 0))) {
-        const bx = Math.round(goblin.x) - 14, by = SIDE_GROUND_Y - 66;
-        ctx.fillStyle = '#120c14'; ctx.fillRect(bx - 1, by - 1, 30, 5);
-        ctx.fillStyle = '#4a1d22'; ctx.fillRect(bx, by, 28, 3);
-        ctx.fillStyle = goblin.hp / goblin.maxHp > 0.4 ? '#e2584f' : '#ff9a3c';
-        ctx.fillRect(bx, by, Math.round(28 * goblin.hp / goblin.maxHp), 3);
-        ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(bx, by, Math.round(28 * goblin.hp / goblin.maxHp), 1);
-      }
-    });
-  }
 
   function drawDadArmorStand(x, groundY) {
     // A large, unmistakable armor display in Dad's room (kept separate from the player).
@@ -3507,6 +4037,16 @@ const Overworld = (() => {
       for (let x = -offset - bgWidth; x < canvas.width + bgWidth; x += bgWidth) {
         ctx.drawImage(sideForestBackground, x, bgY, bgWidth, bgHeight);
       }
+      // The art stops just under the ground line; fill the rest with soil so no
+      // previous frame (e.g. the house) shows through underneath.
+      const bottom = Math.floor(bgY + bgHeight) - 1;
+      if (bottom < canvas.height) {
+        const g = ctx.createLinearGradient(0, bottom, 0, canvas.height);
+        g.addColorStop(0, '#0e1a1a'); g.addColorStop(1, '#070b0d');
+        ctx.fillStyle = g; ctx.fillRect(0, bottom, canvas.width, canvas.height - bottom);
+        ctx.fillStyle = 'rgba(70,96,58,0.35)';
+        for (let x = -(sideCameraX % 23); x < canvas.width; x += 23) ctx.fillRect(Math.round(x), bottom + 3 + ((x * 7) & 3), 2, 1);
+      }
     } else {
       ctx.fillStyle = '#536b80';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -3521,47 +4061,739 @@ const Overworld = (() => {
     // the separate raised platforms here; keep the continuous ground invisible.
     FOREST_SIDE_PLATFORMS.slice(1).forEach(drawSidePlatform);
 
-    drawSideGoblins();
+    drawSideMobs();
 
-    // A quiet trail marker signals the far side without abruptly ending the level.
-    ctx.fillStyle = '#4c443b'; ctx.fillRect(3852, 126, 7, 70);
-    ctx.fillRect(3918, 126, 7, 70);
-    ctx.fillStyle = '#957451'; ctx.fillRect(3858, 133, 61, 26);
-    ctx.fillStyle = '#f0d7a5'; ctx.font = '7px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('FAR SIDE', 3888, 149);
-
+    drawCamp();
+    drawLoreSpots();
     drawSidePlayer();
     drawCombatFx();
     ctx.restore();
-    if (sidePlayer.deadTime > 0 && sidePlayer.deadTime < 0.7) {
-      ctx.fillStyle = 'rgba(0,0,0,' + (1 - sidePlayer.deadTime / 0.7) + ')'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    drawSideOverlays(sidePlayer.x > CAMP.start ? "BRAM'S CAMP" : 'WOODLAND');
+  }
+
+  // ===========================================================================
+  // Story: lore pages, dialogue, the forest camp, the Hollow, the boss and Dad.
+  // ===========================================================================
+  const LORE = [
+    { id: 'watch', kind: 'stone', scene: 'forest', x: 600, title: 'The Silver Watch', where: 'Rune stone, forest trail', hint: 'A stone near the start of the trail.',
+      text: 'HERE STOOD THE SILVER WATCH. Sworn to guard the seal over the Hollow, where the moon fell forty winters ago. We hold the line so the village may sleep.', sign: '- Captain Aldric' },
+    { id: 'page1', kind: 'page', scene: 'forest', x: 1600, title: 'Journal: Day 1', where: "Dad's journal, deep forest", hint: 'Somewhere in the middle of the forest.',
+      text: "Day 1. The goblins aren't raiding. They're running. Their camps are empty and the fires still warm. Something in the Hollow is driving them out of the deep woods, toward the village. Toward home.", sign: '- A.' },
+    { id: 'page2', kind: 'page', scene: 'forest', x: 3738, title: 'Journal: Day 3', where: "Dad's journal, Bram's camp", hint: 'At the camp on the far side of the forest.',
+      text: "Day 3. Old Bram has kept this camp since the Moonfall. He says the seal is cracking and the dead walk again. I'm going in. Rowan, if you're reading this, go home. ...You never listen. Then rest by the fire first.", sign: '- A.' },
+    { id: 'moonfall', kind: 'stone', scene: 'hollow', x: 700, title: 'The Moonfall', where: 'Rune stone, the Hollow', hint: 'A stone near the mouth of the Hollow.',
+      text: 'THE MOON WEPT A SHARD OF ITSELF AND IT FELL HERE. Where it struck, the dead do not rest and the wild things grow wrong. Take nothing the moon has dropped.' },
+    { id: 'page3', kind: 'page', scene: 'hollow', x: 1800, title: 'Journal: Day 5', where: "Dad's journal, the Hollow", hint: 'Deep inside the Hollow.',
+      text: "Day 5. I found the one behind it all. A goblin chief grown huge on the shard's light. He calls himself Grukk, the Hollow King, and wears the shard in his crown. I can't beat him alone. I'll hide past his throne and wait.", sign: '- A.' },
+    { id: 'aldric', kind: 'page', scene: null, x: 0, title: "Aldric's Story", where: 'Told by Dad, after the battle', hint: 'Find Dad.',
+      text: "The Silver Watch didn't fall to monsters. We fell to the shard. It whispers. Half my brothers took it up and became the skeletons you fought. I buried it under a seal and never told you. Grukk dug it up. His crown is broken now, but the shard itself is gone. Deeper." }
+  ];
+  function addLore(id) {
+    if (story.pages.includes(id)) return false;
+    story.pages.push(id);
+    return true;
+  }
+
+  // ---- Dialogue box (typewriter, freezes the world) ----
+  const SPEAKERS = {
+    rowan: { name: 'ROWAN', color: '#9fd3ff' },
+    aldric: { name: 'ALDRIC', color: '#ffd27a' },
+    grukk: { name: 'GRUKK', color: '#ff7a6a' },
+    bram: { name: 'OLD BRAM', color: '#c9e39a' },
+    stone: { name: 'RUNE STONE', color: '#b8d8ff' },
+    page: { name: "DAD'S JOURNAL", color: '#e8d2a0' }
+  };
+  function startDialogue(lines, onDone) {
+    dialogue = { lines, i: 0, shown: 0, onDone, t: time };
+    keys.clear(); sideAttackQueued = false; sideJumpQueued = false;
+    sidePlayer.atk = null;
+  }
+  function updateDialogue(dt) {
+    if (!dialogue) return;
+    const line = dialogue.lines[dialogue.i];
+    const before = Math.floor(dialogue.shown);
+    dialogue.shown = Math.min(line.text.length, dialogue.shown + dt * 52);
+    if (Math.floor(dialogue.shown) !== before && before % 3 === 0 && line.text[before] !== ' ') synthSfx('tick');
+  }
+  function advanceDialogue() {
+    if (!dialogue || time - dialogue.t < 0.15) return;
+    const line = dialogue.lines[dialogue.i];
+    if (dialogue.shown < line.text.length) { dialogue.shown = line.text.length; return; }
+    dialogue.i++; dialogue.shown = 0; dialogue.t = time;
+    if (dialogue.i >= dialogue.lines.length) {
+      const done = dialogue.onDone; dialogue = null;
+      sfx('uiConfirm', 0.6);
+      if (done) done();
+    } else sfx('uiMove', 0.8);
+  }
+  function drawPortrait(who, x, y) {
+    ctx.save();
+    ctx.fillStyle = '#0d0a10'; ctx.fillRect(x - 1, y - 1, 42, 42);
+    ctx.fillStyle = '#231c2a'; ctx.fillRect(x, y, 40, 40);
+    ctx.beginPath(); ctx.rect(x, y, 40, 40); ctx.clip();
+    ctx.imageSmoothingEnabled = false;
+    if (who === 'rowan' && imgReady(knightSprites.idle)) {
+      ctx.drawImage(knightSprites.idle, 50, 20, 28, 28, x - 2, y - 2, 56, 56);
+    } else if (who === 'aldric' && imgReady(hollowArt.dadIdle)) {
+      ctx.drawImage(hollowArt.dadIdle, 50, 55, 28, 28, x - 2, y - 2, 56, 56);
+    } else if (who === 'grukk') {
+      const img = mobSheet(MOB_TYPES.ogre, MOB_TYPES.ogre.anims.idle);
+      if (imgReady(img)) { ctx.translate(x + 40, y); ctx.scale(-1, 1); ctx.drawImage(img, 30, 0, 64, 64, -14, -6, 70, 70); }
+    } else if (who === 'bram') {
+      ctx.fillStyle = '#3d2c22'; ctx.fillRect(x + 6, y + 6, 28, 34);
+      ctx.fillStyle = '#5a4030'; ctx.fillRect(x + 9, y + 8, 22, 30);
+      ctx.fillStyle = '#1c1410'; ctx.fillRect(x + 12, y + 13, 16, 13);
+      ctx.fillStyle = '#d9a77a'; ctx.fillRect(x + 14, y + 16, 12, 8);
+      ctx.fillStyle = '#1c1410'; ctx.fillRect(x + 16, y + 18, 2, 2); ctx.fillRect(x + 22, y + 18, 2, 2);
+      ctx.fillStyle = '#cfcac0'; ctx.fillRect(x + 13, y + 22, 14, 12); ctx.fillRect(x + 16, y + 34, 8, 3);
+    } else {
+      drawItemIcon(who === 'stone' ? 'whetstone' : 'page', x + 8, y + 8, 2);
     }
+    ctx.restore();
+  }
+  function drawDialogue() {
+    if (!dialogue) return;
+    const line = dialogue.lines[dialogue.i];
+    const sp = SPEAKERS[line.who] || SPEAKERS.rowan;
+    const x = 8, y = 166, w = 304, h = 56;
+    ctx.save();
+    ctx.fillStyle = 'rgba(6,5,10,.94)'; ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = '#d6b477'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.strokeStyle = '#5a4535'; ctx.strokeRect(x + 2.5, y + 2.5, w - 5, h - 5);
+    drawPortrait(line.who, x + 7, y + 8);
+    ctx.font = 'bold 7px monospace';
+    const tw = ctx.measureText(sp.name).width + 10;
+    ctx.fillStyle = '#0d0a10'; ctx.fillRect(x + 52, y - 7, tw + 2, 12);
+    ctx.fillStyle = sp.color; ctx.fillRect(x + 53, y - 6, tw, 10);
+    ctx.fillStyle = '#140f16'; ctx.textAlign = 'left'; ctx.fillText(sp.name, x + 58, y + 2);
+    const lines = wrapText(line.text, w - 66, '7px monospace');
+    let left = Math.floor(dialogue.shown);
+    lines.slice(0, 4).forEach((ln, i) => {
+      const part = ln.slice(0, Math.max(0, left)); left -= ln.length + 1;
+      invText(part, x + 54, y + 15 + i * 10, '#f3e7c9', '7px monospace');
+    });
+    if (dialogue.shown >= line.text.length && Math.floor(time * 3) % 2) {
+      ctx.fillStyle = '#f2c14e';
+      const ax = x + w - 12, ay = y + h - 9;
+      ctx.fillRect(ax, ay, 5, 1); ctx.fillRect(ax + 1, ay + 1, 3, 1); ctx.fillRect(ax + 2, ay + 2, 1, 1);
+    }
+    invText((dialogue.i + 1) + '/' + dialogue.lines.length, x + w - 18, y + h - 5, '#6f6670', '5px monospace', 'right');
+    ctx.restore();
+  }
+
+  // ---- Old Bram's shop ----
+  const SHOP_ITEMS = [
+    { name: 'Camp Bread', icon: 'bread', info: 'Heals 10 HP', price: () => 5, give: () => { inventory.bread = (inventory.bread || 0) + 1; } },
+    { name: 'Red Tonic', icon: 'tonic', info: 'Full heal', price: () => 12, give: () => { inventory.tonic = (inventory.tonic || 0) + 1; } },
+    { name: 'Whetstone', icon: 'whetstone', info: () => 'Sword ATK +1  (' + (stats.atkUp || 0) + '/3)', price: () => 30 + (stats.atkUp || 0) * 15, can: () => (stats.atkUp || 0) < 3, give: () => { stats.atkUp = (stats.atkUp || 0) + 1; } },
+    { name: 'Iron Plating', icon: 'plate', info: () => 'Armor DEF +1  (' + (stats.defUp || 0) + '/3)', price: () => 30 + (stats.defUp || 0) * 15, can: () => (stats.defUp || 0) < 3, give: () => { stats.defUp = (stats.defUp || 0) + 1; } },
+    { name: 'Sell All Loot', icon: 'coin', info: () => sellValue() ? 'Trophies & materials: +' + sellValue() + 'c' : 'Nothing to sell', sell: true },
+    { name: 'Leave', icon: null, info: '', leave: true }
+  ];
+  let shopSel = 0, shopLine = '', shopFlash = -10;
+  const SELLABLE = ['fang', 'spore', 'eye', 'bone', 'wisp', 'wood'];
+  function sellValue() { return SELLABLE.reduce((sum, k) => sum + (inventory[k] || 0) * ITEM_DEFS[k].value, 0); }
+  function openShop() {
+    shopSel = 0;
+    shopLine = ['Coin for comfort, knight. What\'ll it be?', 'Your father bought a whetstone too. Two, actually.', 'Bread\'s fresh. Mostly.'][Math.floor(Math.random() * 3)];
+    openPanel('shop'); sfx('uiOpen');
+  }
+  function buyShopItem(i) {
+    const it = SHOP_ITEMS[i];
+    if (it.leave) { closeCurrentPanel(); sfx('uiClose'); return; }
+    if (it.sell) {
+      const v = sellValue();
+      if (!v) { sfx('uiError'); shopLine = 'Bring me fangs, bones and wisps. I pay fair.'; return; }
+      SELLABLE.forEach(k => { inventory[k] = 0; });
+      inventory.coins = (inventory.coins || 0) + v;
+      sfx('coins'); shopFlash = time; shopLine = 'Pleasure doing business. ' + v + ' coins, as promised.';
+      if (onSave) onSave(getSaveData());
+      return;
+    }
+    const price = it.price();
+    if (it.can && !it.can()) { sfx('uiError'); shopLine = 'Any more and it\'ll snap, friend.'; return; }
+    if ((inventory.coins || 0) < price) { sfx('uiError'); shopLine = 'Come back with ' + (price - (inventory.coins || 0)) + ' more coins.'; return; }
+    inventory.coins -= price; it.give();
+    sfx(it.icon === 'whetstone' ? 'draw' : it.icon === 'plate' ? 'armor' : 'coin'); shopFlash = time;
+    shopLine = it.icon === 'whetstone' ? 'Sharper than your father\'s wit.' : it.icon === 'plate' ? 'Riveted it myself. Should hold.' : 'Enjoy.';
+    if (onSave) onSave(getSaveData());
+  }
+  function shopKey(k) {
+    if (k === 'arrowup' || k === 'w') { shopSel = (shopSel + SHOP_ITEMS.length - 1) % SHOP_ITEMS.length; sfx('uiMove'); }
+    else if (k === 'arrowdown' || k === 's') { shopSel = (shopSel + 1) % SHOP_ITEMS.length; sfx('uiMove'); }
+    else if (k === 'e' || k === 'enter' || k === ' ') buyShopItem(shopSel);
+    else if (k === 'escape' || k === 'i' || k === 'x' || k === 'backspace') { closeCurrentPanel(); sfx('uiClose'); }
+  }
+  function drawShop() {
+    ctx.save();
+    ctx.fillStyle = 'rgba(4,5,10,.7)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    invBox(56, 22, 208, 196, '#1b1621', '#d6b477');
+    drawPortrait('bram', 64, 30);
+    invText("OLD BRAM'S WARES", 112, 40, '#ffe3a1', 'bold 9px monospace');
+    wrapText(shopLine, 140, '6px monospace').slice(0, 2).forEach((ln, i) => invText(ln, 112, 52 + i * 8, '#c9e39a', '6px monospace'));
+    drawItemIcon('coin', 222, 30, 1);
+    invText(String(inventory.coins || 0), 256, 39, time - shopFlash < 0.3 ? '#ffffff' : '#ffe3a1', 'bold 7px monospace', 'right');
+    SHOP_ITEMS.forEach((it, i) => {
+      const ry = 76 + i * 20, sel = i === shopSel;
+      const price = it.price ? it.price() : 0;
+      const locked = it.can && !it.can();
+      const poor = it.price && (inventory.coins || 0) < price;
+      invBox(66, ry, 188, 18, sel ? '#2c2433' : '#211b28', sel ? '#d6b477' : '#4b3d35');
+      if (it.icon) drawItemIcon(it.icon, 69, ry + 3, 1);
+      invText(it.name, 86, ry + 8, locked ? '#6f6670' : '#f3e7c9', 'bold 7px monospace');
+      const info = typeof it.info === 'function' ? it.info() : it.info;
+      invText(info, 86, ry + 15, '#8f8478', '5px monospace');
+      if (it.price) invText(locked ? 'MAX' : price + 'c', 248, ry + 11, locked ? '#6f6670' : poor ? '#e2584f' : '#ffe3a1', 'bold 7px monospace', 'right');
+      if (sel) invCursor(66, ry, 188, 18);
+    });
+    invText(inputMode === 'pad' ? '✥ CHOOSE   ✕ BUY   ○ LEAVE' : 'ARROWS CHOOSE   E BUY   ESC LEAVE', 160, 210, '#8f8478', '6px monospace', 'center');
+    ctx.restore();
+  }
+
+  function drawChapterPanel() {
+    const W = canvas.width, H = canvas.height;
+    const t = time - invOpenTime;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,' + Math.min(0.9, t * 1.5) + ')'; ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = Math.min(1, Math.max(0, (t - 0.3) * 2));
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#d6b477'; ctx.fillText('CHAPTER 1', 160, 54);
+    ctx.font = 'bold 16px monospace'; ctx.fillStyle = '#2a1a12'; ctx.fillText('THE HOLLOW KING', 161, 77);
+    ctx.fillStyle = '#ffe3a1'; ctx.fillText('THE HOLLOW KING', 160, 76);
+    ctx.fillStyle = '#d6b477'; ctx.fillRect(80, 86, 160, 1);
+    ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#9be37a'; ctx.fillText('COMPLETE', 160, 100);
+    const rows = [
+      ['LEVEL', String(stats.level)],
+      ['MONSTERS DEFEATED', String(stats.kills || 0)],
+      ['LORE FOUND', story.pages.length + ' / ' + LORE.length],
+      ['COINS', String(inventory.coins || 0)],
+      ['PLAY TIME', Math.floor(stats.playTime / 60) + ':' + String(Math.floor(stats.playTime % 60)).padStart(2, '0')]
+    ];
+    rows.forEach(([a, b], i) => {
+      invText(a, 92, 120 + i * 12, '#b9ad9c', '7px monospace', 'left');
+      invText(b, 228, 120 + i * 12, '#ffe3a1', 'bold 7px monospace', 'right');
+    });
+    ctx.globalAlpha = Math.min(1, Math.max(0, (t - 1.2) * 2));
+    invText('The shard is still out there...', 160, 192, '#c9a8ff', '7px monospace', 'center');
+    invText('CHAPTER 2 COMING SOON', 160, 204, '#8f8478', 'bold 6px monospace', 'center');
+    if (t > 1.5 && Math.floor(time * 2) % 2) invText(inputMode === 'pad' ? 'PRESS ✕ TO CONTINUE' : 'PRESS E TO CONTINUE', 160, 222, '#f3e7c9', '6px monospace', 'center');
+    ctx.restore();
+  }
+
+  // ---- Dad (Aldric) ----
+  let dad = null;  // { x, dir, state: 'run'|'slash'|'idle', t, target, onArrive }
+  let dadTalk = 0;
+  let bossOutro = null;
+  function updateDad(dt) {
+    if (!dad) return;
+    dad.t += dt;
+    if (dad.state === 'run') {
+      const d = dad.target - dad.x;
+      dad.dir = d < 0 ? -1 : 1;
+      dad.x += dad.dir * Math.min(Math.abs(d), 150 * dt);
+      if (Math.abs(d) < 2) { dad.state = dad.slashOnArrive ? 'slash' : 'idle'; dad.t = 0; if (dad.slashOnArrive) sfx('swingBig'); }
+    } else if (dad.state === 'slash' && dad.t > 6 / 12) {
+      dad.state = 'idle'; dad.t = 0;
+      if (dad.onArrive) { const f = dad.onArrive; dad.onArrive = null; f(); }
+    } else if (dad.state === 'idle') {
+      dad.dir = sidePlayer.x < dad.x ? -1 : 1;
+      if (dad.onArrive) { const f = dad.onArrive; dad.onArrive = null; f(); }
+    }
+  }
+  function drawDad() {
+    if (!dad) return;
+    const sheet = dad.state === 'run' ? hollowArt.dadRun : dad.state === 'slash' ? hollowArt.dadSlash : hollowArt.dadIdle;
+    if (!imgReady(sheet)) return;
+    const n = dad.state === 'run' ? 12 : dad.state === 'slash' ? 6 : 4;
+    const fps = dad.state === 'run' ? 16 : dad.state === 'slash' ? 12 : 6;
+    const f = dad.state === 'slash' ? Math.min(n - 1, Math.floor(dad.t * fps)) : Math.floor(dad.t * fps) % n;
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(Math.round(dad.x) - 10, SIDE_GROUND_Y - 1, 20, 2);
+    ctx.save();
+    ctx.translate(Math.round(dad.x), SIDE_GROUND_Y + 1);
+    if (dad.dir < 0) ctx.scale(-1, 1);
+    ctx.drawImage(sheet, f * 128, 0, 128, 96, -64, -96, 128, 96);
+    ctx.restore();
+  }
+  function talkToDad() {
+    const lines = [
+      [{ who: 'aldric', text: "Your mother would have been proud of you today. Furious, but proud." }],
+      [{ who: 'aldric', text: "The shard went deeper into the Hollow. We'll need the whole village ready." }, { who: 'rowan', text: 'Then we get ready. Together this time.' }],
+      [{ who: 'aldric', text: "Bram's still selling that bread? Don't eat the burnt ones. He does it on purpose." }]
+    ];
+    startDialogue(lines[dadTalk++ % lines.length]);
+  }
+
+  // ---- Boss fight ----
+  function theBoss() { return sideMobs.find(m => m.T.boss); }
+  function startBossIntro() {
+    const boss = theBoss(); if (!boss) return;
+    bossFight = { intro: true, active: false, t: 0, talked: false };
+    sidePlayer.x = Math.max(sidePlayer.x, BOSS_ARENA.left + 40);
+    boss.dir = -1;
+    sfx('roar', 1, 0.75); screenShake = 6; padRumble(1, 0.8, 600);
+  }
+  function updateBossIntro(dt) {
+    if (!bossFight || !bossFight.intro) return;
+    bossFight.t += dt;
+    if (bossFight.t > 1.1 && !bossFight.talked) {
+      bossFight.talked = true;
+      const retry = story.bossStarted;
+      story.bossStarted = true;
+      const lines = retry
+        ? [{ who: 'grukk', text: 'Back again, little knight? My Hollow loves the taste of you.' }]
+        : [
+          { who: 'grukk', text: 'Another Silver Watch whelp crawls into MY Hollow.' },
+          { who: 'grukk', text: 'Your father hides like a rat behind my throne. I will crack your bones and use them to call him out.' },
+          { who: 'rowan', text: "So he's alive. Then I just have to go through you." },
+          { who: 'grukk', text: 'HAH! Kneel before the Hollow King!' }
+        ];
+      startDialogue(lines, () => {
+        const boss = theBoss();
+        bossFight.intro = false; bossFight.active = true;
+        if (boss) { boss.dormant = false; boss.attackCooldown = 0.8; }
+        sfx('roar', 0.9, 0.9);
+        notice = 'Jump over his shockwaves!'; noticeUntil = time + 2.6;
+      });
+    }
+  }
+  function endBossFight(won) {
+    bossFight = null;
+    bossWaves.length = 0;
+    for (let i = sideMobs.length - 1; i >= 0; i--) if (sideMobs[i].summoned) sideMobs.splice(i, 1);
+    if (!won) {
+      const boss = theBoss();
+      if (boss) Object.assign(boss, { hp: boss.maxHp, dormant: true, x: 3020, dir: -1, enraged: false, attackTime: 0, hurtTime: 0, kvx: 0, dead: false });
+    }
+  }
+  function onBossDefeated(m) {
+    endBossFight(true);
+    sideMobs.forEach(o => { if (o !== m && !o.dead && platformScene === 'hollow' && o.x > BOSS_ARENA.left - 100) { o.hp = 0; defeatMob(o, 1); } });
+    story.bossDefeated = true;
+    bossOutro = { t: 0, x: m.x, jingle: false };
+    notice = 'The Hollow King has fallen.'; noticeUntil = time + 3;
+    if (onSave) onSave(getSaveData());
+  }
+  function updateBossOutro(dt) {
+    if (!bossOutro) return;
+    bossOutro.t += dt;
+    if (bossOutro.t > 0.9 && !bossOutro.jingle) { bossOutro.jingle = true; sfx('victory'); }
+    if (bossOutro.t > 2.6 && !dad) {
+      const side = sidePlayer.x > 3150 ? -1 : 1;
+      dad = { x: Math.min(HOLLOW_SIDE_WIDTH - 10, sideCameraX + canvas.width + 30), dir: -1, state: 'run', t: 0, target: sidePlayer.x + side * 34, slashOnArrive: false };
+      dad.onArrive = () => {
+        sidePlayer.facing = dad.x < sidePlayer.x ? -1 : 1;
+        startDialogue([
+          { who: 'aldric', text: 'Rowan? ...Rowan! By the moon, you actually came.' },
+          { who: 'rowan', text: 'You left me a note and a suit of armor. What did you think I would do?' },
+          { who: 'aldric', text: "Ha. Your mother's stubbornness. I was hiding behind that throne for two days, waiting for an opening." },
+          { who: 'aldric', text: "Grukk was only the start. The moon shard in his crown... it's gone. Something took it deeper into the Hollow." },
+          { who: 'aldric', text: "There's a lot I never told you about the Silver Watch. Tonight, we go home. Tomorrow, I'll tell you everything." }
+        ], () => {
+          story.dadFound = true; story.chapterDone = true;
+          addLore('aldric');
+          bossOutro = null;
+          if (onSave) onSave(getSaveData());
+          openPanel('chapter');
+        });
+      };
+    }
+  }
+
+  // ---- Places you can use [E] on ----
+  function nearbyInteraction() {
+    const x = sidePlayer.x;
+    if (!sidePlayer.onGround || sidePlayer.deadTime > 0) return null;
+    for (const l of LORE) {
+      if (l.scene === platformScene && Math.abs(x - l.x) < 24) return { label: story.pages.includes(l.id) ? 'READ AGAIN' : 'READ', act: () => readLore(l) };
+    }
+    if (platformScene === 'forest') {
+      if (x < 100) return { label: 'RETURN HOME', act: 'home' };
+      if (Math.abs(x - CAMP.fire) < 26) return { label: 'REST BY THE FIRE', act: restAtFire };
+      if (Math.abs(x - CAMP.bram) < 28) return { label: 'TRADE WITH BRAM', act: openShop };
+      if (x > CAMP.sign - 20) return { label: 'ENTER THE HOLLOW', act: enterHollow };
+    } else if (platformScene === 'hollow') {
+      if (x < 100) return { label: 'BACK TO THE FOREST', act: leaveHollow };
+      if (dad && dad.state === 'idle' && Math.abs(x - dad.x) < 32 && story.dadFound) return { label: 'TALK TO DAD', act: talkToDad };
+    }
+    return null;
+  }
+  function readLore(l) {
+    const first = addLore(l.id);
+    sfx(l.kind === 'stone' ? 'magic' : 'bookOpen');
+    if (first) { notice = 'Lore found: ' + l.title + '  (' + story.pages.length + '/' + LORE.length + ')'; noticeUntil = time + 2.5; }
+    const parts = wrapText(l.text, 238, '7px monospace');
+    const chunks = [];
+    for (let i = 0; i < parts.length; i += 4) chunks.push(parts.slice(i, i + 4).join(' '));
+    const lines = chunks.map(t => ({ who: l.kind === 'stone' ? 'stone' : 'page', text: t }));
+    if (l.sign) lines[lines.length - 1].text += '  ' + l.sign;
+    startDialogue(lines, () => { if (onSave) onSave(getSaveData()); });
+  }
+  const CAMP = { start: 3590, tent: 3625, fire: 3700, log: 3738, bram: 3800, cart: 3842, sign: 3912 };
+  function restAtFire() {
+    stats.health = stats.maxHealth; stats.stamina = stats.maxStamina;
+    story.rested = true;
+    sfx('fire'); padRumble(0.1, 0.2, 200);
+    notice = 'You rest by the fire. Health restored and game saved.'; noticeUntil = time + 2.6;
+    restFlash = time;
+    if (onSave) onSave(getSaveData());
+  }
+  let restFlash = -10;
+  function enterHollow() {
+    platformScene = 'hollow';
+    story.hollowEntered = true;
+    sidePlayer.x = 130; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true; sidePlayer.facing = 1;
+    sideCameraX = 0; pickups.length = 0; bossWaves.length = 0;
+    loadSceneMobs('hollow');
+    dad = story.dadFound ? { x: 3060, dir: -1, state: 'idle', t: 0 } : null;
+    sfx('creak'); keys.clear();
+    sceneTitle = { text: 'THE HOLLOW', sub: 'Where the moon fell', t: time };
+    if (!story.hollowSeen) {
+      story.hollowSeen = true;
+      setTimeout(() => {
+        if (platformScene !== 'hollow' || dialogue) return;
+        startDialogue([
+          { who: 'rowan', text: "It's freezing in here... and the moon looks wrong. Too big. Too close." },
+          { who: 'rowan', text: "Dad's footprints keep going. Stay sharp, Rowan." }
+        ]);
+      }, 1600);
+    }
+    if (onSave) onSave(getSaveData());
+  }
+  function leaveHollow() {
+    if (bossFight) endBossFight(false);
+    platformScene = 'forest';
+    sidePlayer.x = CAMP.sign - 30; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true; sidePlayer.facing = -1;
+    sideCameraX = clamp(sidePlayer.x - canvas.width * 0.43, 0, FOREST_SIDE_WIDTH - canvas.width);
+    pickups.length = 0; dad = null;
+    loadSceneMobs('forest');
+    sfx('creak'); keys.clear();
+    sceneTitle = { text: "BRAM'S CAMP", sub: 'Edge of the woodland', t: time };
+    if (onSave) onSave(getSaveData());
+  }
+  function safeZone() {
+    return (platformScene === 'forest' && sidePlayer.x > CAMP.start - 10) || (platformScene === 'hollow' && sidePlayer.x < 200);
+  }
+  let sceneTitle = null;
+  function updateStory(dt) {
+    if (platformScene === 'forest') {
+      if (!story.campReached && sidePlayer.x > CAMP.start) {
+        story.campReached = true;
+        sceneTitle = { text: "BRAM'S CAMP", sub: 'Edge of the woodland', t: time };
+        if (onSave) onSave(getSaveData());
+      }
+      if (!story.metBram && sidePlayer.x > CAMP.fire + 30 && sidePlayer.onGround) {
+        story.metBram = true;
+        startDialogue([
+          { who: 'bram', text: "Whoa there! Put the sword down, I'm no goblin. Name's Bram. I keep this fire burning for anyone fool enough to travel the deep wood." },
+          { who: 'bram', text: "That armor... you're Aldric's kid. He came through three days ago, heading into the Hollow. Didn't come back out." },
+          { who: 'rowan', text: "Then that's where I'm going." },
+          { who: 'bram', text: "Thought you'd say that. Rest by the fire, and bring me anything you loot. I'll trade fair. The Hollow is just past my sign." }
+        ]);
+      }
+    } else if (platformScene === 'hollow') {
+      if (!story.bossDefeated && !bossFight && sidePlayer.x > BOSS_ARENA.trigger && sidePlayer.deadTime <= 0) startBossIntro();
+      updateBossOutro(dt);
+      updateDad(dt);
+    }
+  }
+
+  // ---- Drawing: camp props ----
+  function drawCampfire(x) {
+    const gy = SIDE_GROUND_Y;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const flick = 1 + Math.sin(time * 13) * 0.05 + Math.sin(time * 7.3) * 0.05;
+    const g = ctx.createRadialGradient(x, gy - 10, 2, x, gy - 10, 70 * flick);
+    g.addColorStop(0, 'rgba(255,170,70,.42)'); g.addColorStop(0.5, 'rgba(255,110,30,.13)'); g.addColorStop(1, 'rgba(255,80,20,0)');
+    ctx.fillStyle = g; ctx.fillRect(x - 80, gy - 90, 160, 110);
+    ctx.restore();
+    // stones and logs
+    ctx.fillStyle = '#3a3438'; [-12, -7, 7, 12].forEach(o => ctx.fillRect(x + o - 2, gy - 3, 5, 3));
+    ctx.fillStyle = '#4a2c1a'; ctx.fillRect(x - 11, gy - 5, 22, 3);
+    ctx.fillStyle = '#6a3e22'; ctx.fillRect(x - 9, gy - 7, 7, 3); ctx.fillRect(x + 2, gy - 7, 7, 3);
+    // flames: three flickering tongues
+    const tongues = [[-4, 13, '#e8542e'], [3, 11, '#e8542e'], [0, 17, '#f08a2e'], [-2, 10, '#ffc34a'], [2, 8, '#ffe9a0']];
+    tongues.forEach(([ox, hgt, col], i) => {
+      const hh = hgt * (0.8 + 0.25 * Math.sin(time * (9 + i * 2.3) + i));
+      const sway = Math.round(Math.sin(time * 6 + i) * 1.5);
+      ctx.fillStyle = col;
+      for (let r = 0; r < hh; r++) {
+        const wdt = Math.max(1, Math.round((1 - r / hh) * (i < 3 ? 6 : 4)));
+        ctx.fillRect(Math.round(x + ox - wdt / 2 + (r / hh) * sway), Math.round(gy - 7 - r), wdt, 1);
+      }
+    });
+    // embers
+    for (let i = 0; i < 5; i++) {
+      const life = (time * 0.7 + i * 0.21) % 1;
+      ctx.fillStyle = 'rgba(255,200,90,' + (1 - life) + ')';
+      ctx.fillRect(Math.round(x + Math.sin(i * 3.1 + time * 2) * 6), Math.round(gy - 14 - life * 34), 1, 1);
+    }
+  }
+  function drawTent(x) {
+    const gy = SIDE_GROUND_Y;
+    ctx.fillStyle = '#2d241e'; ctx.beginPath(); ctx.moveTo(x - 30, gy); ctx.lineTo(x, gy - 38); ctx.lineTo(x + 30, gy); ctx.fill();
+    ctx.fillStyle = '#7a5c3a'; ctx.beginPath(); ctx.moveTo(x - 27, gy); ctx.lineTo(x, gy - 35); ctx.lineTo(x + 27, gy); ctx.fill();
+    ctx.fillStyle = '#5e4630'; ctx.beginPath(); ctx.moveTo(x, gy - 35); ctx.lineTo(x + 27, gy); ctx.lineTo(x + 6, gy); ctx.fill();
+    ctx.fillStyle = '#1a120e'; ctx.beginPath(); ctx.moveTo(x - 7, gy); ctx.lineTo(x, gy - 20); ctx.lineTo(x + 6, gy); ctx.fill();
+    ctx.fillStyle = '#4a3020'; ctx.fillRect(x - 1, gy - 41, 2, 7);
+  }
+  function drawLogBench(x) {
+    const gy = SIDE_GROUND_Y;
+    ctx.fillStyle = '#3a2416'; ctx.fillRect(x - 16, gy - 7, 32, 7);
+    ctx.fillStyle = '#6a4228'; ctx.fillRect(x - 16, gy - 7, 32, 2);
+    ctx.fillStyle = '#8a6040'; ctx.fillRect(x + 13, gy - 6, 3, 5); ctx.fillStyle = '#5a3a24'; ctx.fillRect(x + 14, gy - 5, 1, 3);
+  }
+  function drawBram(x) {
+    const gy = SIDE_GROUND_Y, bob = Math.round(Math.sin(time * 2) * 0.6);
+    const face = sidePlayer.x < x ? -1 : 1;
+    ctx.save(); ctx.translate(x, gy); if (face < 0) ctx.scale(-1, 1);
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(-9, -1, 18, 2);
+    // staff with lantern
+    ctx.fillStyle = '#4a3020'; ctx.fillRect(9, -38, 2, 38);
+    ctx.fillStyle = '#3a2a1a'; ctx.fillRect(10, -38, 6, 1);
+    ctx.fillStyle = '#2a2420'; ctx.fillRect(13, -37, 5, 7);
+    ctx.fillStyle = Math.sin(time * 9) > -0.6 ? '#ffd27a' : '#f0a040'; ctx.fillRect(14, -36, 3, 5);
+    // robe
+    ctx.fillStyle = '#2a1e16'; ctx.fillRect(-8, -26 + bob, 16, 26 - bob);
+    ctx.fillStyle = '#4e3a2a'; ctx.fillRect(-7, -25 + bob, 14, 25 - bob);
+    ctx.fillStyle = '#3a2a1e'; ctx.fillRect(2, -25 + bob, 5, 25 - bob);
+    ctx.fillStyle = '#6a2a22'; ctx.fillRect(-7, -14 + bob, 14, 2);
+    // arm to staff
+    ctx.fillStyle = '#4e3a2a'; ctx.fillRect(5, -20 + bob, 5, 4); ctx.fillStyle = '#d9a77a'; ctx.fillRect(8, -20 + bob, 2, 3);
+    // hood + face + beard
+    ctx.fillStyle = '#2a1e16'; ctx.fillRect(-6, -35 + bob, 13, 11);
+    ctx.fillStyle = '#4e3a2a'; ctx.fillRect(-5, -34 + bob, 11, 9);
+    ctx.fillStyle = '#d9a77a'; ctx.fillRect(0, -31 + bob, 5, 4);
+    ctx.fillStyle = '#1a120e'; ctx.fillRect(3, -30 + bob, 1, 1);
+    ctx.fillStyle = '#cfcac0'; ctx.fillRect(0, -27 + bob, 5, 6); ctx.fillRect(1, -21 + bob, 3, 2);
+    ctx.restore();
+    // lantern glow
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const lx = x + face * 15, g = ctx.createRadialGradient(lx, gy - 33, 1, lx, gy - 33, 22);
+    g.addColorStop(0, 'rgba(255,210,120,.35)'); g.addColorStop(1, 'rgba(255,210,120,0)');
+    ctx.fillStyle = g; ctx.fillRect(lx - 24, gy - 57, 48, 48); ctx.restore();
+  }
+  function drawCart(x) {
+    const gy = SIDE_GROUND_Y;
+    ctx.fillStyle = '#2a1a10'; ctx.fillRect(x - 24, gy - 22, 48, 12);
+    ctx.fillStyle = '#6a4228'; ctx.fillRect(x - 23, gy - 21, 46, 10);
+    ctx.fillStyle = '#4a2c1a'; for (let i = -20; i < 22; i += 9) ctx.fillRect(x + i, gy - 21, 1, 10);
+    // canopy stripes
+    for (let i = 0; i < 6; i++) { ctx.fillStyle = i % 2 ? '#e8d8b0' : '#a83a2e'; ctx.fillRect(x - 26 + i * 9, gy - 40, 9, 6); }
+    ctx.fillStyle = '#2a1a10'; ctx.fillRect(x - 24, gy - 34, 2, 13); ctx.fillRect(x + 22, gy - 34, 2, 13);
+    // goods
+    ctx.fillStyle = '#c8324a'; ctx.fillRect(x - 18, gy - 27, 4, 5); ctx.fillStyle = '#ffe9a0'; ctx.fillRect(x - 17, gy - 27, 1, 1);
+    ctx.fillStyle = '#ad7444'; ctx.fillRect(x - 10, gy - 26, 8, 4);
+    ctx.fillStyle = '#a89c84'; ctx.fillRect(x + 2, gy - 25, 6, 3);
+    ctx.fillStyle = '#7b8e9c'; ctx.fillRect(x + 11, gy - 28, 6, 6);
+    // wheels
+    [-14, 14].forEach(o => {
+      ctx.fillStyle = '#1a120e'; ctx.beginPath(); ctx.arc(x + o, gy - 6, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#6a4228'; ctx.beginPath(); ctx.arc(x + o, gy - 6, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2a1a10'; ctx.fillRect(x + o - 1, gy - 7, 2, 2);
+    });
+  }
+  function drawSignpost(x, text, arrowDir) {
+    const gy = SIDE_GROUND_Y;
+    ctx.fillStyle = '#2e2218'; ctx.fillRect(x - 2, gy - 44, 4, 44);
+    ctx.fillStyle = '#4a3624'; ctx.fillRect(x - 1, gy - 44, 2, 44);
+    const w = 60, y = gy - 42;
+    ctx.fillStyle = '#2e2218';
+    ctx.beginPath();
+    if (arrowDir > 0) { ctx.moveTo(x - w / 2, y); ctx.lineTo(x + w / 2 - 6, y); ctx.lineTo(x + w / 2 + 2, y + 7); ctx.lineTo(x + w / 2 - 6, y + 14); ctx.lineTo(x - w / 2, y + 14); }
+    else { ctx.moveTo(x + w / 2, y); ctx.lineTo(x - w / 2 + 6, y); ctx.lineTo(x - w / 2 - 2, y + 7); ctx.lineTo(x - w / 2 + 6, y + 14); ctx.lineTo(x + w / 2, y + 14); }
+    ctx.fill();
+    ctx.fillStyle = '#8a6a48'; ctx.fillRect(x - w / 2 + 1, y + 1, w - 6, 12);
+    ctx.fillStyle = '#6a4e34'; ctx.fillRect(x - w / 2 + 1, y + 10, w - 6, 3);
+    ctx.fillStyle = '#2a1a10'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(text, x - (arrowDir > 0 ? 2 : -2), y + 9);
+  }
+  function drawLoreSpots() {
+    LORE.forEach(l => {
+      if (l.scene !== platformScene) return;
+      const gy = SIDE_GROUND_Y, found = story.pages.includes(l.id);
+      const pulse = 0.5 + Math.sin(time * 3 + l.x) * 0.5;
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      const col = l.kind === 'stone' ? '120,180,255' : '255,220,140';
+      const g = ctx.createRadialGradient(l.x, gy - 12, 1, l.x, gy - 12, 26);
+      g.addColorStop(0, 'rgba(' + col + ',' + (found ? 0.08 : 0.22 + pulse * 0.15) + ')'); g.addColorStop(1, 'rgba(' + col + ',0)');
+      ctx.fillStyle = g; ctx.fillRect(l.x - 28, gy - 40, 56, 44); ctx.restore();
+      if (l.kind === 'stone') {
+        ctx.fillStyle = '#26262e'; ctx.fillRect(l.x - 9, gy - 26, 18, 26); ctx.fillRect(l.x - 7, gy - 29, 14, 3);
+        ctx.fillStyle = '#4a4a56'; ctx.fillRect(l.x - 8, gy - 27, 15, 26);
+        ctx.fillStyle = '#5c5c6a'; ctx.fillRect(l.x - 8, gy - 27, 4, 26);
+        ctx.fillStyle = '#3a6a40'; ctx.fillRect(l.x - 9, gy - 4, 6, 4); ctx.fillRect(l.x + 5, gy - 6, 4, 6);
+        ctx.fillStyle = found ? '#6a8ab8' : 'rgba(150,210,255,' + (0.6 + pulse * 0.4) + ')';
+        [[-3, -22, 1, 6], [-3, -22, 5, 1], [1, -19, 1, 4], [-4, -13, 7, 1], [-1, -11, 1, 5], [2, -9, 1, 2]].forEach(([a, b, c, d]) => ctx.fillRect(l.x + a, gy + b, c, d));
+      } else {
+        const fl = Math.round(Math.sin(time * 4 + l.x) * 1);
+        ctx.fillStyle = '#5a3a24'; ctx.fillRect(l.x - 6, gy - 3, 12, 3);
+        ctx.fillStyle = '#e9dcbc'; ctx.fillRect(l.x - 5, gy - 6 + fl, 10, 4);
+        ctx.fillStyle = '#a89c84'; ctx.fillRect(l.x - 3, gy - 5 + fl, 6, 1);
+        if (!found) { ctx.fillStyle = '#ffe9a0'; ctx.fillRect(l.x - 1, gy - 14 - Math.round(pulse * 3), 2, 4); ctx.fillRect(l.x - 1, gy - 8 - Math.round(pulse * 3), 2, 1); }
+      }
+    });
+  }
+  function drawCamp() {
+    drawTent(CAMP.tent);
+    drawLogBench(CAMP.log);
+    drawCart(CAMP.cart);
+    drawBram(CAMP.bram);
+    drawCampfire(CAMP.fire);
+    drawSignpost(CAMP.sign, 'THE HOLLOW', 1);
+    // gloomy treeline beyond the sign hints at the Hollow
+    ctx.fillStyle = 'rgba(30,10,50,.35)'; ctx.fillRect(CAMP.sign + 30, 0, 200, SIDE_GROUND_Y + 30);
+  }
+
+  // ---- Drawing: the Hollow ----
+  const hollowMist = Array.from({ length: 18 }, (_, i) => ({ x: i * 190 + (i * 53) % 90, y: 150 + (i * 37) % 40, s: 0.4 + (i % 5) * 0.15 }));
+  function tileImage(img, offsetX, y, w, h) {
+    const start = -((offsetX % w) + w) % w;
+    for (let x = start; x < canvas.width; x += w) ctx.drawImage(img, Math.round(x), y, w, h);
+  }
+  function drawSideHollow() {
+    const W = canvas.width, H = canvas.height;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#05030a'; ctx.fillRect(0, 0, W, H);
+    if (imgReady(hollowArt.back)) tileImage(hollowArt.back, sideCameraX * 0.1, 0, 352, 240);
+    // stars and the cursed moon
+    for (let i = 0; i < 40; i++) {
+      const sx = (i * 97 - sideCameraX * 0.05) % W, sy = (i * 41) % 90;
+      ctx.fillStyle = 'rgba(220,210,255,' + (0.3 + 0.3 * Math.sin(time * 2 + i)) + ')';
+      ctx.fillRect(Math.round((sx + W) % W), sy, 1, 1);
+    }
+    const mx = 238 - sideCameraX * 0.03, my = 44;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const mg = ctx.createRadialGradient(mx, my, 10, mx, my, 70);
+    mg.addColorStop(0, 'rgba(190,150,255,.35)'); mg.addColorStop(1, 'rgba(120,60,200,0)');
+    ctx.fillStyle = mg; ctx.fillRect(mx - 70, my - 70, 140, 140); ctx.restore();
+    ctx.fillStyle = '#e6dcff'; ctx.beginPath(); ctx.arc(mx, my, 22, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#c9b8f0'; [[-8, -6, 6], [6, 4, 4], [-2, 10, 3], [10, -9, 2.5]].forEach(([a, b, r]) => { ctx.beginPath(); ctx.arc(mx + a, my + b, r, 0, Math.PI * 2); ctx.fill(); });
+    // a crack in the moon where the shard broke away
+    ctx.fillStyle = '#05030a'; ctx.beginPath(); ctx.moveTo(mx + 14, my + 12); ctx.lineTo(mx + 22, my + 4); ctx.lineTo(mx + 20, my + 16); ctx.fill();
+    ctx.fillStyle = '#7a4cc0'; ctx.fillRect(Math.round(mx + 15), Math.round(my + 10), 2, 2);
+    if (imgReady(hollowArt.middle)) tileImage(hollowArt.middle, sideCameraX * 0.4, 0, 352, 240);
+    ctx.fillStyle = 'rgba(40,10,70,.25)'; ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+
+    ctx.save();
+    const shakeX = screenShake > 0 ? Math.round((Math.random() - 0.5) * screenShake * 2) : 0;
+    const shakeY = screenShake > 0 ? Math.round((Math.random() - 0.5) * screenShake * 1.4) : 0;
+    ctx.translate(-Math.round(sideCameraX) + shakeX, shakeY);
+    ctx.imageSmoothingEnabled = false;
+    // Ground strip (its solid top sits 18px below the image top).
+    if (imgReady(hollowArt.ground)) {
+      const x0 = Math.floor(sideCameraX / 128) * 128;
+      for (let x = x0 - 128; x < sideCameraX + W + 128; x += 128) ctx.drawImage(hollowArt.ground, x, SIDE_GROUND_Y - 18, 128, 96);
+    } else { ctx.fillStyle = '#1a1424'; ctx.fillRect(sideCameraX, SIDE_GROUND_Y, W, 44); }
+    // Log platforms built from the log tile's caps and middle.
+    HOLLOW_SIDE_PLATFORMS.slice(1).forEach(pl => {
+      if (pl.x > sideCameraX + W || pl.x + pl.w < sideCameraX) return;
+      if (!imgReady(hollowArt.log)) { ctx.fillStyle = '#4a2c1a'; ctx.fillRect(pl.x, pl.y, pl.w, pl.h); return; }
+      const top = pl.y - 7;
+      ctx.drawImage(hollowArt.log, 0, 0, 40, 40, pl.x - 6, top, 40, 40);
+      for (let x = pl.x + 34; x < pl.x + pl.w - 34; x += 32) ctx.drawImage(hollowArt.log, 80, 0, Math.min(32, pl.x + pl.w - 34 - x), 40, x, top, Math.min(32, pl.x + pl.w - 34 - x), 40);
+      ctx.drawImage(hollowArt.log, 152, 0, 40, 40, pl.x + pl.w - 34, top, 40, 40);
+    });
+    // Entrance arch back to the forest and the King's throne in the arena.
+    drawSignpost(70, 'FOREST', -1);
+    drawThrone(3150);
+    drawLoreSpots();
+    drawDad();
+    drawSideMobs();
+    drawSidePlayer();
+    drawCombatFx();
+    // Low mist drifting in front.
+    hollowMist.forEach(m => {
+      const x = ((m.x + time * 8 * m.s) % (HOLLOW_SIDE_WIDTH + 200)) - 100;
+      if (x < sideCameraX - 80 || x > sideCameraX + W + 80) return;
+      const g = ctx.createRadialGradient(x, m.y + 20, 2, x, m.y + 20, 60);
+      g.addColorStop(0, 'rgba(150,130,200,.16)'); g.addColorStop(1, 'rgba(150,130,200,0)');
+      ctx.fillStyle = g; ctx.fillRect(x - 60, m.y - 40, 120, 120);
+    });
+    // Wisps
+    for (let i = 0; i < 10; i++) {
+      const wx = (i * 331 + Math.sin(time * 0.6 + i) * 30) % HOLLOW_SIDE_WIDTH, wy = 90 + Math.sin(time * 1.3 + i * 2) * 25 + (i % 3) * 18;
+      if (wx < sideCameraX - 10 || wx > sideCameraX + W + 10) continue;
+      ctx.fillStyle = 'rgba(140,230,255,' + (0.4 + Math.sin(time * 5 + i) * 0.3) + ')'; ctx.fillRect(Math.round(wx), Math.round(wy), 2, 2);
+      ctx.fillStyle = 'rgba(140,230,255,.15)'; ctx.fillRect(Math.round(wx) - 1, Math.round(wy) - 1, 4, 4);
+    }
+    ctx.restore();
+    // Darkness with a pool of light around the knight.
+    const px = sidePlayer.x - sideCameraX, py = sidePlayer.y - 24;
+    const dk = ctx.createRadialGradient(px, py, 30, px, py, 210);
+    dk.addColorStop(0, 'rgba(5,2,12,0)'); dk.addColorStop(1, 'rgba(5,2,12,.62)');
+    ctx.fillStyle = dk; ctx.fillRect(0, 0, W, H);
+    drawSideOverlays('THE HOLLOW');
+  }
+  function drawThrone(x) {
+    const gy = SIDE_GROUND_Y;
+    ctx.fillStyle = '#1a1220'; ctx.fillRect(x - 22, gy - 58, 44, 58);
+    ctx.fillStyle = '#3a2a3a'; ctx.fillRect(x - 20, gy - 56, 40, 56);
+    ctx.fillStyle = '#2a1e2a'; ctx.fillRect(x - 14, gy - 50, 28, 30);
+    ctx.fillStyle = '#d8cfb4'; [-20, -10, 0, 10, 18].forEach((o, i) => { ctx.fillRect(x + o, gy - 62 - (i % 2) * 5, 3, 8); ctx.fillRect(x + o - 1, gy - 63 - (i % 2) * 5, 5, 3); });
+    ctx.fillStyle = '#4a3a4a'; ctx.fillRect(x - 24, gy - 20, 48, 6);
+    ctx.fillStyle = '#7a4cc0'; ctx.fillRect(x - 2, gy - 46, 4, 4);
+    ctx.fillStyle = 'rgba(200,160,255,' + (0.4 + Math.sin(time * 3) * 0.3) + ')'; ctx.fillRect(x - 1, gy - 45, 2, 2);
+  }
+
+  // Shared screen-space overlays for the outdoor scenes.
+  function drawSideOverlays(label) {
+    const W = canvas.width;
+    if (sidePlayer.deadTime > 0 && sidePlayer.deadTime < 0.7) {
+      ctx.fillStyle = 'rgba(0,0,0,' + (1 - sidePlayer.deadTime / 0.7) + ')'; ctx.fillRect(0, 0, W, canvas.height);
+    }
+    if (time - restFlash < 1.2) { ctx.fillStyle = 'rgba(255,190,100,' + (0.3 * (1 - (time - restFlash) / 1.2)) + ')'; ctx.fillRect(0, 0, W, canvas.height); }
     if (stats.health > 0 && stats.health <= stats.maxHealth * 0.25) {
       const pulse = 0.18 + Math.sin(time * 6) * 0.08;
       const vg = ctx.createRadialGradient(160, 120, 90, 160, 120, 200);
       vg.addColorStop(0, 'rgba(160,0,0,0)'); vg.addColorStop(1, 'rgba(160,0,0,' + pulse + ')');
-      ctx.fillStyle = vg; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = vg; ctx.fillRect(0, 0, W, canvas.height);
     }
-
-    ctx.fillStyle = 'rgba(10,10,18,.72)';
-    ctx.fillRect(218, 4, 98, 17);
-    ctx.fillStyle = '#f5e6c8'; ctx.font = '7px monospace'; ctx.textAlign = 'right';
-    ctx.fillText('WOODLAND', 311, 15);
-    ctx.fillStyle = 'rgba(8,9,16,.72)';
-    ctx.fillRect(0, 226, canvas.width, 14);
+    const boss = bossFight && (bossFight.active || bossFight.intro) && theBoss();
+    if (!boss) {
+      ctx.fillStyle = 'rgba(10,10,18,.72)'; ctx.fillRect(218, 4, 98, 17);
+      ctx.fillStyle = '#f5e6c8'; ctx.font = '7px monospace'; ctx.textAlign = 'right';
+      ctx.fillText(label, 311, 15);
+    }
+    ctx.fillStyle = 'rgba(8,9,16,.72)'; ctx.fillRect(0, 226, W, 14);
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-    ctx.fillText(inputMode === 'pad' ? 'STICK MOVE  ✕ JUMP  □ ATTACK (TAP x3 COMBO)  △ BAG' : 'A/D MOVE  SPACE JUMP  J ATTACK (x3 COMBO)  I BAG', 5, 236);
-
-    if (sidePlayer.x < 100) {
-      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(6, 180, 102, 13);
-      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(6.5, 180.5, 101, 12);
-      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('[ ' + K('E') + ' ] RETURN HOME', 57, 189);
-    } else if (sidePlayer.x > FOREST_SIDE_WIDTH - 170) {
-      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(100, 180, 120, 13);
-      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(100.5, 180.5, 119, 12);
-      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('[ ' + K('E') + ' ] FAR SIDE', 160, 189);
+    ctx.fillText(inputMode === 'pad' ? '✕ JUMP  □ ATTACK  △ BAG  TOUCHPAD QUICK ITEM  (□ IN AIR = PLUNGE)' : 'A/D MOVE  SPACE JUMP  J ATTACK  H QUICK ITEM  I BAG  (J IN AIR = PLUNGE)', 4, 236);
+    const near = !dialogue && !panel && nearbyInteraction();
+    if (near) {
+      const text = '[ ' + K('E') + ' ] ' + near.label;
+      ctx.font = 'bold 7px monospace';
+      const w = Math.ceil(ctx.measureText(text).width) + 14;
+      const x = Math.round(clamp(sidePlayer.x - sideCameraX - w / 2, 4, W - w - 4));
+      const y = 150 + Math.round(Math.sin(time * 4) * 1);
+      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(x, y, w, 13);
+      ctx.strokeStyle = '#f4d27b'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 12);
+      ctx.fillStyle = '#fff0bd'; ctx.textAlign = 'center'; ctx.fillText(text, x + w / 2, y + 9);
+    }
+    if (boss) {
+      const bw = 200, bx = 60, by = 214; // bottom of the screen, clear of the HUD
+      ctx.fillStyle = 'rgba(8,6,12,.85)'; ctx.fillRect(bx - 4, by - 10, bw + 8, 20);
+      invText(boss.T.name.toUpperCase(), 160, by - 2, boss.enraged ? '#ff7a6a' : '#f3e7c9', 'bold 6px monospace', 'center');
+      ctx.fillStyle = '#0d0a10'; ctx.fillRect(bx - 1, by + 1, bw + 2, 6);
+      ctx.fillStyle = '#3a1018'; ctx.fillRect(bx, by + 2, bw, 4);
+      const hpw = Math.round(bw * boss.hp / boss.maxHp);
+      ctx.fillStyle = boss.enraged ? '#ff4a3a' : '#c8324a'; ctx.fillRect(bx, by + 2, hpw, 4);
+      ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(bx, by + 2, hpw, 1);
+      ctx.fillStyle = '#d6b477'; ctx.fillRect(bx + bw / 2, by + 1, 1, 6);
+    }
+    if (sceneTitle) {
+      const t = time - sceneTitle.t;
+      if (t > 3.2) sceneTitle = null;
+      else {
+        const a = t < 0.5 ? t / 0.5 : t > 2.6 ? (3.2 - t) / 0.6 : 1;
+        ctx.save(); ctx.globalAlpha = a; ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(0, 62, W, 40);
+        ctx.font = 'bold 15px monospace'; ctx.fillStyle = '#1a0e1a'; ctx.fillText(sceneTitle.text, 161, 84);
+        ctx.fillStyle = platformScene === 'hollow' ? '#c9a8ff' : '#ffe3a1'; ctx.fillText(sceneTitle.text, 160, 83);
+        ctx.font = '7px monospace'; ctx.fillStyle = '#d9cdb8'; ctx.fillText(sceneTitle.sub, 160, 95);
+        ctx.restore();
+      }
     }
   }
 
@@ -3581,6 +4813,18 @@ const Overworld = (() => {
     ctx.fillStyle = '#f2d38a'; ctx.fillText('XP', 32, 32);
     ctx.fillStyle = '#f2c14e'; ctx.fillRect(117, 27, 5, 5); ctx.fillStyle = '#fff1a8'; ctx.fillRect(118, 28, 1, 2);
     ctx.fillStyle = '#ffe3a1'; ctx.fillText(String(inventory.coins || 0), 124, 32);
+    if (outdoorScene()) {
+      ctx.fillStyle = 'rgba(9,10,20,.8)'; ctx.fillRect(142, 4, 22, 22);
+      ctx.fillStyle = '#d6b477'; ctx.fillRect(142, 4, 22, 1); ctx.fillRect(142, 25, 22, 1);
+      const q = quickSlot && inventory[quickSlot] > 0 ? quickSlot : null;
+      if (q) {
+        drawItemIcon(ITEM_DEFS[q].icon, 147, 9, 1);
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 5px monospace'; ctx.textAlign = 'right'; ctx.fillText(String(inventory[q]), 163, 24);
+      } else { ctx.fillStyle = '#4a4050'; ctx.fillRect(149, 11, 8, 8); }
+      ctx.fillStyle = '#ffe3a1'; ctx.font = 'bold 5px monospace'; ctx.textAlign = 'left'; ctx.fillText(inputMode === 'pad' ? 'TP' : 'H', 144, 10);
+      if (time - invUseFlash < 0.3) { ctx.fillStyle = 'rgba(155,227,122,.5)'; ctx.fillRect(142, 4, 22, 22); }
+      ctx.textAlign = 'left'; ctx.font = '6px monospace';
+    }
     if (comboTimer > 0 || (sidePlayer.atk && sidePlayer.atk.name !== 'slash1')) {
       const step = sidePlayer.atk ? ({ slash1: 1, slash2: 2, finisher: 3, thrust: 1, air: 1 })[sidePlayer.atk.name] : ({ slash1: 1, slash2: 2 })[lastMove] || 0;
       if (step >= 2) { ctx.fillStyle = '#ffe3a1'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'left'; ctx.fillText(step + ' HIT' + (step === 3 ? '!' : ''), 8, 48); }
@@ -3593,17 +4837,19 @@ const Overworld = (() => {
       ctx.font = '7px monospace'; ctx.fillStyle = '#f7e9c7'; ctx.fillText('MAX HP +4   STR +1', 160, 82);
       ctx.globalAlpha = 1;
     }
-    if (notice && time < noticeUntil) {
+    if (notice && time < noticeUntil && !dialogue) {
       ctx.fillStyle = 'rgba(12,10,20,.9)';
       ctx.fillRect(48, 205, 224, 17);
       ctx.strokeStyle = '#d9b56b'; ctx.strokeRect(48.5, 205.5, 223, 16);
       ctx.fillStyle = '#fff0c8'; ctx.textAlign = 'center'; ctx.font = '7px monospace';
       ctx.fillText(notice, 160, 216);
     }
+    drawDialogue();
   }
 
   function drawPlatformer() {
     if (platformScene === 'house') drawSideInterior();
+    else if (platformScene === 'hollow') drawSideHollow();
     else drawSideForest();
     drawSideHUD();
     drawPanel();
@@ -3634,7 +4880,8 @@ const Overworld = (() => {
 
   function closeCurrentPanel() {
     const wasDadNote = panel === 'dad-note';
-    panel = null;
+    if (panel === 'inventory') sfx('uiClose');
+    panel = null; invMenu = null; invInspect = null;
     if (wasDadNote && dadNoteRead && !equipment.armor && !armorQuestActive) {
       armorTutorialPending = true;
     }
@@ -3647,7 +4894,7 @@ const Overworld = (() => {
       const noteDistance = Math.hypot(sidePlayer.x - 144, sidePlayer.y - 164);
       const armorDistance = Math.hypot(sidePlayer.x - 181, sidePlayer.y - 164);
       if (nearDadObjects && Math.min(noteDistance, armorDistance) < 43 && noteDistance <= armorDistance) {
-        panel = 'dad-note';
+        panel = 'dad-note'; sfx('bookOpen');
         dadNoteRead = true;
         if (onSave) onSave(getSaveData());
         return;
@@ -3655,7 +4902,7 @@ const Overworld = (() => {
       if (nearDadObjects && armorDistance < 43) {
         if (!equipment.armor) {
           const completingArmorQuest = armorQuestActive || dadNoteRead;
-          equipment.armor = true;
+          equipment.armor = true; sfx('armor'); setTimeout(() => sfx('belt'), 260); setTimeout(() => sfx('draw'), 560);
           armorQuestActive = false;
           armorTutorialPending = false;
           notice = completingArmorQuest ? 'Quest complete! Dad\'s armor equipped.' : "You equipped Dad's armor.";
@@ -3683,7 +4930,8 @@ const Overworld = (() => {
       return;
     }
 
-    if (sidePlayer.x < 112) {
+    const near = nearbyInteraction();
+    if (near && near.act === 'home') {
       platformScene = 'house';
       insideHouse = true;
       // Come back in through the front door at the bottom of the hallway.
@@ -3695,16 +4943,18 @@ const Overworld = (() => {
       sideCameraX = Math.max(0, HOUSE_SIDE_WIDTH - canvas.width);
       notice = 'You return home.';
       noticeUntil = time + 2;
-    } else if (sidePlayer.x > FOREST_SIDE_WIDTH - 170) {
-      notice = 'You have reached the far side of the forest.';
-      noticeUntil = time + 3;
+      sfx('doorClose');
+      if (onSave) onSave(getSaveData());
+    } else if (near) {
+      near.act();
     } else {
-      notice = 'The path continues through the trees.';
-      noticeUntil = time + 2;
+      notice = platformScene === 'hollow' ? 'Only cold mist here.' : 'The path continues through the trees.';
+      noticeUntil = time + 1.6;
     }
   }
 
   function update(dt) {
+    updateMusic(dt);
     if (paused) return;
     if (introActive) {
       introTime += dt;
@@ -3714,7 +4964,7 @@ const Overworld = (() => {
       if (introTime >= INTRO_DURATION) finishIntro();
       return;
     }
-    if (platformMode && platformScene === 'forest') { updatePlatformer(dt); return; }
+    if (platformMode && outdoorScene()) { updatePlatformer(dt); return; }
     time += dt;
     saveTimer += dt;
     if (saveTimer >= 5) {
@@ -3733,6 +4983,7 @@ const Overworld = (() => {
       if (keys.has('arrowdown') || keys.has('s')) iy += 1;
       if (ix && iy) { ix *= Math.SQRT1_2; iy *= Math.SQRT1_2; }
       if (ix || iy) interiorPlayer.facing = iy < 0 ? 'up' : iy > 0 ? 'down' : ix < 0 ? 'left' : 'right';
+      if (ix) interiorPlayer.hf = ix < 0 ? -1 : 1;
       const speed = keys.has('shift') ? 66 : 46;
       const oldX = interiorPlayer.x, oldY = interiorPlayer.y;
       const nx = oldX + ix * speed * dt;
@@ -3741,7 +4992,11 @@ const Overworld = (() => {
       if (!interiorBlocked(nx, oldY)) interiorPlayer.x = nx;
       if (!interiorBlocked(interiorPlayer.x, ny)) interiorPlayer.y = ny;
       interiorPlayer.moving = Math.abs(interiorPlayer.x - oldX) > 0.01 || Math.abs(interiorPlayer.y - oldY) > 0.01;
-      if (interiorPlayer.moving) interiorPlayer.walk += dt * (keys.has('shift') ? 15 : 10);
+      if (interiorPlayer.moving) {
+        const before = Math.floor(interiorPlayer.walk / 2.5);
+        interiorPlayer.walk += dt * (keys.has('shift') ? 15 : 10);
+        if (Math.floor(interiorPlayer.walk / 2.5) !== before) sfx('stepWood', 0.7);
+      }
       return;
     }
     stats.playTime += dt;
@@ -3827,6 +5082,8 @@ const Overworld = (() => {
     if (!panel) return;
     if (panel === 'stats') { panel = 'inventory'; invTab = 2; }
     if (panel === 'inventory') { drawInventoryScreen(); return; }
+    if (panel === 'shop') { drawShop(); return; }
+    if (panel === 'chapter') { drawChapterPanel(); return; }
     ctx.fillStyle = 'rgba(10, 12, 22, 0.94)';
     ctx.fillRect(43, 37, 234, 164);
     ctx.strokeStyle = '#d9b56b'; ctx.lineWidth = 2;
@@ -3913,7 +5170,7 @@ const Overworld = (() => {
 
   function openPanel(name, tab) {
     if (name === 'stats') { panel = 'inventory'; invTab = 2; }
-    else if (name === 'inventory') { panel = 'inventory'; if (typeof tab === 'number') invTab = tab; }
+    else if (name === 'inventory') { panel = 'inventory'; if (typeof tab === 'number') invTab = tab; invMenu = null; invInspect = null; sfx('uiOpen'); }
     else panel = name;
     invOpenTime = time;
     keys.clear();
@@ -3925,27 +5182,97 @@ const Overworld = (() => {
     openPanel(name, wantTab === null ? invTab : wantTab);
   }
 
-  function useSelectedItem() {
-    if (invTab !== 0) return;
-    const items = ownedItems();
-    const key = items[invSel];
-    if (!key) return;
+  // Item action menu (USE / EQUIP / QUICK SLOT / INSPECT / DROP) and inspect view.
+  let invMenu = null;      // { key, opts, sel, t }
+  let invInspect = null;   // { key, t }
+  let invSwing = -10, invUseFlash = -10, invShake = -10;
+  let loreSel = 0;
+  function itemOptions(key) {
+    const def = ITEM_DEFS[key], opts = [];
+    if (def.heal) opts.push('USE');
+    if (def.type === 'WEAPON') opts.push(equipment.weapon === key ? 'UNEQUIP' : 'EQUIP');
+    if (def.heal) opts.push(quickSlot === key ? 'CLEAR QUICK' : 'SET QUICK');
+    opts.push('INSPECT');
+    if (def.type !== 'KEY ITEM') opts.push('DROP');
+    opts.push('CANCEL');
+    return opts;
+  }
+  function consumeItem(key, fromQuick) {
     const def = ITEM_DEFS[key];
-    if (!def.heal) { notice = def.name + ' cannot be used right now.'; noticeUntil = time + 1.6; sfx('tick'); return; }
-    if (stats.health >= stats.maxHealth) { notice = 'You are already at full health.'; noticeUntil = time + 1.6; sfx('tick'); return; }
+    if (!def || !(inventory[key] > 0)) { sfx('uiError'); notice = 'Nothing in your quick slot.'; noticeUntil = time + 1.4; return false; }
+    if (!def.heal) { notice = def.name + ' cannot be used right now.'; noticeUntil = time + 1.6; sfx('uiError'); invShake = time; return false; }
+    if (stats.health >= stats.maxHealth) { notice = 'You are already at full health.'; noticeUntil = time + 1.6; sfx('uiError'); invShake = time; return false; }
     const before = stats.health;
     stats.health = Math.min(stats.maxHealth, stats.health + def.heal);
+    if (def.heal >= 999) stats.stamina = stats.maxStamina;
     inventory[key]--;
     notice = 'Used ' + def.name + ' (+' + (stats.health - before) + ' HP)'; noticeUntil = time + 1.8;
     invUseFlash = time;
-    sfx('use'); padRumble(0.1, 0.3, 80);
+    sfx(key === 'tonic' ? 'use' : 'eat'); padRumble(0.1, 0.3, 80);
+    if (fromQuick) {
+      addDamageNumber(sidePlayer.x, sidePlayer.y - 56, '+' + (stats.health - before), '#9be37a');
+      for (let i = 0; i < 8; i++) combatFx.push({ kind: 'spark', x: sidePlayer.x + (Math.random() - 0.5) * 16, y: sidePlayer.y - 10 - Math.random() * 30, vx: 0, vy: -40 - Math.random() * 30, life: 0.6, max: 0.6, color: '#9be37a' });
+    }
     const left = ownedItems();
     if (invSel >= left.length) invSel = Math.max(0, left.length - 1);
     if (onSave) onSave(getSaveData());
+    return true;
   }
-  let invUseFlash = -10;
+  function useQuickSlot() {
+    if (panel || dialogue) return;
+    if (!quickSlot || !(inventory[quickSlot] > 0)) {
+      const fallback = ['berries', 'bread', 'fish', 'tonic'].find(k => inventory[k] > 0);
+      if (!fallback) { notice = 'No food or tonics left.'; noticeUntil = time + 1.4; sfx('uiError'); return; }
+      quickSlot = fallback;
+    }
+    consumeItem(quickSlot, true);
+  }
+  function useSelectedItem() {
+    // Opens the action menu for the highlighted item (ITEMS tab) or acts on
+    // the highlighted slot in the other tabs.
+    if (invTab === 0) {
+      const key = ownedItems()[invSel];
+      if (!key) { sfx('uiError'); return; }
+      newItems.delete(key);
+      invMenu = { key, opts: itemOptions(key), sel: 0, t: time };
+      sfx('uiOpen');
+    } else if (invTab === 1) {
+      if (gearSel === 3) toggleWeapon();
+      else { sfx('uiError'); invShake = time; }
+    } else if (invTab === 4) {
+      const entry = LORE[loreSel];
+      if (entry && story.pages.includes(entry.id)) { sfx('bookFlip'); invInspect = { lore: entry.id, t: time }; }
+      else sfx('uiError');
+    } else sfx('uiError');
+  }
+  function toggleWeapon() {
+    if (!equipment.armor) { sfx('uiError'); return; }
+    if (!(inventory.boneblade > 0)) { notice = 'You only have the Knight Sword.'; noticeUntil = time + 1.6; sfx('uiError'); invShake = time; return; }
+    equipment.weapon = equipment.weapon === 'boneblade' ? 'sword' : 'boneblade';
+    sfx('draw'); invSwing = time;
+    notice = (equipment.weapon === 'boneblade' ? 'Bone Blade' : 'Knight Sword') + ' equipped.'; noticeUntil = time + 1.6;
+    if (onSave) onSave(getSaveData());
+  }
+  function runItemOption(opt) {
+    const key = invMenu.key, def = ITEM_DEFS[key];
+    invMenu = null;
+    if (opt === 'USE') consumeItem(key, false);
+    else if (opt === 'EQUIP' || opt === 'UNEQUIP') toggleWeapon();
+    else if (opt === 'SET QUICK') { quickSlot = key; sfx('uiConfirm'); notice = def.name + ' set to quick slot.'; noticeUntil = time + 1.6; }
+    else if (opt === 'CLEAR QUICK') { quickSlot = null; sfx('uiBack'); }
+    else if (opt === 'INSPECT') { invInspect = { key, t: time }; sfx('bookOpen'); }
+    else if (opt === 'DROP') {
+      if (key === 'boneblade' && equipment.weapon === 'boneblade' && inventory.boneblade <= 1) equipment.weapon = 'sword';
+      inventory[key] = Math.max(0, inventory[key] - 1);
+      sfx('cloth'); notice = 'Dropped 1 ' + def.name + '.'; noticeUntil = time + 1.4;
+      const left = ownedItems(); if (invSel >= left.length) invSel = Math.max(0, left.length - 1);
+      if (onSave) onSave(getSaveData());
+    } else sfx('uiBack');
+  }
 
   function inventoryNavigate(dx, dy) {
+    if (invInspect) return;
+    if (invMenu) { invMenu.sel = (invMenu.sel + dy + dx + invMenu.opts.length) % invMenu.opts.length; sfx('uiMove'); return; }
     if (invTab === 0) {
       const count = Math.max(1, ownedItems().length);
       const cols = 6;
@@ -3953,14 +5280,28 @@ const Overworld = (() => {
       col = clamp(col + dx, 0, cols - 1); row = clamp(row + dy, 0, 2);
       const next = row * cols + col;
       invSel = Math.min(next, count - 1);
+      const key = ownedItems()[invSel]; if (key) newItems.delete(key);
     } else if (invTab === 1) {
       gearSel = clamp(gearSel + dy + dx, 0, 3);
-    }
-    sfx('tick');
+    } else if (invTab === 4) {
+      loreSel = clamp(loreSel + dy + dx, 0, LORE.length - 1);
+    } else return;
+    sfx('uiMove');
   }
   function inventoryTab(step) {
+    if (invInspect || invMenu) return;
     invTab = (invTab + step + INV_TABS.length) % INV_TABS.length;
-    sfx('tick');
+    sfx('uiTab');
+  }
+  function inventoryBack() {
+    if (invInspect) { invInspect = null; sfx('bookClose'); return; }
+    if (invMenu) { invMenu = null; sfx('uiBack'); return; }
+    closeCurrentPanel();
+  }
+  function inventoryConfirm() {
+    if (invInspect) { invInspect = null; sfx('bookClose'); return; }
+    if (invMenu) { runItemOption(invMenu.opts[invMenu.sel]); return; }
+    useSelectedItem();
   }
 
   // Returns true when the key was consumed by the open inventory.
@@ -3971,10 +5312,53 @@ const Overworld = (() => {
     else if (k === 'arrowdown' || k === 's') inventoryNavigate(0, 1);
     else if (k === 'q') inventoryTab(-1);
     else if (k === 'r' || k === 'tab') inventoryTab(1);
-    else if (k === 'e' || k === 'enter' || k === ' ') useSelectedItem();
-    else if (k === 'i') closeCurrentPanel();
-    else if (k === 'c') { if (invTab === 2) closeCurrentPanel(); else invTab = 2; }
+    else if (k === 'e' || k === 'enter' || k === ' ') inventoryConfirm();
+    else if (k === 'backspace' || k === 'x') inventoryBack();
+    else if (k === 'j' || k === 'k' || k === 'f') { if (equipment.armor) { invSwing = time; sfx('swing'); } }
+    else if (k === 'i') { invMenu = null; invInspect = null; closeCurrentPanel(); }
+    else if (k === 'c') { if (invTab === 2) closeCurrentPanel(); else { invTab = 2; sfx('uiTab'); } }
     return true;
+  }
+
+  // Mouse / touch on the canvas: tabs, item slots, menu options, dialogue.
+  function canvasPoint(e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * canvas.width / r.width, y: (e.clientY - r.top) * canvas.height / r.height };
+  }
+  function onCanvasPointer(e) {
+    if (introActive || paused) return;
+    const p = canvasPoint(e);
+    const inside = (x, y, w, h) => p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + h;
+    if (dialogue) { advanceDialogue(); e.preventDefault(); return; }
+    if (panel === 'shop') {
+      SHOP_ITEMS.forEach((it, i) => { if (inside(66, 76 + i * 20, 188, 18)) { if (shopSel === i) buyShopItem(i); else { shopSel = i; sfx('uiMove'); } } });
+      e.preventDefault(); return;
+    }
+    if (panel !== 'inventory') return;
+    e.preventDefault();
+    if (invInspect) { invInspect = null; sfx('bookClose'); return; }
+    if (invMenu) {
+      const m = invMenuRect();
+      const i = Math.floor((p.y - m.y - 4) / 12);
+      if (inside(m.x, m.y, m.w, m.h) && i >= 0 && i < invMenu.opts.length) { invMenu.sel = i; runItemOption(invMenu.opts[i]); }
+      else { invMenu = null; sfx('uiBack'); }
+      return;
+    }
+    for (let i = 0; i < INV_TABS.length; i++) {
+      if (inside(INV_TAB_X0 + i * (INV_TAB_W + 2), 17, INV_TAB_W, 14)) { if (invTab !== i) { invTab = i; sfx('uiTab'); } return; }
+    }
+    if (invTab === 0) {
+      const items = ownedItems();
+      for (let i = 0; i < items.length; i++) {
+        const r = itemSlotRect(i);
+        if (inside(r.x, r.y, r.w, r.h)) { if (invSel === i) useSelectedItem(); else { invSel = i; newItems.delete(items[i]); sfx('uiMove'); } return; }
+      }
+    } else if (invTab === 1) {
+      for (let i = 0; i < 4; i++) if (inside(120, 42 + i * 33, 182, 30)) { if (gearSel === i) useSelectedItem(); else { gearSel = i; sfx('uiMove'); } return; }
+    } else if (invTab === 4) {
+      for (let i = 0; i < LORE.length; i++) if (inside(120, 42 + i * 12, 182, 11)) { if (loreSel === i) useSelectedItem(); else { loreSel = i; sfx('uiMove'); } return; }
+    }
+    if (inside(18, 17, 92, 130) && equipment.armor) { invSwing = time; sfx('swing'); }
   }
 
   function invBox(x, y, w, h, fill = '#1d1824', edge = '#5a4a3e') {
@@ -4018,7 +5402,13 @@ const Overworld = (() => {
     ctx.fillStyle = '#251c1c'; ctx.fillRect(cx - 22, baseY + 5, 44, 3);
     ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(cx - 14, baseY - 1, 28, 2);
     ctx.imageSmoothingEnabled = false;
-    if (knightSprites.idle && knightSprites.idle.complete && knightSprites.idle.naturalWidth && equipment.armor) {
+    const swingT = time - invSwing;
+    if (equipment.armor && swingT < 0.42 && imgReady(knightSprites.attacks)) {
+      // Practice swing: frames 15-22 (the finisher) of Attacks.png, clipped to the hero card.
+      const f = 15 + Math.min(7, Math.floor(swingT * 19)), col = f % 8, row = Math.floor(f / 8);
+      ctx.beginPath(); ctx.rect(19, 40, 90, 108); ctx.clip();
+      ctx.drawImage(knightSprites.attacks, col * 128 + 24, row * 64 + 16, 96, 48, cx + 4 - 80, baseY - 96, 192, 96);
+    } else if (knightSprites.idle && knightSprites.idle.complete && knightSprites.idle.naturalWidth && equipment.armor) {
       // 2x crop of the knight's body from the idle cell.
       const f = Math.floor(time * 6) % 8, col = f % 2, row = Math.floor(f / 2);
       ctx.drawImage(knightSprites.idle, col * 128 + 44, row * 64 + 16, 40, 48, cx - 40 + 4, baseY - 96, 80, 96);
@@ -4051,23 +5441,29 @@ const Overworld = (() => {
     });
 
     // Tabs.
-    const tabW = 40, tabX0 = 125;
+    const tabW = INV_TAB_W, tabX0 = INV_TAB_X0;
     INV_TABS.forEach((name, i) => {
-      const x = tabX0 + i * (tabW + 3), active = i === invTab;
+      const x = tabX0 + i * (tabW + 2), active = i === invTab;
       ctx.fillStyle = active ? '#d6b477' : '#2a2230'; ctx.fillRect(x, 17, tabW, 14);
       ctx.fillStyle = active ? '#f7e2a8' : '#3a3042'; ctx.fillRect(x, 17, tabW, 1);
       if (active) { ctx.fillStyle = '#d6b477'; ctx.fillRect(x, 31, tabW, 3); }
-      invText(name, x + tabW / 2, 27, active ? '#2a1a12' : '#a99f9a', 'bold 7px monospace', 'center');
+      invText(name, x + tabW / 2, 27, active ? '#2a1a12' : '#a99f9a', 'bold 6px monospace', 'center');
+      if (i === 4 && story.pages.some(id => !loreSeen.has(id))) { ctx.fillStyle = '#ff5a4a'; ctx.fillRect(x + tabW - 4, 18, 3, 3); }
     });
     const pad = inputMode === 'pad';
     invText(pad ? 'L1' : 'Q', tabX0 - 3, 27, '#8f8478', '6px monospace', 'right');
-    invText(pad ? 'R1' : 'R', tabX0 + 4 * (tabW + 3) - 1, 27, '#8f8478', '6px monospace', 'left');
+    invText(pad ? 'R1' : 'R', tabX0 + 5 * (tabW + 2), 27, '#8f8478', '6px monospace', 'left');
     ctx.fillStyle = '#d6b477'; ctx.fillRect(116, 34, W - 132, 1);
 
     // Left: hero card.
     invBox(18, 17, 92, 190, '#1b1621', '#4b3d35');
     invText('ROWAN', 64, 29, '#ffe3a1', 'bold 9px monospace', 'center');
     invText(equipment.armor ? 'KNIGHT  LV ' + stats.level : 'VILLAGER  LV ' + stats.level, 64, 38, '#b3a796', '6px monospace', 'center');
+    if (quickSlot && inventory[quickSlot] > 0) {
+      ctx.fillStyle = '#0d0a10'; ctx.fillRect(86, 42, 20, 20); ctx.fillStyle = '#2a2231'; ctx.fillRect(87, 43, 18, 18);
+      drawItemIcon(ITEM_DEFS[quickSlot].icon, 90, 46, 1);
+      invText(pad ? 'TP' : 'H', 104, 60, '#ffe3a1', 'bold 5px monospace', 'right');
+    }
     drawInventoryCharacterPreview(64, 140);
     invText('HP', 23, 157, '#f0a29a', '6px monospace');
     invBar(36, 152, 68, 5, stats.health, stats.maxHealth, '#e2584f', '#4a1d22');
@@ -4085,92 +5481,204 @@ const Overworld = (() => {
     if (invTab === 0) drawItemsTab(RX, RY, RW);
     else if (invTab === 1) drawGearTab(RX, RY, RW);
     else if (invTab === 2) drawStatsTab(RX, RY, RW);
-    else drawQuestTab(RX, RY, RW);
+    else if (invTab === 3) drawQuestTab(RX, RY, RW);
+    else drawLoreTab(RX, RY, RW);
+    if (invMenu) drawItemMenu();
 
     // Footer hints.
     ctx.fillStyle = '#0f0c13'; ctx.fillRect(116, 211, W - 132, 14);
-    const hint = pad
-      ? (invTab === 0 ? '✥ SELECT   ✕ USE   L1/R1 TAB   ○ CLOSE' : 'L1/R1 SWITCH TAB    ○ / △ CLOSE')
-      : (invTab === 0 ? 'ARROWS SELECT  E USE  Q/R TAB  I CLOSE' : 'Q/R SWITCH TAB    I / ESC CLOSE');
+    const acts = invTab === 0 || invTab === 4 || (invTab === 1 && gearSel === 3);
+    const hint = invMenu ? (pad ? '✥ CHOOSE   ✕ OK   ○ BACK' : 'ARROWS CHOOSE   E OK   X BACK')
+      : pad ? (acts ? '✥ SELECT  ✕ ' + (invTab === 4 ? 'READ' : 'ACTIONS') + '  □ SWING  ○ CLOSE' : 'L1/R1 TAB   □ SWING   ○ CLOSE')
+      : (acts ? 'ARROWS  E ' + (invTab === 4 ? 'READ' : 'ACTIONS') + '  J SWING  Q/R TAB  I CLOSE' : 'Q/R TAB   J SWING   I / ESC CLOSE');
     invText(hint, 116 + (W - 132) / 2, 221, '#c9bca6', '6px monospace', 'center');
+    if (invInspect) drawInspect();
     ctx.restore();
   }
 
+  const INV_TAB_W = 34, INV_TAB_X0 = 120;
+  const loreSeen = new Set();
+  function itemSlotRect(i) {
+    const cols = 6, slot = 28, gap = 3, x = 118, w = 186, y = 40;
+    const gx = x + Math.floor((w - (cols * slot + (cols - 1) * gap)) / 2);
+    return { x: gx + (i % cols) * (slot + gap), y: y + 2 + Math.floor(i / cols) * (slot + gap), w: slot, h: slot };
+  }
   function drawItemsTab(x, y, w) {
     const items = ownedItems();
     invSel = clamp(invSel, 0, Math.max(0, items.length - 1));
-    const cols = 6, slot = 28, gap = 3;
-    const gx = x + Math.floor((w - (cols * slot + (cols - 1) * gap)) / 2);
+    const slot = 28;
     for (let i = 0; i < 18; i++) {
-      const sx = gx + (i % cols) * (slot + gap), sy = y + 2 + Math.floor(i / cols) * (slot + gap);
+      const { x: sx, y: sy } = itemSlotRect(i);
       const key = items[i];
-      invBox(sx, sy, slot, slot, key ? '#2a2231' : '#1d1824', key ? '#5c4c56' : '#2c2430');
+      const def = key && ITEM_DEFS[key];
+      const edge = def ? RARITY_COLOR[def.rarity] : '#2c2430';
+      invBox(sx, sy, slot, slot, key ? '#2a2231' : '#1d1824', key ? edge : '#2c2430');
+      if (def && def.rarity !== 'common') {
+        ctx.fillStyle = edge; ctx.globalAlpha = 0.16 + (def.rarity === 'legend' ? Math.sin(time * 4) * 0.08 : 0);
+        ctx.fillRect(sx + 1, sy + 1, slot - 2, slot - 2); ctx.globalAlpha = 1;
+        ctx.fillStyle = edge; ctx.fillRect(sx + slot - 2, sy, 2, slot); ctx.fillRect(sx, sy + slot - 2, slot, 2);
+      }
       ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(sx + 3, sy + slot - 5, slot - 6, 2);
       if (key) {
-        const lift = i === invSel ? Math.round(Math.sin(time * 6) * 1) : 0;
-        drawItemIcon(ITEM_DEFS[key].icon, sx + 2, sy + 2 + lift, 2);
+        const sel = i === invSel;
+        const lift = sel ? Math.round(Math.sin(time * 6) * 1) : 0;
+        const shake = sel && time - invShake < 0.25 ? Math.round(Math.sin(time * 80) * 2) : 0;
+        drawItemIcon(def.icon, sx + 2 + shake, sy + 2 + lift, 2);
         const qty = String(inventory[key]);
         ctx.fillStyle = '#0d0a10'; ctx.fillRect(sx + slot - 4 - qty.length * 4, sy + slot - 8, qty.length * 4 + 3, 7);
         invText(qty, sx + slot - 2, sy + slot - 2, '#ffffff', 'bold 6px monospace', 'right');
+        if (newItems.has(key)) {
+          ctx.fillStyle = '#e04848'; ctx.fillRect(sx - 1, sy - 1, 15, 7);
+          invText('NEW', sx + 1, sy + 5, '#ffffff', 'bold 5px monospace');
+        }
+        if (quickSlot === key) { ctx.fillStyle = '#f2c14e'; ctx.fillRect(sx + slot - 7, sy + 1, 6, 6); invText('Q', sx + slot - 6, sy + 6, '#2a1a12', 'bold 5px monospace'); }
+        if (key === 'boneblade' && equipment.weapon === 'boneblade') { ctx.fillStyle = '#71b86c'; ctx.fillRect(sx + slot - 7, sy + 1, 6, 6); invText('E', sx + slot - 6, sy + 6, '#102010', 'bold 5px monospace'); }
       }
     }
-    if (items.length) {
-      const sx = gx + (invSel % cols) * (slot + gap), sy = y + 2 + Math.floor(invSel / cols) * (slot + gap);
-      invCursor(sx, sy, slot, slot);
-    }
+    if (items.length) { const r = itemSlotRect(invSel); invCursor(r.x, r.y, r.w, r.h); }
     // Description card.
     const dy = y + 100;
     invBox(x + 2, dy, w - 4, 66, '#201a26', '#4b3d35');
     const key = items[invSel];
     if (!key) {
       invText('Your pack is empty.', x + w / 2, dy + 30, '#a99f9a', '7px monospace', 'center');
-      invText('Defeat goblins to find loot.', x + w / 2, dy + 42, '#7f766f', '6px monospace', 'center');
+      invText('Defeat monsters to find loot.', x + w / 2, dy + 42, '#7f766f', '6px monospace', 'center');
       return;
     }
     const def = ITEM_DEFS[key];
     ctx.fillStyle = '#151119'; ctx.fillRect(x + 8, dy + 7, 28, 28);
+    ctx.strokeStyle = RARITY_COLOR[def.rarity]; ctx.strokeRect(x + 7.5, dy + 6.5, 29, 29);
     drawItemIcon(def.icon, x + 10, dy + 9, 2);
     invText(def.name.toUpperCase(), x + 42, dy + 15, '#ffe3a1', 'bold 8px monospace');
-    const tagColor = def.type === 'CONSUMABLE' ? '#71b86c' : def.type === 'TROPHY' ? '#d6b477' : '#8fa6c9';
+    const tagColor = def.type === 'CONSUMABLE' ? '#71b86c' : def.type === 'TROPHY' ? '#d6b477' : def.type === 'WEAPON' ? '#ffb27a' : def.type === 'KEY ITEM' ? '#f2c14e' : '#8fa6c9';
     ctx.fillStyle = tagColor; ctx.fillRect(x + 42, dy + 19, def.type.length * 4 + 6, 9);
     invText(def.type, x + 45, dy + 26, '#141018', 'bold 6px monospace');
+    const rx = x + 42 + def.type.length * 4 + 10;
+    invText(def.rarity.toUpperCase(), rx, dy + 26, RARITY_COLOR[def.rarity], 'bold 6px monospace');
     invText('x' + inventory[key], x + w - 10, dy + 15, '#c9bca6', '7px monospace', 'right');
     def.desc.forEach((line, i) => invText(line, x + 10, dy + 46 + i * 9, '#d9cdb8', '7px monospace'));
     if (def.heal) {
       const heal = def.heal >= 999 ? 'FULL' : '+' + def.heal;
       const flash = time - invUseFlash < 0.3;
-      invText((inputMode === 'pad' ? '✕' : 'E') + ' USE  ' + heal + ' HP', x + w - 10, dy + 30, flash ? '#ffffff' : '#9be37a', 'bold 6px monospace', 'right');
+      invText(heal + ' HP', x + w - 10, dy + 30, flash ? '#ffffff' : '#9be37a', 'bold 6px monospace', 'right');
+    } else if (def.value) invText(def.value + 'c', x + w - 10, dy + 30, '#ffe3a1', '6px monospace', 'right');
+  }
+
+  function invMenuRect() {
+    const r = itemSlotRect(invSel);
+    const h = invMenu.opts.length * 12 + 8, w = 70;
+    let mx = r.x + r.w + 4, my = r.y;
+    if (mx + w > 304) mx = r.x - w - 4;
+    if (my + h > 206) my = 206 - h;
+    return { x: mx, y: my, w, h };
+  }
+  function drawItemMenu() {
+    const m = invMenuRect();
+    const pop = Math.min(1, (time - invMenu.t) / 0.08);
+    ctx.save();
+    ctx.globalAlpha = pop;
+    invBox(m.x, m.y, m.w, m.h, '#2a2032', '#d6b477');
+    invMenu.opts.forEach((o, i) => {
+      const oy = m.y + 4 + i * 12, sel = i === invMenu.sel;
+      if (sel) { ctx.fillStyle = '#d6b477'; ctx.fillRect(m.x + 2, oy, m.w - 4, 11); }
+      const dim = o === 'USE' && stats.health >= stats.maxHealth;
+      invText((sel ? '> ' : '  ') + o, m.x + 5, oy + 8, sel ? '#2a1a12' : dim ? '#6f6670' : o === 'DROP' ? '#f0a29a' : '#f3e7c9', (sel ? 'bold ' : '') + '6px monospace');
+    });
+    ctx.restore();
+  }
+
+  function wrapText(text, maxW, font) {
+    ctx.font = font;
+    const out = [];
+    text.split('\n').forEach(par => {
+      let line = '';
+      par.split(' ').forEach(word => {
+        const t = line ? line + ' ' + word : word;
+        if (ctx.measureText(t).width > maxW && line) { out.push(line); line = word; } else line = t;
+      });
+      out.push(line);
+    });
+    return out;
+  }
+
+  function drawInspect() {
+    const W = canvas.width, H = canvas.height;
+    const t = time - invInspect.t;
+    ctx.fillStyle = 'rgba(4,4,8,' + Math.min(0.82, t * 5) + ')'; ctx.fillRect(0, 0, W, H);
+    const k = Math.min(1, t / 0.14);
+    const bw = 236, bh = 170, bx = (W - bw) / 2, by = 30 + (1 - k) * 12;
+    ctx.globalAlpha = k;
+    invBox(bx, by, bw, bh, '#1c1622', '#d6b477');
+    ctx.fillStyle = '#d6b477'; ctx.fillRect(bx + 4, by + 4, bw - 8, 1); ctx.fillRect(bx + 4, by + bh - 5, bw - 8, 1);
+    if (invInspect.lore) {
+      const entry = LORE.find(l => l.id === invInspect.lore);
+      loreSeen.add(entry.id);
+      drawItemIcon(entry.kind === 'stone' ? 'whetstone' : 'page', bx + 10, by + 10, 2);
+      invText(entry.title.toUpperCase(), bx + 38, by + 20, '#ffe3a1', 'bold 8px monospace');
+      invText(entry.where, bx + 38, by + 30, '#8f8478', '6px monospace');
+      ctx.fillStyle = entry.kind === 'stone' ? '#2a2a34' : '#e9dcbc'; ctx.fillRect(bx + 10, by + 40, bw - 20, bh - 58);
+      const lines = wrapText(entry.text, bw - 32, '7px monospace');
+      lines.forEach((ln, i) => invText(ln, bx + 16, by + 52 + i * 10, entry.kind === 'stone' ? '#b8d8ff' : '#3a2a22', '7px monospace'));
+      if (entry.sign) invText(entry.sign, bx + bw - 16, by + bh - 24, entry.kind === 'stone' ? '#8fa6c9' : '#7a5a3a', 'italic 7px monospace', 'right');
+    } else {
+      const def = ITEM_DEFS[invInspect.key];
+      // A slowly turning, glowing item on a pedestal.
+      const cx = bx + 46, cy = by + 64;
+      const glow = ctx.createRadialGradient(cx, cy, 2, cx, cy, 42);
+      glow.addColorStop(0, RARITY_COLOR[def.rarity] + '88'); glow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = glow; ctx.fillRect(cx - 44, cy - 44, 88, 88);
+      const turn = Math.cos(time * 2.2);
+      ctx.save(); ctx.translate(cx, cy + Math.sin(time * 3) * 2); ctx.scale(Math.abs(turn) < 0.12 ? 0.12 * Math.sign(turn || 1) : turn, 1);
+      drawItemIcon(def.icon, -24, -24, 4);
+      ctx.restore();
+      ctx.fillStyle = '#3a2d2a'; ctx.fillRect(cx - 22, cy + 32, 44, 5); ctx.fillStyle = '#5c463a'; ctx.fillRect(cx - 20, cy + 32, 40, 2);
+      invText(def.name.toUpperCase(), bx + 96, by + 22, '#ffe3a1', 'bold 9px monospace');
+      invText(def.rarity.toUpperCase() + '  ' + def.type, bx + 96, by + 33, RARITY_COLOR[def.rarity], 'bold 6px monospace');
+      const lines = wrapText(def.lore || def.desc.join(' '), bw - 108, '7px monospace');
+      lines.forEach((ln, i) => invText(ln, bx + 96, by + 50 + i * 10, '#d9cdb8', '7px monospace'));
+      const facts = [];
+      if (def.heal) facts.push('Restores ' + (def.heal >= 999 ? 'all' : def.heal) + ' HP');
+      if (def.atk) facts.push('Attack +' + def.atk);
+      if (def.value) facts.push('Sells for ' + def.value + 'c');
+      facts.push('Carrying ' + inventory[invInspect.key]);
+      facts.forEach((f, i) => invText(f, bx + 96, by + 118 + i * 10, '#9fd3ff', '6px monospace'));
     }
+    invText(inputMode === 'pad' ? '✕ / ○ CLOSE' : 'E / X CLOSE', bx + bw / 2, by + bh - 9, '#8f8478', '6px monospace', 'center');
+    ctx.globalAlpha = 1;
   }
 
   function drawGearTab(x, y, w) {
     const on = equipment.armor;
+    const blade = equipment.weapon === 'boneblade' && inventory.boneblade > 0;
     const slots = [
       { label: 'HEAD', icon: 'helm', name: 'Steel Helm', stat: 'DEF +1' },
-      { label: 'BODY', icon: 'armor', name: "Dad's Armor", stat: 'DEF +2' },
+      { label: 'BODY', icon: 'armor', name: "Dad's Armor" + (stats.defUp ? ' +' + stats.defUp : ''), stat: 'DEF +' + (2 + (stats.defUp || 0)) },
       { label: 'LEGS', icon: 'legs', name: 'Iron Greaves', stat: 'SPD  -' },
-      { label: 'WEAPON', icon: 'sword', name: 'Knight Sword', stat: 'ATK +2' }
+      { label: 'WEAPON', icon: blade ? 'boneblade' : 'sword', name: (blade ? 'Bone Blade' : 'Knight Sword') + (stats.atkUp ? ' +' + stats.atkUp : ''), stat: 'ATK +' + ((blade ? 3 : 2) + (stats.atkUp || 0)) }
     ];
     slots.forEach((s, i) => {
       const sy = y + 2 + i * 33;
-      invBox(x + 2, sy, w - 4, 30, i === gearSel ? '#2c2433' : '#211b28', '#4b3d35');
+      const shake = i === gearSel && time - invShake < 0.25 ? Math.round(Math.sin(time * 80) * 2) : 0;
+      invBox(x + 2 + shake, sy, w - 4, 30, i === gearSel ? '#2c2433' : '#211b28', '#4b3d35');
       ctx.fillStyle = '#151119'; ctx.fillRect(x + 6, sy + 3, 24, 24);
       if (on) drawItemIcon(s.icon, x + 6, sy + 3, 2);
       else { ctx.globalAlpha = 0.18; drawItemIcon(s.icon, x + 6, sy + 3, 2); ctx.globalAlpha = 1; }
       invText(s.label, x + 36, sy + 11, '#8f8478', '6px monospace');
       invText(on ? s.name : 'Empty', x + 36, sy + 22, on ? '#f3e7c9' : '#6f6670', 'bold 7px monospace');
       if (on) invText(s.stat, x + w - 10, sy + 19, s.stat.startsWith('ATK') ? '#ffb27a' : '#9fd3ff', 'bold 7px monospace', 'right');
+      if (i === 3 && on && inventory.boneblade > 0) invText((inputMode === 'pad' ? '✕' : 'E') + ' SWAP', x + w - 10, sy + 9, '#ffe3a1', 'bold 5px monospace', 'right');
       if (i === gearSel) invCursor(x + 2, sy, w - 4, 30);
     });
-    invText(on ? 'Dad\'s old knight set. It still fits.' : 'Find Dad\'s armor stand in his room.', x + w / 2, y + 144, on ? '#a9c8a0' : '#e8b07a', '6px monospace', 'center');
+    invText(on ? (inventory.boneblade > 0 ? 'Swap weapons on the WEAPON slot.' : 'Dad\'s old knight set. It still fits.') : 'Find Dad\'s armor stand in his room.', x + w / 2, y + 144, on ? '#a9c8a0' : '#e8b07a', '6px monospace', 'center');
+    if (stats.atkUp || stats.defUp) invText('Bram upgrades: ATK +' + (stats.atkUp || 0) + '  DEF +' + (stats.defUp || 0), x + w / 2, y + 156, '#d6b477', '6px monospace', 'center');
   }
 
   function drawStatsTab(x, y, w) {
     const rows = [
       ['LEVEL', String(stats.level)],
-      ['STRENGTH', stats.strength + (equipment.armor ? '  (+' + SWORD_ATTACK + ')' : '')],
-      ['DEFENSE', stats.defense + (equipment.armor ? '  (+' + ARMOR_DEFENSE + ')' : '')],
-      ['GOBLINS DEFEATED', String(stats.kills || 0)],
+      ['ATTACK', String(totalAttack())],
+      ['DEFENSE', String(totalDefense())],
+      ['MONSTERS / GOBLINS', (stats.kills || 0) + ' / ' + (stats.goblinKills || 0)],
       ['STEPS', String(stats.steps)],
       ['PLAY TIME', Math.floor(stats.playTime / 60) + ':' + String(Math.floor(stats.playTime % 60)).padStart(2, '0')]
     ];
@@ -4192,21 +5700,26 @@ const Overworld = (() => {
     });
   }
 
-  function drawQuestTab(x, y, w) {
-    const inForest = platformScene === 'forest' && !insideHouse;
-    const farSide = inForest && sidePlayer.x > FOREST_SIDE_WIDTH - 260;
-    const steps = [
+  function mainQuestSteps() {
+    const inForest = outdoorScene() && !insideHouse;
+    return [
       ['Read the note from Dad', dadNoteRead],
       ["Equip Dad's armor", equipment.armor],
-      ['Head out into the forest', inForest || (stats.kills || 0) > 0],
-      ['Reach the far side', farSide]
+      ['Head out into the forest', inForest || (stats.kills || 0) > 0 || story.campReached],
+      ['Reach the camp at the far side', story.campReached],
+      ['Enter the Hollow', story.hollowEntered],
+      ['Defeat the Hollow King', story.bossDefeated],
+      ['Find Dad', story.dadFound]
     ];
-    invBox(x + 2, y + 2, w - 4, 92, '#201a26', '#4b3d35');
-    invText('MAIN QUEST', x + 10, y + 13, '#d6b477', 'bold 6px monospace');
-    invText('Meet Dad Beyond the Forest', x + 10, y + 24, '#ffe3a1', 'bold 8px monospace');
+  }
+  function drawQuestTab(x, y, w) {
+    const steps = mainQuestSteps();
+    invBox(x + 2, y + 2, w - 4, 112, '#201a26', '#4b3d35');
+    invText('MAIN QUEST', x + 10, y + 12, '#d6b477', 'bold 6px monospace');
+    invText(story.chapterDone ? 'Chapter 1 Complete' : 'Where Did Dad Go?', x + 10, y + 22, '#ffe3a1', 'bold 8px monospace');
     const current = steps.findIndex(s => !s[1]);
     steps.forEach(([label, done], i) => {
-      const sy = y + 34 + i * 14;
+      const sy = y + 28 + i * 12;
       ctx.fillStyle = '#0d0a10'; ctx.fillRect(x + 10, sy, 9, 9);
       ctx.fillStyle = done ? '#71b86c' : i === current ? '#3a3042' : '#211b28'; ctx.fillRect(x + 11, sy + 1, 7, 7);
       if (done) { ctx.fillStyle = '#e9ffd9'; ctx.fillRect(x + 12, sy + 4, 2, 2); ctx.fillRect(x + 14, sy + 5, 1, 1); ctx.fillRect(x + 15, sy + 2, 2, 3); }
@@ -4219,14 +5732,36 @@ const Overworld = (() => {
         for (let k = 0; k < 4; k++) ctx.fillRect(ax + k, sy + 4 - k, 1, k * 2 + 1);
       }
     });
-    const kills = Math.min(5, stats.kills || 0);
-    invBox(x + 2, y + 100, w - 4, 66, '#201a26', '#4b3d35');
-    invText('SIDE QUEST', x + 10, y + 111, '#d6b477', 'bold 6px monospace');
-    invText('Goblin Trouble', x + 10, y + 122, '#ffe3a1', 'bold 8px monospace');
-    invText('Defeat 5 goblin scouts on the trail.', x + 10, y + 134, '#d9cdb8', '6px monospace');
-    invBar(x + 10, y + 142, w - 52, 5, kills, 5, kills >= 5 ? '#71b86c' : '#e2584f', '#3a1d22');
-    invText(kills + ' / 5', x + w - 10, y + 147, kills >= 5 ? '#9be37a' : '#f3e7c9', 'bold 7px monospace', 'right');
-    if (kills >= 5) invText('COMPLETE', x + w / 2, y + 160, '#9be37a', 'bold 7px monospace', 'center');
+    const kills = Math.min(5, stats.goblinKills || 0);
+    const pages = story.pages.length;
+    invBox(x + 2, y + 118, w - 4, 50, '#201a26', '#4b3d35');
+    invText('SIDE QUESTS', x + 10, y + 128, '#d6b477', 'bold 6px monospace');
+    invText('Goblin Trouble', x + 10, y + 139, kills >= 5 ? '#9be37a' : '#ffe3a1', 'bold 7px monospace');
+    invBar(x + 92, y + 134, w - 134, 4, kills, 5, kills >= 5 ? '#71b86c' : '#e2584f', '#3a1d22');
+    invText(kills >= 5 ? 'DONE' : kills + '/5', x + w - 10, y + 139, kills >= 5 ? '#9be37a' : '#f3e7c9', 'bold 6px monospace', 'right');
+    invText('Lost Pages', x + 10, y + 153, pages >= LORE.length ? '#9be37a' : '#ffe3a1', 'bold 7px monospace');
+    invBar(x + 92, y + 148, w - 134, 4, pages, LORE.length, pages >= LORE.length ? '#71b86c' : '#5fa8ff', '#1d2a3a');
+    invText(pages >= LORE.length ? 'DONE' : pages + '/' + LORE.length, x + w - 10, y + 153, pages >= LORE.length ? '#9be37a' : '#f3e7c9', 'bold 6px monospace', 'right');
+    invText('Find Dad\'s journal pages and lore stones.', x + 10, y + 163, '#8f8478', '5px monospace');
+  }
+
+  function drawLoreTab(x, y, w) {
+    invText('JOURNAL & LORE  ' + story.pages.length + '/' + LORE.length, x + 4, y + 0, '#d6b477', 'bold 6px monospace');
+    LORE.forEach((entry, i) => {
+      const ry = y + 2 + i * 12, found = story.pages.includes(entry.id), sel = i === loreSel;
+      ctx.fillStyle = sel ? '#2c2433' : i % 2 ? '#1d1824' : '#231d2a'; ctx.fillRect(x + 2, ry, w - 4, 11);
+      drawItemIcon(entry.kind === 'stone' ? 'whetstone' : 'page', x + 4, ry - 1, 1);
+      invText(found ? entry.title : '? ? ?', x + 20, ry + 8, found ? (sel ? '#ffe3a1' : '#f3e7c9') : '#5f5662', (sel ? 'bold ' : '') + '6px monospace');
+      if (found && !loreSeen.has(entry.id)) { ctx.fillStyle = '#e04848'; ctx.fillRect(x + w - 22, ry + 2, 15, 7); invText('NEW', x + w - 20, ry + 8, '#fff', 'bold 5px monospace'); }
+      if (sel) invCursor(x + 2, ry, w - 4, 11);
+    });
+    const entry = LORE[loreSel], found = entry && story.pages.includes(entry.id);
+    const by = y + 2 + LORE.length * 12 + 4;
+    invBox(x + 2, by, w - 4, 166 - (by - y), '#201a26', '#4b3d35');
+    if (!found) { invText('Not found yet.', x + w / 2, by + 20, '#8f8478', '7px monospace', 'center'); invText(entry.hint, x + w / 2, by + 32, '#6f6670', '6px monospace', 'center'); return; }
+    const lines = wrapText(entry.text, w - 18, '6px monospace');
+    lines.slice(0, 9).forEach((ln, i) => invText(ln, x + 8, by + 10 + i * 8, '#d9cdb8', '6px monospace'));
+    if (lines.length > 9) invText('... ' + (inputMode === 'pad' ? '✕' : 'E') + ' READ ALL', x + w - 8, by + 84, '#ffe3a1', 'bold 5px monospace', 'right');
   }
 
   function drawPauseMenu() {
@@ -4303,7 +5838,7 @@ const Overworld = (() => {
 
   function draw() {
     if (introActive) { drawIntro(); return; }
-    if (platformMode && platformScene === 'forest') { drawPlatformer(); return; }
+    if (platformMode && outdoorScene()) { drawPlatformer(); return; }
     if (battle) { drawBattle(); if (paused) drawPauseMenu(); return; }
     if (insideHouse) { drawHouseInterior(); drawHouseHUD(); drawPanel(); if (armorTutorialPending) drawArmorInventoryPrompt(); if (paused) drawPauseMenu(); return; }
     ctx.fillStyle = '#1b1f3a';
@@ -4349,10 +5884,10 @@ const Overworld = (() => {
 
   function interact() {
     // The house is top-down; only the forest uses side-view interaction.
-    if (platformMode && platformScene === 'forest') { interactPlatformer(); return; }
+    if (platformMode && outdoorScene()) { interactPlatformer(); return; }
     if (insideHouse) {
       if (nearDadNote() && (!nearDadArmor() || dadNoteDistance() <= dadArmorDistance())) {
-        panel = 'dad-note';
+        panel = 'dad-note'; sfx('bookOpen');
         dadNoteRead = true;
         if (onSave) onSave(getSaveData());
         return;
@@ -4360,7 +5895,7 @@ const Overworld = (() => {
       if (nearDadArmor()) {
         if (!equipment.armor) {
           const completingArmorQuest = armorQuestActive || dadNoteRead;
-          equipment.armor = true;
+          equipment.armor = true; sfx('armor'); setTimeout(() => sfx('belt'), 260); setTimeout(() => sfx('draw'), 560);
           armorQuestActive = false;
           armorTutorialPending = false;
           notice = completingArmorQuest ? "Quest complete! Dad's armor equipped." : "You equipped Dad's armor.";
@@ -4381,6 +5916,8 @@ const Overworld = (() => {
         if (platformMode) {
           insideHouse = false;
           platformScene = 'forest';
+          loadSceneMobs('forest'); sfx('doorOpen');
+          sceneTitle = { text: 'THE WOODLAND', sub: 'Follow the trail east', t: time };
           sidePlayer.x = 72; sidePlayer.y = SIDE_GROUND_Y;
           sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
           sidePlayer.facing = 1; sideCameraX = 0;
@@ -4446,7 +5983,11 @@ const Overworld = (() => {
       inventory: { ...inventory },
       stats: { ...stats },
       stepDistance,
-      worldClock
+      worldClock,
+      story: { ...story, pages: story.pages.slice() },
+      quickSlot,
+      newItems: Array.from(newItems),
+      loreSeen: Array.from(loreSeen)
     };
   }
 
@@ -4455,10 +5996,13 @@ const Overworld = (() => {
     player.x = SPAWN.x * TILE; player.y = SPAWN.y * TILE; player.facing = 'down';
     insideHouse = false;
     interiorPlayer.x = KID_SPAWN.x; interiorPlayer.y = KID_SPAWN.y; interiorPlayer.facing = KID_SPAWN.facing; interiorPlayer.moving = false; interiorPlayer.walk = 0;
-    inventory.berries = 3; inventory.wood = 0; inventory.fish = 0; inventory.fang = 0; inventory.tonic = 0; inventory.coins = 0;
-    equipment.armor = false;
+    Object.keys(inventory).forEach(k => { inventory[k] = 0; }); inventory.berries = 3;
+    equipment.armor = false; equipment.weapon = 'sword';
+    quickSlot = 'berries'; newItems.clear(); loreSeen.clear();
+    Object.assign(story, { campReached: false, hollowEntered: false, hollowSeen: false, metBram: false, rested: false, bossStarted: false, bossDefeated: false, dadFound: false, chapterDone: false, pages: [] });
+    dialogue = null; bossFight = null; bossOutro = null; dad = null; bossWaves.length = 0;
     armorTutorialPending = false; armorQuestActive = false; dadNoteRead = false;
-    Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0, xp: 0, kills: 0 });
+    Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0, xp: 0, kills: 0, goblinKills: 0, atkUp: 0, defUp: 0 });
     stepDistance = 0;
     worldClock = 0.28;
     // A genuinely new slot begins in the kid's bedroom.
@@ -4475,7 +6019,17 @@ const Overworld = (() => {
     if (['up', 'down', 'left', 'right'].includes(saveData.facing)) player.facing = saveData.facing;
     if (saveData.equipment && typeof saveData.equipment === 'object') {
       equipment.armor = saveData.equipment.armor === true;
+      if (saveData.equipment.weapon === 'boneblade') equipment.weapon = 'boneblade';
     }
+    if (saveData.story && typeof saveData.story === 'object') {
+      Object.keys(story).forEach(k => { if (k !== 'pages' && typeof saveData.story[k] === 'boolean') story[k] = saveData.story[k]; });
+      ['hollowSeen', 'metBram', 'rested'].forEach(k => { if (typeof saveData.story[k] === 'boolean') story[k] = saveData.story[k]; });
+      if (Array.isArray(saveData.story.pages)) story.pages = saveData.story.pages.filter(id => LORE.some(l => l.id === id));
+    }
+    if (typeof saveData.quickSlot === 'string' && ITEM_DEFS[saveData.quickSlot]) quickSlot = saveData.quickSlot;
+    else if (saveData.quickSlot === null) quickSlot = null;
+    if (Array.isArray(saveData.newItems)) saveData.newItems.forEach(k => { if (ITEM_DEFS[k]) newItems.add(k); });
+    if (Array.isArray(saveData.loreSeen)) saveData.loreSeen.forEach(k => loreSeen.add(k));
     dadNoteRead = saveData.sideNoteRead === true;
     if (typeof saveData.armorQuestActive === 'boolean') armorQuestActive = saveData.armorQuestActive;
     else armorQuestActive = false;
@@ -4485,7 +6039,7 @@ const Overworld = (() => {
       armorTutorialPending = true;
     }
     if (saveData.inventory && typeof saveData.inventory === 'object') {
-      ['berries', 'wood', 'fish', 'fang', 'tonic', 'coins'].forEach(k => {
+      Object.keys(inventory).forEach(k => {
         if (Number.isFinite(saveData.inventory[k])) inventory[k] = Math.max(0, Math.floor(saveData.inventory[k]));
       });
     }
@@ -4527,7 +6081,17 @@ const Overworld = (() => {
 
   function onKeyDown(e) {
     const k = e.key.toLowerCase();
+    unlockAudio();
     if (introActive) { finishIntro(); e.preventDefault(); e.stopPropagation(); return; }
+    if (dialogue && !paused) {
+      if (!e.repeat && ['e', 'enter', ' ', 'j', 'k', 'f', 'escape', 'x'].includes(k)) advanceDialogue();
+      e.preventDefault(); e.stopPropagation(); return;
+    }
+    if (panel === 'shop') { if (!e.repeat || k.startsWith('arrow')) shopKey(k); e.preventDefault(); e.stopPropagation(); return; }
+    if (panel === 'chapter') {
+      if (!e.repeat && ['e', 'enter', ' ', 'escape', 'x'].includes(k) && time - invOpenTime > 1.5) { panel = null; sfx('uiConfirm'); if (onSave) onSave(getSaveData()); }
+      e.preventDefault(); e.stopPropagation(); return;
+    }
 
     if (paused) {
       if (k === 'escape' || k === 'p') {
@@ -4561,6 +6125,7 @@ const Overworld = (() => {
     }
 
     if (k === 'escape' && panel) {
+      if (panel === 'inventory' && (invMenu || invInspect)) { inventoryBack(); e.preventDefault(); e.stopPropagation(); return; }
       closeCurrentPanel();
       e.preventDefault();
       e.stopPropagation();
@@ -4595,11 +6160,16 @@ const Overworld = (() => {
       return;
     }
     if (panel === 'inventory') {
+      if (k === 'escape') { inventoryBack(); e.preventDefault(); e.stopPropagation(); return; }
       if (!e.repeat || k.startsWith('arrow')) inventoryKey(k);
       e.preventDefault(); e.stopPropagation(); return;
     }
-    if ((k === 'j' || k === 'k' || k === 'f') && platformMode && platformScene === 'forest') {
+    if ((k === 'j' || k === 'k' || k === 'f') && platformMode && outdoorScene()) {
       if (!e.repeat && !panel) sideAttackQueued = true;
+      e.preventDefault(); e.stopPropagation(); return;
+    }
+    if (k === 'h' && platformMode && outdoorScene()) {
+      if (!e.repeat && !panel) useQuickSlot();
       e.preventDefault(); e.stopPropagation(); return;
     }
     if (k === 'i' || k === 'c') {
@@ -4655,14 +6225,18 @@ const Overworld = (() => {
     });
     applySave(saveData);
     platformMode = true;
-    platformScene = saveData && saveData.platformScene === 'forest' ? 'forest' : 'house';
-    sidePlayer.x = saveData && Number.isFinite(saveData.sideX) ? clamp(saveData.sideX, 20, platformScene === 'house' ? HOUSE_SIDE_WIDTH - 20 : FOREST_SIDE_WIDTH - 20) : (platformScene === 'house' ? 410 : 72);
+    platformScene = saveData && (saveData.platformScene === 'forest' || saveData.platformScene === 'hollow') ? saveData.platformScene : 'house';
+    sidePlayer.x = saveData && Number.isFinite(saveData.sideX) ? clamp(saveData.sideX, 20, sideWorldWidth() - 20) : (platformScene === 'house' ? 410 : 72);
+    // Never resume mid-arena: start the boss walk-in from the Hollow's last stretch instead.
+    if (platformScene === 'hollow' && !story.bossDefeated && sidePlayer.x > BOSS_ARENA.left - 60) sidePlayer.x = BOSS_ARENA.left - 120;
     sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
     sidePlayer.facing = 1; sidePlayer.moving = false; sidePlayer.walk = 0;
     dadNoteRead = !!(saveData && saveData.sideNoteRead);
     sideJumpQueued = false; sideAttackQueued = false; sidePlayer.attackTime = 0; sidePlayer.attackCooldown = 0; sidePlayer.hurtTime = 0; sidePlayer.invulnTime = 0; sidePlayer.deadTime = 0; sidePlayer.atk = null;
     combatFx.length = 0; damageNumbers.length = 0; pickups.length = 0; hitStop = 0; screenShake = 0; comboTimer = 0;
-    sideGoblins.forEach((goblin, i) => { goblin.x = goblin.home; goblin.hp = goblin.maxHp; goblin.dead = false; goblin.deadTime = 0; goblin.respawn = 0; goblin.attackTime = 0; goblin.attackCooldown = 0.7 + i * 0.4; goblin.hurtTime = 0; goblin.attackHit = false; goblin.patrolDir = i % 2 ? 1 : -1; goblin.dir = goblin.patrolDir; goblin.moving = false; goblin.kvx = 0; goblin.flash = 0; });
+    loadSceneMobs(platformScene === 'hollow' ? 'hollow' : 'forest');
+    dad = platformScene === 'hollow' && story.dadFound ? { x: 3060, dir: -1, state: 'idle', t: 0 } : null;
+    sceneTitle = null;
     sideCameraX = Math.max(0, sidePlayer.x - canvas.width * 0.43);
     insideHouse = platformScene === 'house';
     introActive = !saveData || typeof saveData !== 'object';
@@ -4678,6 +6252,7 @@ const Overworld = (() => {
     if (introActive) { insideHouse = true; interiorPlayer.x = KID_SPAWN.x; interiorPlayer.y = KID_SPAWN.y; interiorPlayer.facing = KID_SPAWN.facing; }
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('keyup', onKeyUp);
+    canvas.addEventListener('pointerdown', onCanvasPointer);
     const maxCamX = Math.max(0, MAP_W * TILE - canvas.width);
     const maxCamY = Math.max(0, MAP_H * TILE - canvas.height);
     camX = Math.round(clamp(player.x + 8 - canvas.width / 2, 0, maxCamX));
@@ -4687,19 +6262,32 @@ const Overworld = (() => {
   function stop() {
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp);
+    if (canvas) canvas.removeEventListener('pointerdown', onCanvasPointer);
     keys.clear();
+    Object.values(musicTracks).forEach(t => { try { t.a.pause(); } catch (_) {} t.playing = false; t.v = 0; });
   }
 
   // True when the forest shows an interaction prompt (return home / far side).
   function forestInteractAvailable() {
-    return platformScene === 'forest' && (sidePlayer.x < 100 || sidePlayer.x > FOREST_SIDE_WIDTH - 170);
+    return outdoorScene() && !!nearbyInteraction();
   }
 
   // PS5 layout: ✕ jump/interact/confirm, □ attack, ○ back, △ inventory,
   // touchpad/Create stats, Options pause.
   function controllerAction(action) {
     inputMode = 'pad';
+    unlockAudio();
     if (introActive) { finishIntro(); return; }
+    if (dialogue && !paused) { if (action === 'primary' || action === 'attack' || action === 'back') advanceDialogue(); return; }
+    if (panel === 'shop' && !paused) {
+      if (action === 'primary') buyShopItem(shopSel);
+      else if (action === 'back' || action === 'inventory') { closeCurrentPanel(); sfx('uiClose'); }
+      return;
+    }
+    if (panel === 'chapter' && !paused) {
+      if ((action === 'primary' || action === 'back') && time - invOpenTime > 1.5) { panel = null; sfx('uiConfirm'); if (onSave) onSave(getSaveData()); }
+      return;
+    }
 
     if (armorTutorialPending) {
       if (action === 'inventory' || action === 'primary') startArmorQuestFromInventory();
@@ -4741,9 +6329,11 @@ const Overworld = (() => {
     }
 
     if (panel === 'inventory') {
-      if (action === 'primary') useSelectedItem();
-      else if (action === 'back' || action === 'inventory') closeCurrentPanel();
-      else if (action === 'stats') { if (invTab === 2) closeCurrentPanel(); else invTab = 2; }
+      if (action === 'primary') inventoryConfirm();
+      else if (action === 'back') inventoryBack();
+      else if (action === 'inventory') closeCurrentPanel();
+      else if (action === 'attack') { if (equipment.armor) { invSwing = time; sfx('swing'); } }
+      else if (action === 'stats') { if (invTab === 2) closeCurrentPanel(); else { invTab = 2; sfx('uiTab'); } }
       else if (action === 'tabPrev') inventoryTab(-1);
       else if (action === 'tabNext') inventoryTab(1);
       return;
@@ -4758,7 +6348,7 @@ const Overworld = (() => {
       return;
     }
 
-    const inForest = platformMode && platformScene === 'forest' && !insideHouse;
+    const inForest = platformMode && outdoorScene() && !insideHouse;
     if (action === 'attack') {
       if (inForest) { sideAttackQueued = true; padRumble(0.05, 0.25, 60); }
       return;
@@ -4769,7 +6359,7 @@ const Overworld = (() => {
       return;
     }
     if (action === 'inventory') { openPanel('inventory'); return; }
-    if (action === 'stats') { openPanel('stats'); return; }
+    if (action === 'stats') { if (inForest) useQuickSlot(); else openPanel('stats'); return; }
     // ○ with nothing open does nothing, so it never pauses by accident.
   }
   return { init, update, draw, stop, controllerAction, setInputMode };

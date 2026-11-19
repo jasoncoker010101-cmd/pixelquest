@@ -21,3 +21,34 @@ Werewolf sprites used in the opening cinematic:
 - Pack: Free Werewolf Sprite Sheets (Black and Red Werewolf idle sprites), supplied by the project owner.
 - Source/license reference included in the pack: https://craftpix.net/file-licenses/DigitalDisco
 - Original pack files are not included; the two idle poses used in Pixel Quest were resized for the cinematic.
+
+
+Hollow update (all CC0 1.0 unless noted):
+
+Sound effects (assets/audio/sfx):
+- Kenney, RPG Audio: https://kenney.nl/assets/rpg-audio
+- Kenney, Impact Sounds: https://kenney.nl/assets/impact-sounds
+- Kenney, Interface Sounds: https://kenney.nl/assets/interface-sounds
+- Kenney, Music Jingles: https://kenney.nl/assets/music-jingles
+- StarNinjas, 20 Sword Sound Effects: https://opengameart.org/content/20-sword-sound-effects-attacks-and-clashes
+- artisticdude, Goblins Sound Pack: https://opengameart.org/content/goblins-sound-pack
+- Ogrebane, Monster Sound Pack Volume 1: https://opengameart.org/content/monster-sound-pack-volume-1
+- rubberduck, 80 CC0 RPG SFX: https://opengameart.org/content/80-cc0-rpg-sfx
+- Files were converted to MP3 and trimmed; some were renamed.
+
+Music (assets/audio/music):
+- house.mp3: cynicmusic, Town Theme RPG: https://opengameart.org/content/town-theme-rpg
+- forest.mp3: cynicmusic, Dark Forest Theme: https://opengameart.org/content/dark-forest-theme
+- forest_ambience.mp3: TinyWorlds, Forest Ambience: https://opengameart.org/content/forest-ambience
+- hollow.mp3: Augmentality (HaelDB), Creepy Forest: https://opengameart.org/content/creepy-forest-f
+- boss.mp3: Juhani Junkala, Epic Boss Battle: https://opengameart.org/content/boss-battle-music
+- camp.mp3: congusbongus, Cathedral in the forest: https://opengameart.org/content/cathedral-in-the-forest-ambient-loop
+
+Monster sprites (assets/mobs: goblin, skeleton, mushroom, flying_eye):
+- LuizMelo, Monsters Creatures Fantasy: https://luizmelo.itch.io/monsters-creatures-fantasy (CC0)
+
+The Hollow backgrounds, ogre boss, ghosts, and Aldric (assets/hollow):
+- Ansimuz, Legacy Collection (Gothicvania Haunted Forest, Ogre, Ghost, Terrible Knight), already in this repo as assets/Legacy Collection.zip (CC0). Aldric uses the Terrible Knight sheets.
+
+House armor sprite (assets/knight/mini-idle.png, mini-run.png):
+- Scaled-down versions of the existing knight sheets in assets/knight.
