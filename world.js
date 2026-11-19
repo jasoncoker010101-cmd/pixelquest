@@ -167,8 +167,8 @@ const Overworld = (() => {
       respawn: 0, moving: false, kvx: 0, flash: 0, walk: 0, showHpUntil: 0, blockTime: 0, bob: Math.random() * 6 };
   }
   function loadSceneMobs(scene) {
-    sideMobs = (SCENE_MOBS[scene] || []).filter(([type]) => type !== 'reever' || !story.reeverDown).map(([type, x, range], i) => makeMob(type, x, range, i));
-    sideMobs.forEach(m => { if (m.T.riser) m.dormant = true; if (m.type !== 'reever') rollElite(m); });
+    sideMobs = (SCENE_MOBS[scene] || []).filter(([type]) => (type !== 'reever' || !story.reeverDown) && (type !== 'seamFiend' || !story.seamCleared)).map(([type, x, range], i) => makeMob(type, x, range, i));
+    sideMobs.forEach(m => { if (m.T.riser) m.dormant = true; if (!['reever', 'seamFiend'].includes(m.type)) rollElite(m); });
     const R = REGIONS[scene];
     if (R && R.boss && !story[R.bossFlag]) {
       const boss = makeMob(R.boss, R.bossX, 120, 0);
@@ -179,6 +179,7 @@ const Overworld = (() => {
   // Story flags that persist in the save slot.
   const STORY_DEFAULTS = { campReached: false, hollowEntered: false, hollowSeen: false, metBram: false, rested: false, bossStarted: false, bossDefeated: false, dadFound: false, chapterDone: false,
     ch2Started: false, passEntered: false, metWren: false, passBossStarted: false, passBossDefeated: false, ch2Done: false,
+    nickAmbushed: false, nickBossSeen: false, nickDefeated: false,
     gloamEntered: false, gloamGate: false, gloamBossStarted: false, gloamBossDefeated: false, ch3Done: false,
     harborEntered: false, ferryOpened: false, courtEntered: false, ch4Done: false };
   const story = Object.assign({}, STORY_DEFAULTS, { pages: [], fires: [], lastFire: null });
@@ -2937,8 +2938,17 @@ const Overworld = (() => {
     if (!platformMode && insideHouse) return { house: 1 };
     if (!platformMode) return { forest: 1, ambience: 1 };
     if (platformScene === 'house') return { house: 1 };
+    if (nickScene) {
+      const ramp = clamp(nickScene.t / 3.8, 0, 1);
+      return { bossIntro: (.50 + ramp * .78) * (1 - clamp((nickScene.t - NICK_IMPACT - .30) / 1.05, 0, 1)) };
+    }
+    if (platformScene === 'pass' && !story.nickAmbushed && !bossFight && sidePlayer.x > NICK_OMEN && sidePlayer.x < NICK_TRAP + 195) {
+      const ramp = clamp((sidePlayer.x - NICK_OMEN) / (NICK_TRAP - NICK_OMEN), 0, 1);
+      return { pass: .76 * (1 - ramp), bossIntro: .50 * ramp };
+    }
     if (bossFight && bossFight.intro) return { bossIntro: 1 };
-    if (bossFight && bossFight.active) { const b = theBoss(); return b && b.type === 'mare' ? { bossMare: 1 } : b && b.type === 'demon' ? { bossVael: 1 } : { boss: 1 }; }
+    if (bossFight && bossFight.active) { const b = theBoss(); return b && b.type === 'mare' ? { bossMare: 1 } : b && ['demon', 'nick'].includes(b.type) ? { bossVael: 1 } : { boss: 1 }; }
+    if (platformScene === 'frost' || platformScene === 'seam') return { hollow: .58, ambience: .22 };
     if (platformScene === 'pass') return Math.abs(sidePlayer.x - 1900) < 260 ? { camp: 0.8, pass: 0.4 } : { pass: 1 };
     if (platformScene === 'harbor') return { camp: 0.7, ambience: 0.35 };
     if (platformScene === 'court') return { gloam: 0.45 };
@@ -3259,7 +3269,7 @@ const Overworld = (() => {
   }
   function releaseMoonblade() {
     const f = sidePlayer.facing;
-    playerWaves.push({ x: sidePlayer.x + f * 26, y: sidePlayer.y - 24, f, age: 0, life: 0.75, hit: new Set(), dist: 0 });
+    playerWaves.push({ x: sidePlayer.x + f * 26, y: sidePlayer.y - 24, f, age: 0, life: 0.75, hit: new Set(), dist: 0, frost: currentWeapon() === 'frostedge' });
     combatFx.push({ kind: 'arc', x: sidePlayer.x + f * 6, y: sidePlayer.y - 26, f, r: 46, color: '120,200,255', life: 0.24, max: 0.24, vx: 0, vy: 0 });
     flashUntil = time + 0.08;
     screenShake = Math.max(screenShake, 4);
@@ -3297,7 +3307,7 @@ const Overworld = (() => {
       for (let t = 3; t >= 0; t--) {
         const x = w.x - w.f * t * 9;
         ctx.globalAlpha = a * (t === 0 ? 1 : 0.28 - t * 0.05);
-        ctx.strokeStyle = t === 0 ? '#e8f8ff' : '#4fb6ff';
+        ctx.strokeStyle = t === 0 ? '#e8f8ff' : w.frost ? '#8985ef' : '#4fb6ff';
         ctx.lineWidth = t === 0 ? 3 : 6;
         ctx.beginPath();
         ctx.ellipse(x - w.f * 10 * s, w.y, 14 * s, 24 * s, 0, w.f > 0 ? -1.25 : Math.PI - 1.25 + 0, w.f > 0 ? 1.25 : Math.PI + 1.25);
@@ -3308,6 +3318,13 @@ const Overworld = (() => {
       ctx.beginPath();
       ctx.ellipse(w.x - w.f * 12 * s, w.y, 14 * s, 24 * s, 0, w.f > 0 ? -1.1 : Math.PI - 1.1, w.f > 0 ? 1.1 : Math.PI + 1.1);
       ctx.stroke();
+      if (w.frost) {
+        ctx.fillStyle = '#c0f3ff';
+        for (let j = 0; j < 11; j++) {
+          const x = w.x - w.f * ((j * 11 + w.age * 150) % 85), y = w.y + Math.sin(j * 2.4 + w.age * 9) * 25;
+          ctx.fillRect(Math.round(x), Math.round(y), 2 + j % 3, 1 + j % 2);
+        }
+      }
     });
     ctx.restore();
   }
@@ -3385,7 +3402,8 @@ const Overworld = (() => {
     m.flash = 0.07; m.showHpUntil = time + 3;
     if (!m.T.armor) {
       m.hurtTime = 0.3; m.kvx = f * knock; m.attackTime = 0; m.attackHit = true;
-      m.attackCooldown = Math.max(m.attackCooldown, 0.55); m.dir = -f;
+      m.attackCooldown = Math.max(m.attackCooldown, 0.55);
+      if (m.type !== 'nick' || m.st !== 'ray') m.dir = -f;
     } else {
       m.kvx = f * knock * 0.12;
     }
@@ -3436,7 +3454,7 @@ const Overworld = (() => {
 
   function defeatMob(m, f) {
     const T = m.T;
-    m.dead = true; m.deadTime = 0; m.respawn = T.boss || m.arenaWave || m.type === 'reever' ? Infinity : 24; m.attackTime = 0;
+    m.dead = true; m.deadTime = 0; m.respawn = T.boss || m.arenaWave || ['reever', 'seamFiend'].includes(m.type) ? Infinity : 24; m.attackTime = 0;
     m.kvx = T.armor ? 0 : f * 160;
     hitStop = T.boss ? 0.3 : 0.11; screenShake = Math.max(screenShake, T.boss ? 7 : 3.5);
     stats.kills = (stats.kills || 0) + 1;
@@ -3453,6 +3471,11 @@ const Overworld = (() => {
     fortuneOnKill(m, dropY);
     if (!m.arenaWave) depthsOnKill(m);
     tideOnKill(m);
+    if (m.type === 'seamFiend') {
+      story.seamCleared = true;
+      notice = 'The mine cache is unguarded.'; noticeUntil = time + 3;
+      tidePersist();
+    }
     if (T.xp) gainXp(Math.round(T.xp * (m.elite ? 1.75 : 1) * (bloodMoon ? 1.4 : 1)));
     if (T.boss) onBossDefeated(m);
   }
@@ -4044,6 +4067,7 @@ const Overworld = (() => {
 
   function updatePlatformer(dt) {
     syncArena();
+    if (nickScene) { time += dt; updateNickAmbush(dt); return; }
     if (hitStop > 0) { hitStop -= dt; sideMobs.forEach(g => { g.flash = Math.max(0, (g.flash || 0) - dt); }); updateSideCamera(dt); return; }
     time += dt;
     if (!panel && !dialogue && !bossFight?.cine) tide.mealTime = Math.max(0, tide.mealTime - dt);
@@ -4205,6 +4229,8 @@ const Overworld = (() => {
     stepDistance += moved;
     while (stepDistance >= 20) { stats.steps++; stepDistance -= 20; }
 
+    if (platformScene === 'pass' && !story.nickAmbushed && !bossFight && !dialogue && stats.health > 0 && sidePlayer.x >= NICK_TRAP &&
+        sidePlayer.x < NICK_TRAP + 195 && sidePlayer.onGround) { startNickAmbush(); return; }
     if (outdoorScene()) { updateForestCombat(time < witchUntil ? dt * 0.3 : dt); updateStory(dt); }
     updateTideWorld(dt);
     updateSideCamera(dt);
@@ -4539,7 +4565,9 @@ const Overworld = (() => {
     const dx = sidePlayer.x - m.x, face = dx < 0 ? -1 : 1;
     const L = BOSS_ARENA.left + 46, R = BOSS_ARENA.right - 46;
     const go = (st) => { m.st = st; m.stT = 0; };
-    if (T.ai === 'mare') {
+    if (T.ai === 'nick') {
+      updateNickBoss(m, dt, enraged, playerAlive, dx, face, L, R, go);
+    } else if (T.ai === 'mare') {
       m.y = SIDE_GROUND_Y;
       if (m.st === 'stalk') {
         m.dir = face;
@@ -4655,6 +4683,7 @@ const Overworld = (() => {
       return [A.idle, 0];
     }
     if (A.rise && m.dormant) return [A.rise, m.rising ? Math.min(A.rise[1] - 1, Math.floor(m.rising * A.rise[2])) : 0];
+    if (T.ai === 'nick' && m.st === 'ray') return [NICK_RAY, nickRayFrame(m.stT, nickFireAt(m.enraged))];
     if (T.ai === 'mare') {
       if (m.st === 'charge' || m.st === 'stalk' && m.moving) return [A.move, Math.floor(m.walk) % A.move[1]];
       return [A.idle, Math.floor(time * (m.st === 'windup' || m.st === 'stomp' ? 14 : m.st === 'stun' ? 4 : 7)) % A.idle[1]];
@@ -4692,7 +4721,7 @@ const Overworld = (() => {
     const sink = T.boss && m.dead && !T.fly ? Math.min(14, m.deadTime * 6) : 0;
     const squash = m.dead && !T.anims.death && !T.boss ? Math.max(0.2, 1 - m.deadTime * 1.6) : 1;
     ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha *= alpha;
     ctx.translate(Math.round(m.x), Math.round(m.y + sink));
     if (flip) ctx.scale(-1, 1);
     if (m.type === 'skarn' && m.dead) {
@@ -4718,7 +4747,7 @@ const Overworld = (() => {
       mobFlashCtx.globalCompositeOperation = 'source-in';
       mobFlashCtx.fillStyle = m.flash > 0 ? '#ffffff' : '#ff4a3a'; mobFlashCtx.fillRect(0, 0, T.fw, T.fh);
       mobFlashCtx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = alpha * (m.flash > 0 ? 0.85 : 0.35);
+      ctx.globalAlpha *= m.flash > 0 ? 0.85 : 0.35;
       ctx.drawImage(mobFlashCanvas, -T.ax * sc, -T.ay * sc, w, h);
     }
     ctx.restore();
@@ -4912,6 +4941,11 @@ const Overworld = (() => {
 
   function knightPose() {
     const ks = knightSprites;
+    if (nickScene?.struck && !nickScene.awake) {
+      const age = nickScene.t - NICK_IMPACT;
+      return age < .28 ? { sheet: ks.hurt, cols: 2, frame: Math.min(2, Math.floor(age * 12)) }
+        : { sheet: ks.death, cols: 2, frame: Math.min(3, Math.floor((age - .28) * 10)) };
+    }
     if (sidePlayer.deadTime > 0) {
       return { sheet: ks.death, cols: 2, frame: Math.min(3, Math.floor((sidePlayer.deathAge || 0) * 7)) };
     }
@@ -5369,6 +5403,11 @@ const Overworld = (() => {
     } else if (who === 'skarn') {
       const T = MOB_TYPES.skarn, img = mobSheet(T, T.anims.idle);
       if (imgReady(img)) ctx.drawImage(img, 52, 36, 45, 45, x, y, 40, 40);
+    } else if (who === 'nick') {
+      const img = mobSheet(MOB_TYPES.nick, MOB_TYPES.nick.anims.idle);
+      if (imgReady(img)) ctx.drawImage(img, 101, 35, 74, 72, x - 2, y - 2, 44, 44);
+    } else if (WITNESS_APPEARANCE[who]) {
+      drawWitnessBody(who, x + 20, y + 59, 1.95, 1);
     } else if (who === 'ashmane') {
       const img = mobSheet(MOB_TYPES.mare, MOB_TYPES.mare.anims.idle);
       if (imgReady(img)) ctx.drawImage(img, 24, 12, 48, 48, x - 4, y - 4, 48, 48);
@@ -6344,7 +6383,7 @@ const Overworld = (() => {
     const rows = [
       ['LEVEL', String(stats.level)],
       ['MONSTERS DEFEATED', String(stats.kills || 0)],
-      ['LORE FOUND', story.pages.length + ' / ' + LORE.length],
+      ['STORIES HEARD', story.pages.length + ' / ' + LORE.length],
       ['COINS', String(inventory.coins || 0)],
       ['PLAY TIME', Math.floor(stats.playTime / 60) + ':' + String(Math.floor(stats.playTime % 60)).padStart(2, '0')]
     ];
@@ -6736,7 +6775,12 @@ const Overworld = (() => {
       }
       if (c.ev.breath && boss.attackTime <= 0 && boss.st === 'breath') boss.st = 'stalk';
     }
-    if (!['ogre', 'mare', 'demon'].includes(boss.type)) depthsCine(c, boss, dt, th);
+    if (boss.type === 'nick') {
+      if (t > .82 && t < 2.48) { boss.st = 'ray'; boss.stT = t - .82; }
+      else { boss.st = 'stalk'; boss.stT = 0; }
+      if (cineEvent(c, 'charge', .82)) sfx('magic', .8, .58);
+      if (cineEvent(c, 'beam', 1.92)) sfx('demon', .76, 1.35);
+    } else if (!['ogre', 'mare', 'demon'].includes(boss.type)) depthsCine(c, boss, dt, th);
     // Ember motes that drift around the name card.
     if (t > th.nameAt && t < CINE_END - 0.4 && Math.random() < dt * 14) {
       cineFx.push({ kind: 'mote', x: sideCameraX + 160 + (Math.random() - 0.5) * 220, y: 60 + Math.random() * 40, vx: (Math.random() - 0.5) * 10, vy: -8 - Math.random() * 10, g: 0, life: 1.6, max: 1.6, size: 1, color: th.glow });
@@ -6953,6 +6997,7 @@ const Overworld = (() => {
     story[region().bossFlag] = true;
     if (m.type === 'saltStag') tideGrant('antler', 1);
     if (m.type === 'wellKeeper') tideGrant('wellglass', 1);
+    if (m.type === 'nick') tideGrant('frostcore', 1);
     bossOutro = { t: 0, x: m.x, jingle: false, scene: platformScene };
     notice = m.T.short + ' has fallen.'; noticeUntil = time + 3;
     if (onSave) onSave(getSaveData());
@@ -6962,6 +7007,13 @@ const Overworld = (() => {
     if (!bossOutro) return;
     bossOutro.t += dt;
     if (bossOutro.t > 0.9 && !bossOutro.jingle) { bossOutro.jingle = true; sfx('victory'); }
+    if (bossOutro.scene === 'frost') {
+      if (bossOutro.t > 2.3) {
+        bossOutro = null;
+        notice = 'Nick is waiting to talk.'; noticeUntil = time + 3;
+      }
+      return;
+    }
     if (region().tide && bossOutro.t > 1.5) {
       bossOutro = null;
       if (platformScene === 'well') tideNotice('Take the east path to Seren.', 'magic');
@@ -7030,12 +7082,11 @@ const Overworld = (() => {
   function fireHere() { return FIRES.find(f => f.scene === platformScene && Math.abs(sidePlayer.x - f.x) < 26); }
   function nearbyInteraction() {
     const x = sidePlayer.x;
-    if (!sidePlayer.onGround || sidePlayer.deadTime > 0 || sidePlayer.roll) return null;
-    for (const l of LORE) {
-      if (l.scene === platformScene && Math.abs(x - l.x) < 24) return { label: story.pages.includes(l.id) ? 'READ AGAIN' : 'READ', act: () => readLore(l) };
-    }
+    if (nickScene || !sidePlayer.onGround || sidePlayer.deadTime > 0 || sidePlayer.roll) return null;
     const fire = fireHere();
     if (fire) return { label: 'REST / FAST TRAVEL', act: () => restAtFire(fire) };
+    const witness = LORE.find(l => l.speaker && l.scene === platformScene && (!l.requires || story[l.requires]) && Math.abs(x - l.x) < 24);
+    if (witness) return { label: 'TALK TO ' + SPEAKERS[witness.speaker].name, act: () => talkLore(witness) };
     const tideSpot = tideInteraction(x);
     if (tideSpot) return tideSpot;
     const chest = nearChest();
@@ -7052,23 +7103,33 @@ const Overworld = (() => {
       if (x > HOLLOW_SIDE_WIDTH - 70 && story.chapterDone) return story.ch2Started ? { label: 'TRAVEL TO THE ASHEN PASS', act: () => enterRegion('pass', REGIONS.pass.entry, 1) } : { label: 'TALK TO DAD FIRST', act: () => { notice = 'Dad has something to tell you first.'; noticeUntil = time + 2; sfx('uiError'); } };
     } else if (platformScene === 'pass') {
       if (x < 70) return { label: 'BACK TO THE HOLLOW', act: () => enterRegion('hollow', HOLLOW_SIDE_WIDTH - 90, -1) };
+      if (story.nickAmbushed && Math.abs(x - NICK_TRAIL) < 24) return { label: 'FOLLOW THE FROST TRAIL', act: () => enterRegion('frost', REGIONS.frost.entry, 1) };
       if (wren && wren.state === 'idle' && Math.abs(x - wren.x) < 30) return { label: 'TALK TO WREN', act: talkToWren };
       if (x > PASS_SIDE_WIDTH - 70 && story.passBossDefeated) return { label: 'ENTER GLOAMHOLD', act: () => enterRegion('gloam', REGIONS.gloam.entry, 1) };
     } else if (platformScene === 'gloam') {
       if (x < 70) return { label: 'BACK TO THE ASHEN PASS', act: () => enterRegion('pass', PASS_SIDE_WIDTH - 90, -1) };
       if (story.ch3Done && x > GLOAM_SIDE_WIDTH - 76) return { label: 'WALK TO LANTERN QUAY', act: () => enterRegion('harbor', REGIONS.harbor.entry, 1) };
       if (wren && wren.state === 'idle' && Math.abs(x - wren.x) < 30) return { label: 'TALK TO WREN', act: talkToWren };
+    } else if (platformScene === 'frost') {
+      if (x < 66) return { label: 'RETURN TO THE ASHEN PASS', act: () => enterRegion('pass', NICK_TRAIL + 30, 1) };
+      if (story.nickDefeated && Math.abs(x - REGIONS.frost.bossX) < 45 && !bossOutro) {
+        return { label: 'TALK TO NICK', act: () => talkLore(LORE.find(l => l.id === 'nicktruth')) };
+      }
     } else if (region().peaceful) {
       return coastInteraction(x);
     }
     return null;
   }
-  function readLore(l) {
-    const first = addLore(l.id);
-    sfx(l.kind === 'stone' ? 'magic' : 'bookOpen');
-    if (first) { notice = 'Lore found: ' + l.title + '  (' + story.pages.length + '/' + LORE.length + ')'; noticeUntil = time + 2.5; }
-    startDialogue([{ who: l.kind === 'stone' ? 'stone' : 'page', text: l.text + (l.sign ? '\n' + l.sign : '') }],
-      () => { if (onSave) onSave(getSaveData()); });
+  function talkLore(l, extra = [], done) {
+    if (!l?.speaker) return;
+    startDialogue([
+      ...(l.question ? [{ who: 'rowan', text: l.question }] : []),
+      { who: l.speaker, text: l.text }, ...extra
+    ], () => {
+      if (addLore(l.id)) { notice = 'Recorded: ' + l.title; noticeUntil = time + 2.6; }
+      if (done) done();
+      if (onSave) onSave(getSaveData());
+    });
   }
   // Chapter 4: the ferry and the outer gallery. Correct signals unlock the route
   // permanently; an unfinished signal is local to the current visit/save run.
@@ -7102,12 +7163,11 @@ const Overworld = (() => {
     const at = (point, distance = 25) => Math.abs(x - point) < distance;
     if (platformScene === 'harbor') {
       if (x < 57) return { label: 'BACK TO GLOAMHOLD', act: () => enterRegion('gloam', GLOAM_SIDE_WIDTH - 90, -1) };
-      if (at(QUAY.nessa)) return { label: 'TALK TO NESSA', act: () => story.ferryOpened
-        ? speakAtCoast(['nessa', "There, see that light? That's Jory. Tell him he still owes me a left boot."])
-        : speakAtCoast(['nessa', "Careful of that rope. It's the last good one I've got."],
-          ['rowan', "Do you still cross to the Court? I'm looking for Seren."],
-          ['nessa', "Seren? She used to help the children sleep on the crossing. Sang until she lost her voice."],
-          ['nessa', "Jory's out there now. Ring the night signal and he'll bring the skiff. The order's on the stone past my stall."]) };
+      if (at(QUAY.nessa)) return { label: 'TALK TO NESSA', act: () => {
+        if (story.ferryOpened && story.pages.includes('ferrysong') && !story.pages.includes('boots')) return talkLore(LORE.find(l => l.id === 'boots'));
+        if (story.ferryOpened && story.pages.includes('ferrysong')) return speakAtCoast(['nessa', "There, see that light? That's Jory. Tell him he still owes me a left boot."]);
+        talkLore(LORE.find(l => l.id === 'ferrysong'));
+      } };
       if (at(QUAY.wren)) return { label: 'SIT WITH WREN', act: () => speakAtCoast(
         ['wren', "My mother couldn't swim. She got seasick standing on this pier."],
         ['rowan', "Mine used to carry pebbles in her coat. There was always something to throw in the water."],
@@ -7125,8 +7185,8 @@ const Overworld = (() => {
       if (at(490)) return { label: 'LISTEN WITH WREN', act: () => speakAtCoast(
         ['wren', "Hold still a second. I thought I heard a voice."],
         ['rowan', "I had a music box that played that tune. Dad always closed it before the end."],
-        ['wren', "Try the watch desk. I'll listen here."]) };
-      if (at(655, 30)) return { label: story.ch4Done ? 'REREAD THE LEDGER' : 'OPEN THE LEDGER', act: readMoonwellLedger };
+          ['wren', "Try the keeper by the desk. I'll listen here."]) };
+      if (at(655, 30)) return { label: 'TALK TO THE GALLERY KEEPER', act: readMoonwellLedger };
       if (x > 783) return { label: 'INSPECT THE SEALED DOOR', act: () => speakAtCoast(
         ['rowan', "No handle on this side. There's warm air coming through the crack."]) };
     }
@@ -7134,19 +7194,16 @@ const Overworld = (() => {
   }
   function readMoonwellLedger() {
     const entry = LORE.find(l => l.id === 'serenledger');
-    if (story.ch4Done) { readLore(entry); return; }
-    sfx('bookOpen');
-    startDialogue([
-      { who: 'register', text: entry.text },
-      { who: 'rowan', text: "That's her writing. The way she makes the S." },
+    if (story.ch4Done) { talkLore(entry); return; }
+    talkLore(entry, [
+      { who: 'rowan', text: "Then she's alive. Can you open the lower door?" },
       { who: 'wren', text: "I heard her again. Below us, not down the hall." },
       { who: 'rowan', text: "Mum? ...It's Rowan." },
-      { who: 'wren', text: "Here. Sit down for a minute. I'll keep watch." }
+      { who: 'keeper', text: "Take my key. I'll tell them I never saw you." }
     ], () => {
-      addLore(entry.id); story.ch4Done = true;
+      story.ch4Done = true;
       gainXp(100);
-      if (onSave) onSave(getSaveData());
-      tideNotice('The ledger releases the seal at the far door.', 'magic');
+      tideNotice('The keeper unseals the lower door.', 'magic');
     });
   }
   const CAMP = { start: 3590, tent: 3625, fire: 3700, log: 3738, bram: 3800, cart: 3842, sign: 3912 };
@@ -7632,6 +7689,8 @@ const Overworld = (() => {
   const DEPTH_GATES = { forest: 'mire', hollow: 'barrow', pass: 'cinder', gloam: 'archive' };
   function depthsInteraction(x) {
     const R = depthR();
+    const extra = forgeTrailInteraction(x);
+    if (extra) return extra;
     if (depths.peddler && depths.peddler.scene === platformScene && Math.abs(x - depths.peddler.x) < 26) return { label: 'TALK TO TESS', act: talkToPeddler };
     const sh = SHRINES[platformScene];
     if (sh != null && Math.abs(x - sh) < 22) return { label: depths.shrines.includes(platformScene) ? 'SHRINE (QUIET)' : 'PRAY AT THE SHRINE', act: useShrine };
@@ -7893,6 +7952,7 @@ const Overworld = (() => {
     if (dg) drawDepthGate(REGIONS[dg].parentX, REGIONS[dg]);
     const sh = SHRINES[platformScene]; if (sh != null) drawShrine(sh);
     BOARDS.filter(b => b.scene === platformScene).forEach(b => drawBoard(b.x));
+    drawForgeTrail();
     drawPeddler();
     drawMoths();
     drawSpores();
@@ -8254,7 +8314,6 @@ const Overworld = (() => {
       if (near(608, 27) && !story.tideCache) return use('DIG BESIDE THE BLUE JAR', () => {
         story.tideCache = true; tideGrant('coins', 36); tideGrant('tonic', 1); tideNotice('Buried cache: 36 coins and a red tonic.', 'coin'); tidePersist();
       });
-      if (story.saltBossDone && near(1960, 42)) return use('READ THE RELIQUARY', () => readLore(LORE.find(l => l.id === 'wellnames')));
     } else if (platformScene === 'well') {
       if (x < 57) return go('CLIMB TO THE PALE COURT', 'court', 797, -1);
       if (story.wellBossDone && near(1928, 45)) return use(tide.ending ? 'REMEMBER THE CROSSING' : 'SPEAK TO SEREN', () => openTide(tide.ending ? 'epilogue' : 'ending'));
@@ -8267,18 +8326,30 @@ const Overworld = (() => {
   const tideRows = () => {
     const row = (title, sub, action, unavailable = false) => ({ title, sub, action, unavailable });
     const save = (text, sound) => { tideMessage = text; if (!panel) tideNotice(text, sound); else sfx(sound || 'uiConfirm'); tidePersist(); };
-    const spend = (cost, material, qty, done) => {
-      if (inventory.coins < cost || (material && inventory[material] < qty)) return tideError('You’re short on the listed materials.');
-      inventory.coins -= cost; if (material) inventory[material] -= qty; done();
+    const spendAll = (cost, materials, done) => {
+      if (inventory.coins < cost || materials.some(([key, qty]) => inventory[key] < qty)) return tideError('You’re short on the listed materials.');
+      inventory.coins -= cost;
+      for (const [key, qty] of materials) inventory[key] -= qty;
+      done();
     };
+    const spend = (cost, material, qty, done) => spendAll(cost, material ? [[material, qty]] : [], done);
     const w = currentWeapon(), rank = tide.forge[w] || 0, wear = tide.wear[w] || 0;
     switch (tideService) {
       case 'forge': return [
         row('Repair gear · 8c', `Blade wear ${wear}% / coat wear ${tide.armorWear}%`, () => spend(8, null, 0, () => { tide.wear[w] = tide.armorWear = 0; save('Blade and coat repaired.', 'clash'); }), !wear && !tide.armorWear),
         row(`Temper ${WEAPONS[w].name} · ${rank ? 28 : 16}c`, rank >= 2 ? 'Fully tempered' : `Rank ${rank}/2 · Uses 1 Living Ember`, () => spend(rank ? 28 : 16, 'ember', 1, () => { tide.forge[w] = rank + 1; tide.wear[w] = 0; save('The blade takes a new edge.', 'clash'); }), rank >= 2),
         row('Reinforce Dad’s coat · 18c', tide.coatTemper ? 'Reinforced' : 'Uses 1 Bog Toad Hide · +2 defense until worn', () => spend(18, 'toadskin', 1, () => { tide.coatTemper = 1; tide.armorWear = 0; save('He stitched steel into the lining.', 'clash'); }), !!tide.coatTemper || !equipment.armor),
-        row('Forge Tideglass Blade · 32c', 'Uses the Salt Stag’s antler; one blade', () => spend(32, 'antler', 1, () => { tideGrant('tideblade', 1); equipment.weapon = 'tideblade'; save('Tideglass Blade crafted and equipped.', 'magic'); }), inventory.tideblade > 0),
+        row('Weapon recipes', 'Forge a blade from boss trophies and cave ore', () => openTide('recipes')),
         row('Brineguard outfit & dyes', 'Equip two pieces for +2 bonus defense', () => openTide('outfit'))
+      ];
+      case 'recipes': return [
+        row('Forge Frostglass Edge · 24c', inventory.frostedge ? 'Already forged' : `Nick’s Heart ${inventory.frostcore}/1 · Seam Ore ${inventory.seamore}/1`, () => spendAll(24, [['frostcore', 1], ['seamore', 1]], () => { tideGrant('frostedge', 1); equipment.weapon = 'frostedge'; save('Frostglass Edge crafted and equipped.', 'magic'); }), inventory.frostedge > 0),
+        row('Forge Tideglass Blade · 32c', inventory.tideblade ? 'Already forged' : 'Uses the Salt Stag’s antler', () => spend(32, 'antler', 1, () => { tideGrant('tideblade', 1); equipment.weapon = 'tideblade'; save('Tideglass Blade crafted and equipped.', 'magic'); }), inventory.tideblade > 0),
+        row('Ask about the materials', 'Find out where to start looking', () => {
+          closeCurrentPanel();
+          startDialogue([{ who: platformScene === 'pass' ? 'vi' : 'orrin', text: "Nick's heart stays cold in a fire. Seam ore stays hot in the snow. For the ore, check the work order at the Lookout." }]);
+        }),
+        row('Back to the forge', 'Repairs, upgrades and armor', () => openTide('forge'))
       ];
       case 'outfit': {
         const toggle = (slot, name, price) => {
@@ -8322,7 +8393,8 @@ const Overworld = (() => {
     }
   };
   const TIDE_MENUS = {
-    forge: ['ORRIN’S FORGE', 'A blade holds an edge until it doesn’t.'], outfit: ['BRINEGUARD OUTFIT', 'Cowl + boots unlock the set bonus.'],
+    forge: ['THE BLACKSMITH', 'Temper weapons, mend armor, or forge something new.'], recipes: ['WEAPON RECIPES', 'Boss trophies and cave ore cannot be sold or dropped.'],
+    outfit: ['BRINEGUARD OUTFIT', 'Cowl + boots unlock the set bonus.'],
     cook: ['TEO’S COOKFIRE', 'Use meals from your bag. Only one buff at a time.'], stable: ['SALT HOUND STABLE', 'It’s a slow road without decent company.'],
     contract: ['REEVER CONTRACT', 'Missing gear. Broken locks. Silver for proof.'], ending: ['SEREN / THE LOWER WELL', 'The door waits. Your mother doesn’t move.'],
     confirmHome: ['THE HOMEWARD BELL', 'Bring all three of you home.'], confirmShutter: ['THE CLOSED SLUICE', 'Take Seren out before the tide comes in.'],
@@ -8559,7 +8631,7 @@ const Overworld = (() => {
       p(bite ? '#fff3b6' : '#e18475', 837, 189 + bob, 5, 2);
       if (bite) { p('#fcebaa', 831, 191 + bob, 4, 1); p('#fcebaa', 845, 191 + bob, 4, 1); }
     }
-    drawDepthsWorld(); drawSideMobs();
+    drawDepthsWorld(); drawLoreSpots(); drawSideMobs();
     drawSidePlayer(); drawPlayerWaves(); drawCombatFx(); drawFortuneFx(); drawAmbient();
     ctx.restore(); drawSideOverlays(R.name);
     if (tideArena && !dialogue && !panel) invText(`WAVE ${tideArena.wave} / 3`, 306, 34, '#ffe2b3', 'bold 7px monospace', 'right');
@@ -8658,7 +8730,7 @@ const Overworld = (() => {
   }
   function restoreBossOutro() {
     const R = region();
-    if (!R.boss || !story[R.bossFlag] || R.tide) return;
+    if (!R.boss || !story[R.bossFlag] || R.tide || platformScene === 'frost') return;
     const page = { mire: 'skarnend', barrow: 'mournend', cinder: 'ignarothend', archive: 'tidemawend' }[platformScene];
     const missing = R.side ? !story.pages.includes(page) :
       platformScene === 'hollow' ? !story.chapterDone : platformScene === 'pass' ? !story.ch2Done : !story.ch3Done;
@@ -8708,6 +8780,10 @@ const Overworld = (() => {
     }
   }
   function talkToWren() {
+    if (platformScene === 'pass' && story.nickAmbushed && !story.nickDefeated && !story.passBossDefeated) {
+      startDialogue([{ who: 'wren', text: "He told me where to find you. That beam glazed the whole road in ice. Rest here first. If you're going after him, follow the frost east." }]);
+      return;
+    }
     const lines = platformScene === 'gloam'
       ? (story.gloamBossDefeated
         ? [[{ who: 'wren', text: "Your mother... alive. Then the Court has been taking moon-readers for years. Mine too, maybe." }, { who: 'wren', text: "Whatever you decide, Rowan, I'm coming with you." }]]
@@ -8834,31 +8910,476 @@ const Overworld = (() => {
     ctx.fillStyle = '#2a1a10'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
     ctx.fillText(text, x - (arrowDir > 0 ? 2 : -2), y + 9);
   }
+  const WITNESS_APPEARANCE = {
+    nell: ['NELL', '#c79c61', '#643e37'], hob: ['HOB', '#accc88', '#3b523d'], mira: ['MIRA', '#e1a18d', '#734755'],
+    tamsin: ['TAMSIN', '#efbe80', '#695239'], osk: ['OSK', '#9dc8e6', '#293d55'], pike: ['PIKE', '#e2ab6e', '#604333'],
+    fenn: ['FENN', '#9ed8ae', '#394f45'], posta: ['POSTA', '#efb198', '#664140'], vey: ['VEY', '#acd9e1', '#274e55'],
+    ysolde: ['YSOLDE', '#b5d0e8', '#3b4664'], enna: ['ENNA', '#dfbad6', '#604560'], keeper: ['GALLERY KEEPER', '#c7dfd4', '#3e5458'],
+    hessa: ['HESSA', '#d1c2ee', '#4f3962'], pip: ['PIP', '#d9e790', '#435a37'], novice: ['DESERTER', '#e6aab4', '#643c4d'],
+    calden: ['CALDEN', '#acd5e3', '#3d4e6c'], lys: ['LYS', '#e4c8eb', '#634c6a'], vi: ['VI THE SMITH', '#f7b07a', '#673c37']
+  };
+  for (const [key, [name, color]] of Object.entries(WITNESS_APPEARANCE)) SPEAKERS[key] = { name, color };
+  SPEAKERS.nick = { name: 'NICK', color: '#b9f4ff', mob: 'nick' };
+  // Preserve the old IDs so existing journal unlocks carry over.
+  const WITNESS_STORIES = {
+    watch: ['nell', 'The Silver Watch', 'Did the Watch really come this far?', "Mum took bread to their post. She'd knock on the seal with her heel just to make the captain jump. They've watched that spot since the moon fell."],
+    howl: ['hob', "Hob's Warning", 'Did you see what came out last night?', "I saw a wolf open my gate with a hand. Moonstruck, Gran would've called it. Aldric followed their tracks at dawn. Haven't seen him come back."],
+    page1: ['mira', 'The Empty Camps', 'Where did all the goblins go?', "Past my window. Whole families, carrying pots and babies. Their fires were still lit when I went to look. Whatever scared them is deeper in the woods."],
+    page2: ['tamsin', 'Aldric at the Fire', 'You saw my dad?', "Three nights back. Bram told him the seal was cracking. Aldric left me half his supper and said to tell you to go home. He laughed when he said it. Knew you wouldn't."],
+    moonfall: ['osk', 'Where the Moon Fell', 'What happened here?', "Morwen cracked the moon. Six of us went to see where the biggest piece landed. You'll pass the other five if you keep going. They won't be happy to see you."],
+    page3: ['pip', 'The King and the Riders', 'What did Grukk trade away?', "The big piece! The riders put it in a sack. He kept enough for his crown. A big knight was hiding past the throne. I pretended not to see him."],
+    riders: ['pike', 'The Pale Riders', 'Why is the road deserted?', "I kept the lamps lit up to the bend. Then a rider took the light straight out of the glass. Didn't even slow down. I moved my post back here."],
+    wrenlog: ['fenn', 'Seven Riders', 'What came through the pass?', "Seven riders carrying a light wrapped in black cloth. I followed until the mare screamed. Wren says she's still up there. I won't be going back to check."],
+    ashroad: ['posta', 'The Ember Road', 'What did this road look like before?', "Cart tracks and silver dust all the way to Gloamhold. The Court burned the wagons here. Twelve winters, and the rock's still warm."],
+    letter: ['novice', 'The Queen’s Singers', 'What happens to the moon-readers?', "The Queen makes them sing until the shards answer. I heard one through the wall. Next morning I walked out with my boots in my hands."],
+    founding: ['vey', 'The City of Lamps', 'Who built Gloamhold?', "The Watch. There was moonsilver under the city. Gran used to turn her lamp toward the window and say the moon was borrowing her light."],
+    tide: ['enna', 'The Black Tide', 'Do you remember the night it came?', "The water never reached my ankles. It was the light that drowned. My brother was under the baker's lamp when it went out. He's still there, some nights."],
+    lamps: ['vey', 'The Lamplighters', 'Why do they still carry the lamps?', "We were supposed to walk until sunrise. Some of us never saw it. If you put one down, turn his lamp toward the sky. We used to do that for each other."],
+    captain: ['ysolde', 'The Last Captain', 'You look like Wren.', "My daughter. I sent her away with the scouts. The Court took the moon-readers alive, including the woman from your village. The riders crossed the eastern sea."],
+    moonwell: ['calden', 'Beneath the Hall', 'What’s making that noise?', "The moon's reflection never left the well. Then something moved in it. Those burning faces in the hall? It knows every one of their names."],
+    queen: ['enna', 'Morwen’s Promise', "Why does she think she's helping?", "She lost a child on a night the moon didn't rise. She promised the sky would never go dark again. She'd listen if Lys told her to stop. No one else can."],
+    ferrysong: ['nessa', 'The Night Signal', "Can you get me across? I'm looking for Seren.", "Seren taught the children the night signal. Ring Shell, then Star, then Anchor. Jory's still out there. Watch for his lantern."],
+    boots: ['nessa', 'Nessa’s Left Boot', 'Anything I should tell Jory?', "Tell him he owes me a left boot. No, don't tell him why. And if he asks about the wine, it was never on the boat."],
+    lysletter: ['keeper', 'Lys and the Pear Tree', 'Who tied the ribbons?', "Lys tied the first one. She wanted the lowest branch so she could reach it. Someone still comes by at night to tie fresh ribbon. I don't ask who."],
+    serenledger: ['keeper', 'The Singer Below', 'Where did they take Seren?', "Down to the lower well. Three nights ago. She stopped halfway through her last song and said 'Rowan.' Is that you?"],
+    hessa: ['hessa', 'The Witch’s Refusal', 'Did Morwen come to you?', "She asked if I could bring a dead child back. I told her no. Her tea went cold. Then she said she'd make a world where children couldn't die."],
+    pictos: ['pip', 'Skarn in the Reeds', 'What are you doing out here?', "Skarn told me to hide and count to a hundred. Pale horses took the bright rock while I counted. I started again at one, in case he meant stay hidden."],
+    roll: ['osk', 'The Fallen Watch', 'Is this where they buried the Watch?', "Bertil, Mourn, ninety others. Me too, if you're counting. Aldric put the shard beneath us. I'd have done the same. Most days I still hear the bell."],
+    orders: ['novice', 'The Stolen Splinters', 'Who dug up these graves?', "We did. The Queen wanted what grew in their bones. Our captain said to leave Grukk his crown. Give him a crown and he'll never check the wagon."],
+    ledger: ['posta', 'The Last Caravan', 'Why are there wagons in a mine?', "I drove the third one. We hid from the riders in here. That thing ate the moonsilver through the floorboards. I didn't wait to see which wagon was next."],
+    star: ['hessa', 'The Ember Star', 'Why is it so warm down here?', "The wyrm swallowed a piece of moon. Even Morwen wouldn't come down after that. Watch the walls. If they light up, it's breathing in."],
+    register: ['calden', 'The Moon-Readers', 'Did you know Seren?', "She took my place on the second watch. Ilse teased her for singing to the well instead of studying it. Then the water started singing back."],
+    lys: ['calden', 'The Long Winter', 'Tell me about Lys.', "The moon stayed away nine nights. Lys didn't wake on the tenth. Her mother waited at the window till morning. Next spring she started pulling the moon down."],
+    wellnames: ['lys', 'The Names Under Salt', 'Can we get everyone out?', "Mirren. Asa. Ione. Say their names, ring once, pass the lantern hand to hand. Don't shut the sluice while somebody's holding it. No one has to stay."]
+  };
+  for (const l of LORE) {
+    const d = WITNESS_STORIES[l.id];
+    if (!d) continue;
+    [l.speaker, l.title, l.question, l.text] = d;
+    l.kind = 'voice'; l.sign = ''; l.where = `Told by ${SPEAKERS[l.speaker].name}`;
+    l.hint = 'Speak to ' + SPEAKERS[l.speaker].name + '.';
+  }
+  for (const id of ['ferrysong', 'boots']) {
+    const l = LORE.find(l => l.id === id); l.scene = null; l.hint = 'Talk to Nessa at Lantern Quay.';
+  }
+  Object.assign(LORE.find(l => l.id === 'wellnames'), { scene: 'vault', x: 1960, requires: 'saltBossDone', hint: 'Speak to Lys in the Salt Vault.' });
+  LORE.push({ id: 'nicktruth', kind: 'voice', speaker: 'nick', title: "Nick's Warning", question: 'You could have killed me. Why didn’t you?',
+    text: "The Court wanted a body. I gave them a crater and sent your friend to pick you up. Next time, don't stand where they expect you to.",
+    where: 'Told by Nick on Frostglass Ridge', hint: 'Speak to Nick after the duel.' });
+
+  function drawWitnessBody(who, x, y, scale, direction) {
+    const [, scarf, coat] = WITNESS_APPEARANCE[who];
+    ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.scale(direction * scale, scale);
+    const bit = (color, x, y, w, h) => { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); };
+    bit('#171624', -8, -22, 17, 20); bit('#171624', -6, -34, 13, 13);
+    bit(coat, -7, -22, 14, 16); bit(coat, -5, -33, 11, 11);
+    bit('#e0af89', -1, -29, 7, 6); bit('#29202b', 3, -28, 2, 1);
+    bit(scarf, -6, -23, 13, 3); bit(scarf, -7, -20, 3, 8);
+    bit('#a27b64', -6, -10, 12, 2); bit('#292333', -6, -7, 5, 7); bit('#292333', 2, -7, 5, 7);
+    bit('#342734', 8, -23, 2, 23); bit(scarf, 8, -24, 2, 3);
+    ctx.restore();
+  }
   function drawLoreSpots() {
-    LORE.forEach(l => {
-      if (l.scene !== platformScene) return;
-      const gy = SIDE_GROUND_Y, found = story.pages.includes(l.id);
-      const pulse = 0.5 + Math.sin(time * 3 + l.x) * 0.5;
-      ctx.save(); ctx.globalCompositeOperation = 'lighter';
-      const col = l.kind === 'stone' ? '120,180,255' : '255,220,140';
-      const g = ctx.createRadialGradient(l.x, gy - 12, 1, l.x, gy - 12, 26);
-      g.addColorStop(0, 'rgba(' + col + ',' + (found ? 0.08 : 0.22 + pulse * 0.15) + ')'); g.addColorStop(1, 'rgba(' + col + ',0)');
-      ctx.fillStyle = g; ctx.fillRect(l.x - 28, gy - 40, 56, 44); ctx.restore();
-      if (l.kind === 'stone') {
-        ctx.fillStyle = '#26262e'; ctx.fillRect(l.x - 9, gy - 26, 18, 26); ctx.fillRect(l.x - 7, gy - 29, 14, 3);
-        ctx.fillStyle = '#4a4a56'; ctx.fillRect(l.x - 8, gy - 27, 15, 26);
-        ctx.fillStyle = '#5c5c6a'; ctx.fillRect(l.x - 8, gy - 27, 4, 26);
-        ctx.fillStyle = '#3a6a40'; ctx.fillRect(l.x - 9, gy - 4, 6, 4); ctx.fillRect(l.x + 5, gy - 6, 4, 6);
-        ctx.fillStyle = found ? '#6a8ab8' : 'rgba(150,210,255,' + (0.6 + pulse * 0.4) + ')';
-        [[-3, -22, 1, 6], [-3, -22, 5, 1], [1, -19, 1, 4], [-4, -13, 7, 1], [-1, -11, 1, 5], [2, -9, 1, 2]].forEach(([a, b, c, d]) => ctx.fillRect(l.x + a, gy + b, c, d));
-      } else {
-        const fl = Math.round(Math.sin(time * 4 + l.x) * 1);
-        ctx.fillStyle = '#5a3a24'; ctx.fillRect(l.x - 6, gy - 3, 12, 3);
-        ctx.fillStyle = '#e9dcbc'; ctx.fillRect(l.x - 5, gy - 6 + fl, 10, 4);
-        ctx.fillStyle = '#a89c84'; ctx.fillRect(l.x - 3, gy - 5 + fl, 6, 1);
-        if (!found) { ctx.fillStyle = '#ffe9a0'; ctx.fillRect(l.x - 1, gy - 14 - Math.round(pulse * 3), 2, 4); ctx.fillRect(l.x - 1, gy - 8 - Math.round(pulse * 3), 2, 1); }
+    const drawWitness = (who, x, found) => {
+      if (!WITNESS_APPEARANCE[who] || x < sideCameraX - 32 || x > sideCameraX + canvas.width + 32) return;
+      const y = SIDE_GROUND_Y;
+      ctx.fillStyle = 'rgba(10,11,20,.45)'; ctx.fillRect(x - 10, y - 1, 21, 2);
+      drawWitnessBody(who, x, y, 1, sidePlayer.x < x ? -1 : 1);
+      if (found || nickScene) return;
+      const bob = Math.round(Math.sin(time * 3 + x) * 2);
+      ctx.fillStyle = '#191823'; ctx.fillRect(x - 7, y - 48 + bob, 14, 8);
+      ctx.fillRect(x - 3, y - 40 + bob, 3, 2);
+      ctx.fillStyle = SPEAKERS[who].color;
+      for (let i = -4; i <= 4; i += 4) ctx.fillRect(x + i, y - 45 + bob, 2, 2);
+    };
+    for (const l of LORE) {
+      if (l.speaker && l.scene === platformScene && (!l.requires || story[l.requires])) drawWitness(l.speaker, l.x, story.pages.includes(l.id));
+    }
+    if (platformScene === 'court') drawWitness('keeper', 655, story.ch4Done);
+  }
+
+  // A fixed work order alongside the repeatable hunt board. The seam is
+  // discoverable without the order and a kill counts even if you find it first.
+  const FORGE_TRAIL = { smith: 1750, notice: 1971, crack: 1255, seamFire: 245, cache: 1052, width: 1200 };
+  Object.assign(STORY_DEFAULTS, { seamOrder: false, seamPaid: false, seamSeen: false, seamCleared: false, seamLooted: false });
+  REGIONS.seam = { name: 'THE CINDER SEAM', width: FORGE_TRAIL.width, entry: 82, color: '#ffb181',
+    plats: [tideGround(FORGE_TRAIL.width), { x: 525, y: 144, w: 116, h: 10 }, { x: 705, y: 142, w: 80, h: 10 }] };
+  REGION_SUBS.seam = 'An old mine beneath Cinder Deep';
+  FIRES.push({ id: 'seam', scene: 'seam', x: FORGE_TRAIL.seamFire, name: 'Cinder Seam Lantern' });
+  SCENE_MOBS.seam = [['skull', 471, 54], ['seamFiend', 852, 72]];
+  MOB_TYPES.seamFiend = { ...MOB_TYPES.fiend, name: 'Cinderback', hp: 40, dmg: 9, speed: 72, chase: 170,
+    scale: MOB_TYPES.fiend.scale * 1.25, xp: 54, coins: [9, 13], drops: [['ember', 1]], tint: '250,95,47,.44' };
+  Object.assign(ITEM_DEFS, {
+    frostcore: { name: 'Nick’s Heart', type: 'KEY ITEM', rarity: 'rare', value: 0, icon: 'frostcore', desc: ['A heart of solid ice.', 'Used to forge Frostglass Edge.'], lore: 'A second heart, which Nick swears he did not need.' },
+    seamore: { name: 'Seam Ore', type: 'KEY ITEM', rarity: 'rare', value: 0, icon: 'seamore', desc: ['An ore that holds heat.', 'Used to forge Frostglass Edge.'], lore: 'The Cinderback slept on the last good chunk.' },
+    frostedge: { name: 'Frostglass Edge', type: 'WEAPON', rarity: 'legend', value: 0, bound: true, atk: 6, icon: 'frostedge', desc: ['ATK +6. Temper at a forge.', 'Fires a pale Moonblade arc.'], lore: 'The last thing Vi heard at the anvil was ice cracking.' }
+  });
+  for (const k of ['frostcore', 'seamore', 'frostedge']) { inventory[k] = 0; ITEM_ORDER.push(k); }
+  Object.assign(TIDE_ICONS, {
+    frostcore: '............ ...kk..kk... ..kBbkBbBk.. ..kBWWBbbk.. ..kbWBBbBk.. ...kbBWTk... ....kBBk.... .....kk.....'.split(' '),
+    seamore: '............ .....kk..... ...kkGokk... ..kgGoGgok.. .kgoGggGgkk. .kgGoggGgk.. ..kggogkk... ...kkkk.....'.split(' '),
+    frostedge: '..........k. .........kB. ........kWB. .......kWBk. ......kWBk.. .....kWBk... ..k.kWBk.... ..kkWBk..... ...kBk...... ..kbkk...... .kk.........'.split(' ')
+  });
+  WEAPONS.frostedge = { name: ITEM_DEFS.frostedge.name, atk: 6, icon: 'frostedge', arc: '166,230,255' };
+  function useSeamOrder() {
+    if (story.seamPaid) return startDialogue([{ who: 'board', text: 'CINDERBACK: Closed. Vi marked the work order paid in red chalk.' }]);
+    if (story.seamCleared) {
+      story.seamOrder = story.seamPaid = true;
+      tideGrant('coins', 24);
+      tideNotice('Cinderback bounty paid: 24 coins.', 'victory'); tidePersist();
+      return;
+    }
+    story.seamOrder = true; tidePersist();
+    startDialogue([
+      { who: 'board', text: 'WANTED: Cinderback. 24 coins. Follow Cinder Deep to the brass rails. Look for orange light where the two mine supports touch.' },
+      { who: 'vi', text: "The ore in our old strongbox is yours if you can get it out. Bring it here if you want a blade that won't crack." }
+    ]);
+  }
+  function forgeTrailInteraction(x) {
+    const F = FORGE_TRAIL, near = target => Math.abs(x - target) < 23;
+    if (platformScene === 'pass') {
+      if (near(F.smith)) return { label: 'TALK TO VI / FORGE', act: () => openTide('forge') };
+      if (near(F.notice)) return { label: story.seamCleared && !story.seamPaid ? 'CLAIM CINDERBACK BOUNTY' : 'READ THE WORK ORDER', act: useSeamOrder };
+    } else if (platformScene === 'cinder' && near(F.crack)) {
+      return { label: 'SQUEEZE THROUGH THE SEAM', act: () => { story.seamSeen = true; enterRegion('seam', REGIONS.seam.entry, 1); } };
+    } else if (platformScene === 'seam') {
+      if (x < 62) return { label: 'BACK TO CINDER DEEP', act: () => enterRegion('cinder', F.crack - 33, -1) };
+      if (near(F.cache) && !story.seamLooted) return { label: story.seamCleared ? 'OPEN THE MINE CACHE' : 'CACHE / GUARDED', act: () => {
+        if (!story.seamCleared) return tideNotice('The Cinderback is still guarding it.', 'uiError');
+        story.seamLooted = true; depthsOnChest();
+        tideGrant('seamore', 1); tideGrant('ember', 2); tideGrant('coins', 12);
+        tideNotice('Seam Ore, 2 Living Embers, and 12 coins.', 'chest'); tidePersist();
+      } };
+    }
+    return null;
+  }
+  function drawForgeTrail() {
+    const F = FORGE_TRAIL, g = SIDE_GROUND_Y;
+    if (platformScene === 'pass') {
+      const x = F.smith;
+      drawSignpost(x + 22, 'FORGE', -1);
+      drawWitnessBody('vi', x - 5, g, 1.05, sidePlayer.x < x ? -1 : 1);
+      tidePixel('#2b2020', x + 6, g - 16, 22, 4); tidePixel('#827376', x + 7, g - 16, 20, 2);
+      tidePixel('#4f4144', x + 14, g - 12, 7, 12);
+      tideGlow(x + 18, g - 12, 21, '255,119,59', .34);
+      drawBoard(F.notice);
+      invText('WORK ORDER', F.notice, g - 41, '#ffdfb0', 'bold 6px monospace', 'center');
+    } else if (platformScene === 'cinder') {
+      const x = F.crack;
+      tideShape('#251719', [x - 44,g],[x - 30,g - 92],[x - 11,g - 74],[x - 2,g - 64],[x + 6,g - 77],[x + 40,g - 87],[x + 47,g]);
+      tideShape('#100e15', [x - 10,g],[x - 3,g - 54],[x + 7,g - 66],[x + 4,g - 16],[x + 14,g]);
+      tidePixel('#7a594e', x - 28, g - 67, 4, 67); tidePixel('#7a594e', x + 25, g - 67, 4, 67);
+      tidePixel('#8f6b58', x - 32, g - 70, 64, 4);
+      tidePixel('#e3b875', x - 35, g - 4, 70, 2); tidePixel('#a07348', x - 32, g + 2, 68, 1);
+      tideGlow(x + 1, g - 34, 22, '255,110,48', .65);
+      if (story.seamSeen) invText('CINDER SEAM', x, g - 79, '#ffca92', 'bold 6px monospace', 'center');
+    }
+  }
+  function drawCinderSeam() {
+    const F = FORGE_TRAIL, W = canvas.width, H = canvas.height, g = SIDE_GROUND_Y, cx = sideCameraX;
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#100d15'); bg.addColorStop(.62, '#30222c'); bg.addColorStop(1, '#15121b');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    ctx.save(); worldShake();
+    for (let x = Math.floor((cx - 75) / 80) * 80; x < cx + W + 85; x += 80) {
+      const n = Math.abs(x * 13 % 37);
+      tideShape('#1c1520', [x - 20,0],[x + 64,0],[x + 51,50 + n],[x + 26,90 + n],[x + 18,56],[x - 10,60]);
+      tideShape('#45313b', [x - 12,g],[x + 5,g - 60 + n],[x + 32,g - 71 + n],[x + 48,g]);
+      for (let i = 0; i < 5; i++) tidePixel(i % 2 ? '#65404a' : '#4d333e', x + i * 9, g - 13 - (i * 12 + n) % 43, 3 + n % 12, 2);
+      if (x % 160 === 0) {
+        tidePixel('#30232a', x + 4, 72, 6, g - 72); tidePixel('#67483e', x + 5, 73, 2, g - 75);
+        tidePixel('#513b38', x - 25, 71, 70, 4); tideLantern(x + 19, 94, '255,142,83');
       }
+      tidePixel('#25202a', x, g, 80, 44);
+      tidePixel('#795349', x, g, 80, 3);
+      tidePixel('#665055', x + n, g + 12, 23, 2);
+      tidePixel('#47343e', x + 28, g + 23 + n % 9, 42, 3);
+    }
+    sidePlatforms().slice(1).forEach(p => {
+      tidePixel('#463039', p.x, p.y, p.w, p.h);
+      tidePixel('#967066', p.x, p.y, p.w, 2);
     });
+    drawSignpost(54, 'CINDER DEEP', -1); drawCampfire(F.seamFire);
+    drawChest({ x: F.cache, rarity: 'rare', open: story.seamLooted, looted: story.seamLooted, openedAt: -8 });
+    drawSideMobs(); drawSidePlayer(); drawPlayerWaves(); drawCombatFx(); drawFortuneFx();
+    ctx.restore(); drawSideOverlays(region().name);
+  }
+
+  const NICK_OMEN = 1950, NICK_TRAP = 2070, NICK_TRAIL = 2094;
+  const NICK_CHARGE = 3.75, NICK_IMPACT = 5.13, NICK_WAKE = 7.27, NICK_END = 8.48;
+  const NICK_RAY = ['nick-attack_ray', 14, 12];
+  const frostArt = [1, 2, 3, 4, 5].map(n => loadImg(`frost/snow-${n}.png`));
+  let nickScene = null;
+  REGIONS.frost = { name: 'FROSTGLASS RIDGE', width: 1560, entry: 88, color: '#abebff', plats: [tideGround(1560)],
+    boss: 'nick', bossX: 1190, bossFlag: 'nickDefeated', arena: { left: 824, trigger: 896, right: 1434 } };
+  REGION_SUBS.frost = 'Ashen Pass / Beyond the frost trail';
+  FIRES.push({ id: 'frost', scene: 'frost', x: 748, name: 'Frostglass Cairn' });
+  SCENE_MOBS.frost = [['frostWolf', 312, 75], ['frostWolf', 563, 73]];
+  MOB_TYPES.frostWolf = {
+    name: 'Frost Wolf', src: 'frost/', anims: { idle: ['wolf-idle', 4, 8], move: ['wolf-run', 6, 13],
+      attack: ['wolf-attack', 7], hurt: ['wolf-hit', 4], death: ['wolf-death', 8] },
+    fw: 48, fh: 32, ax: 24, ay: 32, faceLeft: true, scale: 1.15, bodyH: 23, width: 23, hp: 11, speed: 105,
+    chase: 160, reach: 39, dmg: 6, atkTime: .78, hit: [.28, .54], cd: [1.35, 1.9], xp: 23, coins: [3, 6],
+    drops: [['fang', .66], ['tonic', .12]], voice: 'hound'
+  };
+  MOB_TYPES.nick = {
+    name: 'Nick, the Frostglass Warden', short: 'Nick', boss: true, ai: 'nick', src: 'frost/',
+    anims: { idle: ['nick-idle', 5, 7], move: ['nick-move', 8, 12], attack: ['nick-attack_peck', 11],
+      ray: NICK_RAY, hurt: ['nick-hurt', 4], death: null },
+    fw: 256, fh: 128, ax: 128, ay: 128, scale: .72, bodyH: 65, width: 31, hp: 98, speed: 65,
+    chase: 700, reach: 58, dmg: 10, atkTime: .85, hit: [.29, .52], cd: [1.15, 1.4],
+    xp: 192, coins: [32, 42], drops: [['tonic', 1]], voice: 'monster', summon: 'frostWolf'
+  };
+  for (const T of [MOB_TYPES.nick, MOB_TYPES.frostWolf]) {
+    for (const anim of Object.values(T.anims)) if (anim) mobSheet(T, anim);
+  }
+  BOSS_LINES.nick = { flag: 'nickBossSeen', tip: 'Jump the ray or get behind him. Strike while he recovers.',
+    first: [{ who: 'nick', text: "You're standing again. Good. This time, move when you see the light." },
+      { who: 'rowan', text: "This time I'm not letting you walk away." }],
+    retry: [{ who: 'nick', text: "Watch my beak, not the snow." }] };
+  BOSS_CINE.nick = { nameAt: 1.9, main: '#a5eaff', hot: '#f0fdff', deep: '#204b7f', glow: '119,213,255', crest: 'moon' };
+  BOSS_FORMS.nick = ['THE WHITEOUT', 'Now try it with your eyes shut.', '#3c6794', '#a7ecff',
+    [[-17,-49,-38,47],[11,-60,37,55],[2,-66,9,33]], [[-11,-45,20,2]]];
+  PHASE_SHOWS.nick = { nameAt: 1.74, style: 'crystal', cue: 'magic', seed: 10, main: '#a5eaff', hot: '#f0fdff', deep: '#204b7f', glow: '119,213,255', crest: 'moon' };
+  const nickReduced = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const nickEase = v => { const n = clamp(v, 0, 1); return n * n * (3 - 2 * n); };
+  const nickFireAt = enraged => enraged ? .74 : 1.10;
+  function nickRayFrame(t, fireAt) {
+    return t < fireAt ? Math.min(6, Math.floor(Math.max(0, t) / fireAt * 7))
+      : Math.min(13, 7 + Math.floor((t - fireAt) * 14));
+  }
+  function updateNickBoss(m, dt, enraged, playerAlive, dx, face, left, right, go) {
+    const T = m.T, fireAt = nickFireAt(enraged), distance = Math.abs(dx);
+    m.hurtTime = Math.max(0, m.hurtTime - dt);
+    if (m.hurtTime > 0 && m.st === 'peck') go('recover');
+    if (m.st === 'stalk') {
+      m.dir = face;
+      if (distance > 72) {
+        m.x += face * T.speed * (enraged ? 1.23 : 1) * dt;
+        m.moving = true; m.walk += dt * 14;
+      }
+      if (playerAlive && m.stT > (enraged ? .60 : .89)) {
+        m.nickHit = false;
+        go(distance < 55 && !m.pecked ? 'peck' : 'ray');
+        m.pecked = m.st === 'peck';
+        sfx(m.pecked ? 'swingBig' : 'magic', .65, m.pecked ? .95 : .54);
+      }
+    } else if (m.st === 'peck') {
+      m.atkLen = T.atkTime;
+      m.attackTime = Math.max(.001, T.atkTime - m.stT);
+      if (m.stT >= .29 && m.stT < .54 && !m.nickHit && playerAlive) m.nickHit = bossTouch(m, 55, m.y - 38, T.dmg + Number(enraged) * 2);
+      if (m.stT >= T.atkTime) { m.attackTime = 0; go('recover'); }
+    } else if (m.st === 'ray') {
+      // Face is locked at wind-up. Jump over the beam or cross behind Nick.
+      if (m.stT >= fireAt && m.stT - dt < fireAt) {
+        sfx('demon', .66, 1.35); sfx('clash', .6, .76);
+        if (!nickReduced()) screenShake = Math.max(screenShake, 4);
+      }
+      const a = m.stT - fireAt, along = dx * m.dir;
+      if (playerAlive && a >= 0 && a < (enraged ? .52 : .34) && !m.nickHit &&
+          along > 28 && along < 282 && sidePlayer.y > m.y - 41 && sidePlayer.y < m.y + 22 && canHitPlayer()) {
+        m.nickHit = true; hurtByBoss(T.dmg + 3, m.dir, 'Frostglass Ray', enraged);
+      }
+      if (a >= (enraged ? .64 : .52)) go('recover');
+    } else if (m.stT >= (enraged ? .92 : 1.34)) go('stalk');
+    m.x = clamp(m.x, left, right);
+  }
+  function startNickAmbush() {
+    const origin = sidePlayer.x;
+    const actor = makeMob('nick', origin + 218, 0, 0);
+    actor.T = { ...actor.T, scale: .86, bodyH: 80 };
+    nickScene = { t: 0, actor, origin, impactX: origin, impactY: sidePlayer.y - 25, struck: false, awake: false };
+    clearHeldInput();
+    Object.assign(sidePlayer, { facing: 1, atk: null, roll: null, pray: null, drink: null, moving: false, hurtTime: 0, invulnTime: 0, vx: 0, vy: 0 });
+    mobShots.length = 0; groundFires.length = 0; playerWaves.length = 0; bossWaves.length = 0; cineFx.length = 0;
+    sceneTitle = null; notice = '';
+    sfx('swooshBig', .45, .55);
+  }
+  function wakeAfterNick() {
+    if (nickScene.awake) return;
+    nickScene.awake = true;
+    stats.health = 1;
+    story.nickAmbushed = true;
+    sidePlayer.x = 1917; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.onGround = true;
+    sidePlayer.invulnTime = 0; sidePlayer.hurtTime = 0;
+    sideCameraX = sidePlayer.x - canvas.width * .43;
+    screenShake = 0;
+  }
+  function finishNickAmbush() {
+    if (!nickScene) return;
+    wakeAfterNick();
+    nickScene = null;
+    clearHeldInput(); cineFx.length = 0;
+    sidePlayer.invulnTime = 1.6;
+    notice = 'Rest at the fire. Follow the frost trail east.'; noticeUntil = time + 4.2;
+    if (onSave) onSave(getSaveData());
+  }
+  function updateNickAmbush(dt) {
+    const c = nickScene, b = c.actor;
+    c.t += dt;
+    const t = c.t;
+    b.x = c.origin + 218 - 77 * nickEase((t - .25) / 1.14);
+    b.moving = t > .25 && t < 1.39; b.walk += dt * 15;
+    if (t >= NICK_CHARGE && t - dt < NICK_CHARGE) sfx('magic', .92, .55);
+    if (!c.struck && t >= NICK_IMPACT) {
+      c.struck = true; stats.health = 1;
+      sfx('demon', 1, 1.18); sfx('slam', 1, .59); sfx('hurt', .72, .82);
+      padRumble(.95, .8, 480);
+      if (!nickReduced()) screenShake = 10;
+      cineBurst(c.impactX, c.impactY, 33, { angle: Math.PI, spread: 2.1, speed: 155, g: 160, life: 1.05, color: '167,233,255', size: 3 });
+      cineBurst(c.impactX, SIDE_GROUND_Y, 18, { angle: -2.3, spread: 1.7, speed: 90, g: 250, life: 1.24, kind: 'rock', color: '80,141,180', size: 3 });
+      spawnBlood(c.impactX, c.impactY, -1, true);
+    }
+    if (c.struck && !c.awake) {
+      const a = t - NICK_IMPACT, flight = nickEase(a / .55);
+      sidePlayer.x = c.origin - 82 * flight;
+      sidePlayer.y = SIDE_GROUND_Y - 25 * Math.sin(Math.PI * clamp(a / .55, 0, 1));
+    }
+    screenShake = Math.max(0, screenShake - dt * 21);
+    updateCombatFx(dt); updateCineParticles(dt);
+    if (!c.awake) {
+      const target = c.origin - (c.struck ? 124 : 105) + (nickReduced() ? 0 : 24 * nickEase((t - .25) / 1.4));
+      sideCameraX += (target - sideCameraX) * Math.min(1, dt * 4.6);
+    }
+    if (t >= NICK_WAKE) wakeAfterNick();
+    if (t >= NICK_END) finishNickAmbush();
+  }
+  function frostSnow(intensity, clock = time) {
+    const w = canvas.width, h = canvas.height;
+    for (let i = 0; i < 64; i++) {
+      const x = ((i * 67.7 - clock * (19 + i % 9 * 4)) % w + w) % w;
+      const y = (i * 43.3 + clock * (6 + i % 7)) % h;
+      ctx.globalAlpha = intensity * (.21 + i % 5 * .14);
+      ctx.fillStyle = i % 4 ? '#bad9ed' : '#f0fdff';
+      ctx.fillRect(Math.round(x), Math.round(y), i % 6 === 0 ? 5 : 2, i % 4 === 0 ? 2 : 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawNickRay(x, y, endX, endY, elapsed, chargeAt, large) {
+    if (elapsed < 0) return;
+    if (elapsed < chargeAt) {
+      const p = clamp(elapsed / chargeAt, 0, 1), rad = 10 + 17 * p;
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      const halo = ctx.createRadialGradient(x, y, 1, x, y, rad);
+      halo.addColorStop(0, `rgba(137,224,255,${.2 + p * .55})`); halo.addColorStop(1, 'rgba(20,100,240,0)');
+      ctx.fillStyle = halo; ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+      ctx.strokeStyle = `rgba(160,227,255,${.10 + p * .40})`; ctx.setLineDash([5, 7]);
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(endX, endY); ctx.stroke(); ctx.setLineDash([]);
+      for (let i = 0; i < 12; i++) {
+        const a = i * 2.4 + elapsed * 4, r = rad * (.4 + (i * .16 + 1 - p) % 1);
+        ctx.fillStyle = i % 3 ? '#80cfff' : '#e5fcff';
+        ctx.fillRect(Math.round(x + Math.cos(a) * r), Math.round(y + Math.sin(a) * r), 2, 2);
+      }
+      const core = 2 + p * 5;
+      ctx.fillStyle = '#eaffff'; ctx.fillRect(x - core / 2, y - core / 2, core, core);
+      ctx.restore(); return;
+    }
+    const fired = elapsed - chargeAt, duration = large ? .89 : .53;
+    if (fired >= duration) return;
+    const force = (1 - nickEase((fired - duration * .44) / (duration * .56))) * (.92 + .08 * Math.sin(fired * 47));
+    const reach = Math.hypot(endX - x, endY - y), wide = (large ? 53 : 26) * force;
+    const span = Math.min(reach, reach * (.7 + fired * 14));
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(Math.atan2(endY - y, endX - x));
+    for (const [color, m, alpha] of [['#7664e5', 1.61, .29], ['#297fd9', 1.18, .83], ['#55bcf7', .81, 1], ['#a4efff', .55, 1], ['#f1ffff', .27, 1]]) {
+      const n = wide * m;
+      ctx.globalAlpha = alpha * Math.min(1, force * 2);
+      ctx.fillStyle = color; ctx.beginPath();
+      ctx.moveTo(0, -n * .15); ctx.lineTo(31, -n * .39); ctx.lineTo(span, -n * .60);
+      ctx.lineTo(span, n * .60); ctx.lineTo(31, n * .39); ctx.lineTo(0, n * .15); ctx.fill();
+    }
+    ctx.globalAlpha = force;
+    for (let i = 0; i < 29; i++) {
+      const px = (i * 41.2 + fired * (310 + i % 8 * 35)) % span, off = Math.sin(i * 1.9 + fired * 7.5) * wide * (.34 + px / reach * .4);
+      ctx.fillStyle = i % 3 ? '#d5f9ff' : '#5cc9ff';
+      ctx.fillRect(Math.round(px), Math.round(off), 3 + i % 5 * 2, i % 4 ? 1 : 2);
+    }
+    ctx.restore();
+  }
+  function drawNickAmbushWorld() {
+    const c = nickScene;
+    if (!c || c.awake) return;
+    const b = c.actor, t = c.t;
+    if (t >= NICK_CHARGE && t < NICK_IMPACT + .89) {
+      const f = nickRayFrame(t - NICK_CHARGE, NICK_IMPACT - NICK_CHARGE), img = mobSheet(b.T, NICK_RAY);
+      if (imgReady(img)) {
+        ctx.save(); ctx.translate(b.x, b.y); ctx.scale(-b.T.scale, b.T.scale);
+        ctx.drawImage(img, f * 256, 0, 256, 128, -128, -128, 256, 128); ctx.restore();
+      } else drawMob(b);
+      const x = b.x - 34, y = b.y - 58;
+      const slope = (c.impactY - y) / (c.impactX - x);
+      drawNickRay(x, y, x - 360, y - 360 * slope, t - NICK_CHARGE, NICK_IMPACT - NICK_CHARGE, true);
+    } else {
+      ctx.save(); ctx.globalAlpha = 1 - nickEase((t - 6.08) / .68); drawMob(b); ctx.restore();
+    }
+  }
+  function drawNickAmbushFrame() {
+    const c = nickScene, t = c.t, w = canvas.width, h = canvas.height;
+    if (!c.awake) drawCineFx();
+    const bar = Math.round(25 * nickEase(t / .60) * (1 - nickEase((t - NICK_WAKE) / .85)));
+    const tint = .29 * nickEase(t / .62) * (1 - nickEase((t - NICK_WAKE) / .83));
+    ctx.fillStyle = `rgba(24,43,91,${tint})`; ctx.fillRect(0, 0, w, h);
+    frostSnow(.78 * nickEase(t / .85) * (1 - nickEase((t - NICK_WAKE) / .78)), nickReduced() ? 0 : t);
+    if (t < NICK_WAKE) {
+      ctx.fillStyle = '#090d18'; ctx.fillRect(0, 0, w, bar); ctx.fillRect(0, h - bar, w, bar);
+      const end = t - NICK_IMPACT;
+      if (end >= 0 && end < .19 && !nickReduced()) {
+        ctx.fillStyle = `rgba(212,249,255,${.31 * (1 - end / .19)})`; ctx.fillRect(0, bar, w, h - bar * 2);
+      }
+      if (t > 1.41 && t < NICK_IMPACT) {
+        const a = nickEase((t - 1.41) / .3) * (1 - nickEase((t - 4.90) / .23));
+        ctx.globalAlpha = a; ctx.textAlign = 'center';
+        ctx.fillStyle = '#101f34'; ctx.fillRect(56, 43, 208, 41);
+        ctx.fillStyle = '#75cced'; ctx.fillRect(56, 43, 208, 1); ctx.fillRect(56, 83, 208, 1);
+        ctx.font = 'bold 13px monospace'; ctx.fillStyle = '#d5f7ff'; ctx.fillText('NICK', 160, 60);
+        ctx.font = '7px monospace'; ctx.fillStyle = '#97bdd8'; ctx.fillText('THE FROSTGLASS WARDEN', 160, 74);
+        ctx.font = '8px monospace'; ctx.fillStyle = '#e7f5ff';
+        ctx.fillText(t < 2.94 ? "Rowan. I know who you're looking for." : 'But the Court is watching.', 160, h - 9);
+        ctx.globalAlpha = 1;
+      }
+      if (end > .15 && end < .95) {
+        ctx.globalAlpha = 1 - nickEase((end - .60) / .33);
+        invText('1 HP', clamp(c.origin - sideCameraX - 62, 25, 280), 102, '#ff9b94', 'bold 12px monospace', 'center');
+        ctx.globalAlpha = 1;
+      }
+    }
+    const black = t < NICK_WAKE ? nickEase((t - 6.32) / .50) : 1 - nickEase((t - NICK_WAKE) / .78);
+    if (black > 0) { ctx.fillStyle = `rgba(5,8,15,${black})`; ctx.fillRect(0, 0, w, h); }
+    if (t >= 6.87 && t < 7.94) {
+      ctx.globalAlpha = nickEase((t - 6.87) / .16) * (1 - nickEase((t - 7.69) / .25));
+      invText('WREN: Rowan. Stay with me.', 160, 189, '#ffe1c3', '8px monospace', 'center');
+      ctx.globalAlpha = 1;
+    }
+    if (t > .4 && t < 4.85) invText(K('E') + ' SKIP', 312, 16, '#b8cbdf', '6px monospace', 'right');
+  }
+  function drawFrostglass() {
+    const w = canvas.width, h = canvas.height, gy = SIDE_GROUND_Y;
+    ctx.fillStyle = '#26364c'; ctx.fillRect(0, 0, w, h);
+    for (const [i, par] of [[4,.04],[3,.16],[2,.27],[1,.52]]) drawLayer(frostArt[i], par, -15, 384, 216);
+    ctx.fillStyle = 'rgba(27,57,101,.27)'; ctx.fillRect(0, 0, w, gy);
+    ctx.save(); worldShake(); ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#1c2b42'; ctx.fillRect(sideCameraX - 15, gy, w + 30, h - gy + 15);
+    const start = Math.floor(sideCameraX / 384) * 384;
+    if (imgReady(frostArt[0])) for (let x = start - 384; x < sideCameraX + w + 40; x += 384) {
+      ctx.drawImage(frostArt[0], 0, 196, 384, 20, x, gy - 6, 384, 22);
+    }
+    ctx.fillStyle = '#56708b';
+    for (let x = Math.floor(sideCameraX / 24) * 24 - 24; x < sideCameraX + w + 24; x += 24) {
+      const y = gy + 12 + (x * 7 % 11);
+      ctx.fillRect(x, y, 6 + x / 24 % 6, 2);
+      if (x % 72 === 0) { ctx.fillStyle = '#8eafc3'; ctx.fillRect(x - 4, gy - 6, 14, 2); ctx.fillStyle = '#56708b'; }
+    }
+    drawSignpost(50, 'ASHEN PASS', -1); drawCampfire(748);
+    drawSideMobs(); drawSidePlayer(); drawPlayerWaves(); drawCombatFx(); drawFortuneFx();
+    const b = theBoss();
+    if (b && !b.dead && b.st === 'ray') drawNickRay(b.x + b.dir * 28, b.y - 42, b.x + b.dir * 285, b.y - 42,
+      b.stT, nickFireAt(b.enraged), false);
+    if (story.nickDefeated && (!b || b.deadTime > 2.2)) {
+      drawMob({ type: 'nick', T: MOB_TYPES.nick, x: REGIONS.frost.bossX, y: gy, dir: sidePlayer.x < REGIONS.frost.bossX ? -1 : 1 });
+    }
+    ctx.restore();
+    frostSnow(.62, nickReduced() ? 0 : time);
+    drawSideOverlays('FROSTGLASS RIDGE');
   }
   function drawCamp() {
     drawTent(CAMP.tent);
@@ -9030,7 +9551,7 @@ const Overworld = (() => {
         invBox(56, 48, 208, 15, '#192a34', bellFeedback.error ? '#dfa48b' : '#e3bd7e');
         invText(bellFeedback.text, 160, 58, '#fff2d1', '7px monospace', 'center');
       } else if (!sceneTitle) {
-        const goal = harbor ? (story.ferryOpened ? 'Board at the east dock' : 'Find the night ferry signal')
+        const goal = harbor ? (story.ferryOpened ? 'Board at the east dock' : 'Ask Nessa about the night signal')
           : (story.ch4Done ? 'Lower Well: east door' : "Follow Seren's voice");
         invText(goal, 312, 31, '#fff0ce', 'bold 7px monospace', 'right');
       }
@@ -9080,7 +9601,17 @@ const Overworld = (() => {
       ctx.strokeStyle = '#1a0c0c'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x - 14, g - 5, 6, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.arc(x + 14, g - 5, 6, Math.PI * 0.2, Math.PI * 1.7); ctx.stroke();
       ctx.fillStyle = 'rgba(255,120,60,' + (0.35 + Math.sin(time * 4 + i) * 0.2) + ')'; ctx.fillRect(x - 4, g - 20, 3, 2); ctx.fillRect(x + 10, g - 19, 2, 2);
     });
-    if (platformScene === 'pass') { drawSignpost(70, 'HOLLOW', -1); if (story.passBossDefeated) drawSignpost(PASS_SIDE_WIDTH - 70, 'GLOAMHOLD', 1); }
+    if (platformScene === 'pass') {
+      drawSignpost(70, 'HOLLOW', -1);
+      if (story.passBossDefeated) drawSignpost(PASS_SIDE_WIDTH - 70, 'GLOAMHOLD', 1);
+      if (story.nickAmbushed) {
+        for (let i = 0; i < 18; i++) {
+          const x = NICK_TRAIL - 49 + i * 6, y = SIDE_GROUND_Y - 2 - i % 4;
+          ctx.fillStyle = i % 3 ? '#75b5d7' : '#d1f4ff'; ctx.fillRect(x, y, 4 + i % 4, 2);
+        }
+        drawSignpost(NICK_TRAIL, 'FROST TRAIL', 1);
+      }
+    }
     drawDepthsWorld();
     FIRES.filter(f => f.scene === platformScene).forEach(f => drawCampfire(f.x));
     drawLoreSpots();
@@ -9088,6 +9619,7 @@ const Overworld = (() => {
     drawChests();
     drawSideMobs();
     drawSidePlayer();
+    if (platformScene === 'pass') drawNickAmbushWorld();
     drawPlayerWaves();
     drawCombatFx();
     drawFortuneFx();
@@ -9413,6 +9945,7 @@ const Overworld = (() => {
 
   // Shared screen-space overlays for the outdoor scenes.
   function drawSideOverlays(label) {
+    if (nickScene) return;
     drawDepthsGrade();
     if (bossFight && bossFight.cine) { drawBossCine(); return; }
     const W = canvas.width;
@@ -9538,9 +10071,16 @@ const Overworld = (() => {
     else if (art === 'hollow') drawSideHollow();
     else if (art === 'pass') drawSidePass();
     else if (art === 'gloam') drawSideGloam();
+    else if (art === 'frost') drawFrostglass();
+    else if (art === 'seam') drawCinderSeam();
     else if (region().tide) drawTide();
     else if (region().peaceful) drawCoast();
     else drawSideForest();
+    if (nickScene) {
+      drawNickAmbushFrame();
+      if (nickScene.awake && nickScene.t > NICK_WAKE + .75) drawSideHUD();
+      return;
+    }
     if (!(bossFight && bossFight.cine)) drawSideHUD();
     drawPanel();
     if (armorTutorialPending) drawArmorInventoryPrompt();
@@ -10032,6 +10572,7 @@ const Overworld = (() => {
   }
   function onCanvasPointer(e) {
     if (introActive) return;
+    if (nickScene) { e.preventDefault(); return; }
     const p = canvasPoint(e);
     const inside = (x, y, w, h) => p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + h;
     if (paused) {
@@ -10082,7 +10623,17 @@ const Overworld = (() => {
       for (let j = 0; j < LORE_ROWS; j++) { const i = j + off; if (i < LORE.length && inside(120, 42 + j * 12, 182, 11)) { if (loreSel === i) useSelectedItem(); else { loreSel = i; sfx('uiMove'); } return; } }
     } else if (invTab === 5) {
       const fl = mapFires();
-      for (let i = 0; i < fl.length; i++) if (inside(120, 166 + i * 8, 182, 8)) { if (mapSel === i) mapConfirm(); else { mapSel = i; sfx('uiMove'); } return; }
+      const off = mapFireOffset();
+      if (fl.length > MAP_FIRE_ROWS && inside(188, 153, 39, 13)) {
+        const step = p.x < 208 ? -MAP_FIRE_ROWS : MAP_FIRE_ROWS;
+        mapSel = clamp(off + step, 0, fl.length - 1); sfx('uiMove'); return;
+      }
+      for (let j = 0; j < MAP_FIRE_ROWS && off + j < fl.length; j++) {
+        if (!inside(120, 166 + j * 8, 182, 8)) continue;
+        const i = off + j;
+        if (mapSel === i) mapConfirm(); else { mapSel = i; sfx('uiMove'); }
+        return;
+      }
     } else if (invTab === 6) {
       for (let i = 0; i < RELIC_ORDER.length; i++) { const r = relicSlotRect(i); if (inside(r.x, r.y, r.w, r.h)) { if (relicSel === i) toggleRelic(); else { relicSel = i; sfx('uiMove'); } return; } }
     }
@@ -10459,7 +11010,7 @@ const Overworld = (() => {
       ['Follow the east road to Lantern Quay', story.harborEntered],
       ['Ring the night signal for the ferry', story.ferryOpened],
       ['Cross to the Pale Court', story.courtEntered],
-      ["Find Seren's entry in the ledger", story.ch4Done],
+      ['Ask the gallery keeper about Seren', story.ch4Done],
       ['Defeat the Keeper beneath the Court', story.wellBossDone],
       ['Bring Seren home', !!tide.ending]
     ];
@@ -10498,7 +11049,7 @@ const Overworld = (() => {
     const pages = story.pages.length;
     invBox(x + 2, y + 118, w - 4, 50, '#201a26', '#4b3d35');
     invText('SIDE QUESTS', x + 10, y + 128, '#d6b477', 'bold 6px monospace');
-    const rows = [['Goblin Trouble', kills, 5, '#e2584f'], ['Lost Pages', pages, LORE.length, '#5fa8ff'], ['Moon Moths', depths.moths.length, MOTH_TOTAL, '#cfe6ff'], ['Champions', DEPTH_IDS.filter(d => story[REGIONS[d].bossFlag]).length, 4, '#ff9a5a']];
+    const rows = [['Goblin Trouble', kills, 5, '#e2584f'], ['Stories Heard', pages, LORE.length, '#5fa8ff'], ['Moon Moths', depths.moths.length, MOTH_TOTAL, '#cfe6ff'], ['Champions', DEPTH_IDS.filter(d => story[REGIONS[d].bossFlag]).length, 4, '#ff9a5a']];
     rows.forEach(([label, have, need, col], i) => {
       const ry = y + 137 + i * 9, done = have >= need;
       invText(label, x + 10, ry, done ? '#9be37a' : '#ffe3a1', 'bold 6px monospace');
@@ -10508,7 +11059,9 @@ const Overworld = (() => {
   }
 
   // ---- MAP tab: the known world and fast travel between campfires ----
+  const MAP_FIRE_ROWS = 5;
   let mapSel = 0;
+  function mapFireOffset() { return Math.floor(mapSel / MAP_FIRE_ROWS) * MAP_FIRE_ROWS; }
   let mapFeedback = '';
   const MAP_NODES = [
     { id: 'home', name: 'Home', x: 14, y: 84, known: () => true },
@@ -10595,10 +11148,16 @@ const Overworld = (() => {
     mapSel = clamp(mapSel, 0, Math.max(0, fl.length - 1));
     invBox(x + 2, y + 114, w - 4, 52, '#201a26', '#4b3d35');
     invText('CAMPFIRES', x + 8, y + 123, '#d6b477', 'bold 6px monospace');
+    const off = mapFireOffset();
+    if (fl.length > MAP_FIRE_ROWS) {
+      invText('<', 196, y + 123, off ? '#ffe3a1' : '#645663', 'bold 7px monospace', 'center');
+      invText(`${1 + off / MAP_FIRE_ROWS}/${Math.ceil(fl.length / MAP_FIRE_ROWS)}`, 207, y + 123, '#e4c498', '6px monospace', 'center');
+      invText('>', 218, y + 123, off + MAP_FIRE_ROWS < fl.length ? '#ffe3a1' : '#645663', 'bold 7px monospace', 'center');
+    }
     invText(mapFeedback || (at ? 'Choose a destination' : 'Rest at a fire to travel'), x + w - 8, y + 123, mapFeedback ? '#ffcb94' : at ? '#9be37a' : '#a99d8f', '5px monospace', 'right');
     if (!fl.length) invText('No campfires discovered yet.', x + w / 2, y + 145, '#8f8478', '6px monospace', 'center');
-    fl.forEach((f, i) => {
-      const ry = y + 126 + i * 8, sel = i === mapSel;
+    fl.slice(off, off + MAP_FIRE_ROWS).forEach((f, j) => {
+      const ry = y + 126 + j * 8, sel = off + j === mapSel;
       ctx.fillStyle = sel ? '#2c2433' : '#231d2a'; ctx.fillRect(x + 4, ry, w - 8, 8);
       ctx.fillStyle = '#e8542e'; ctx.fillRect(x + 8, ry + 2, 3, 5); ctx.fillStyle = '#ffd36a'; ctx.fillRect(x + 9, ry + 4, 1, 2);
       invText(f.name, x + 16, ry + 7, sel ? '#ffe3a1' : '#f3e7c9', (sel ? 'bold ' : '') + '6px monospace');
@@ -10617,7 +11176,7 @@ const Overworld = (() => {
   const LORE_ROWS = 7;
   function loreOffset() { return clamp(loreSel - 3, 0, Math.max(0, LORE.length - LORE_ROWS)); }
   function drawLoreTab(x, y, w) {
-    invText('JOURNAL & LORE  ' + story.pages.length + '/' + LORE.length, x + 4, y + 0, '#d6b477', 'bold 6px monospace');
+    invText('STORY JOURNAL  ' + story.pages.length + '/' + LORE.length, x + 4, y + 0, '#d6b477', 'bold 6px monospace');
     const off = loreOffset();
     ctx.fillStyle = '#151119'; ctx.fillRect(x + w - 2, y + 2, 2, LORE_ROWS * 12);
     ctx.fillStyle = '#d6b477'; ctx.fillRect(x + w - 2, y + 2 + Math.round(LORE_ROWS * 12 * off / LORE.length), 2, Math.round(LORE_ROWS * 12 * LORE_ROWS / LORE.length));
@@ -10898,7 +11457,7 @@ const Overworld = (() => {
     equipment.armor = false; equipment.weapon = 'sword';
     quickSlot = 'berries'; newItems.clear(); loreSeen.clear();
     Object.assign(story, STORY_DEFAULTS, { pages: [], fires: [], lastFire: null });
-    dialogue = null; bossFight = null; bossOutro = null; dad = null; bossWaves.length = 0;
+    dialogue = null; bossFight = null; bossOutro = null; nickScene = null; dad = null; bossWaves.length = 0;
     armorTutorialPending = false; armorQuestActive = false; dadNoteRead = false;
     Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0, xp: 0, kills: 0, goblinKills: 0, atkUp: 0, defUp: 0, perkAtk: 0, perkDef: 0, critUp: 0, luck: 0, thirst: 0, chargeUp: 0, elites: 0, chests: 0 });
     fortune.owned = []; fortune.equipped = []; fortune.slots = 2; fortune.phoenixUsed = false; pendingPerks = 0; perkOffer = null; relicReveal = null; wheel = null;
@@ -10994,6 +11553,10 @@ const Overworld = (() => {
     const k = e.key.toLowerCase();
     unlockAudio();
     if (introActive) { finishIntro(); e.preventDefault(); e.stopPropagation(); return; }
+    if (nickScene) {
+      if (!e.repeat && nickScene.t > .4 && ['e', 'enter', 'escape'].includes(k)) finishNickAmbush();
+      e.preventDefault(); e.stopPropagation(); return;
+    }
     if (bossFight && bossFight.cine && !paused) { if (!e.repeat && ['e', 'enter', ' ', 'j', 'f', 'escape', 'x'].includes(k)) skipBossCine(); e.preventDefault(); e.stopPropagation(); return; }
     if (dialogue && !paused) {
       if (!e.repeat && ['e', 'enter', ' ', 'j', 'k', 'f', 'escape', 'x'].includes(k)) advanceDialogue();
@@ -11216,6 +11779,7 @@ const Overworld = (() => {
     inputMode = 'pad';
     unlockAudio();
     if (introActive) { finishIntro(); return; }
+    if (nickScene) { if (nickScene.t > .4 && ['primary', 'back'].includes(action)) finishNickAmbush(); return; }
     if (bossFight && bossFight.cine && !paused) { if (action === 'primary' || action === 'attack' || action === 'back') skipBossCine(); return; }
     if (dialogue && !paused) { if (action === 'primary' || action === 'attack' || action === 'back') advanceDialogue(); return; }
     if (fortunePanel() && !paused) { fortunePad(action); return; }
@@ -11304,7 +11868,8 @@ const Overworld = (() => {
   }
   function renderState() {
     return JSON.stringify({ chapter: questChapter(), scene: platformScene,
-      phase: introActive ? 'intro' : paused ? 'paused' : panel || 'play',
+      phase: introActive ? 'intro' : paused ? 'paused' : nickScene ? 'nick-ambush' : panel || 'play',
+      ambushTime: nickScene?.t ?? null, ambushBeat: nickScene ? nickScene.awake ? 'wake' : nickScene.struck ? 'impact' : nickScene.t >= NICK_CHARGE ? 'charge' : 'reveal' : null,
       introTime: introActive ? introTime : null,
       player: { x: Math.round(sidePlayer.x), y: Math.round(sidePlayer.y), health: stats.health },
       cameraX: Math.round(sideCameraX), boss: bossFight ? (bossFight.phaseTwo ? 'phase-two-intro' : bossFight.cine ? 'intro' : bossFight.active ? 'active' : 'dialogue') : null,

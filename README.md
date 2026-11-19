@@ -4,6 +4,18 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
 
 **Play online:** https://jasoncoker010101-cmd.github.io/pixelquest/
 
+## Frostglass and the Cinder Seam
+
+In Chapter 2, stop at Wren’s Lookout. Vi’s forge is west of the fire, and a
+Cinderback work order is posted just to the east. Follow that notice into
+Cinder Deep to find a hidden mine, its checkpoint, and a guarded ore cache.
+The regular hunt boards still offer repeatable bounties.
+
+A new encounter on the Ashen Pass opens a frost trail to an optional duel.
+Bring the resulting boss trophy and Seam Ore to either blacksmith to craft
+the Frostglass Edge. Look for people with speech markers to hear stories
+and earn journal entries; lore already unlocked in older saves stays unlocked.
+
 ## Salt Coast expansion
 
 In Chapter 4, look for the Brinewick path east of Wren at Lantern Quay.
@@ -22,7 +34,7 @@ Brineguard pieces for a defense bonus. Land hits with a blade to unlock
 Undertow, then hold down and press Attack while grounded. The Tideglass Blade
 learns it faster.
 
-After reading the Pale Court ledger, enter the east door to descend to the
+After talking to the Pale Court gallery keeper, enter the east door to descend to the
 Lower Well. Saga I ends there. Optional lore unlocks a second ending with its
 own epilogue. Existing Chapter 4 saves keep their original ledger progress.
 
@@ -35,7 +47,7 @@ own epilogue. Existing Chapter 4 saves keep their original ledger progress.
 
 ## Combat and accounts
 
-- All nine bosses, including the Salt Stag and Ione, reveal a second form at half health. Each boss gets its own visual reveal and sound cue. Skip with the same controls as the first entrance; combat resumes in phase two with a brief grace period.
+- Bosses, including Nick, the Salt Stag and Ione, reveal a second form at half health. Each boss gets its own visual reveal and sound cue. Skip with the same controls as the first entrance; combat resumes in phase two with a brief grace period.
 - Leveling takes more XP, and each level restores some health and stamina instead of refilling both. Existing saves keep their earned levels and stats. Armor still softens boss hits, but direct attacks and hazards cannot be reduced to one damage, and phase-two hits are stronger.
 - Skarn, Mourn and Tidemaw use their own pixel art. Both opening moon shots show the fracture, and each outdoor region has its own set of scenery and lighting accents. See `assets/ASSET-CREDITS.txt` for the scenery source.
 - Hits on living enemies and the player leave short-lived pixel blood sprays and splashes. Shield blocks and enemies like skeletons and ghosts don't bleed. Switch Blood Effects off in either the title settings or the in-game pause menu.
@@ -55,11 +67,11 @@ own epilogue. Existing Chapter 4 saves keep their original ledger progress.
 - **Player stats:** health, stamina, level, strength, defense, steps, and play time.
 - **Animated main menu:** title letters drop in, a cracked moon sheds glowing shards, shooting stars cross the sky, and Rowan waits by a campfire. Menu options are rune stones with a sword cursor, and the save screen shows each slot's chapter, area, and level.
 - **Story:** four playable chapters so far.
-  - Chapter 1, The Hollow King: follow Dad's trail through the forest to Bram's camp and into the Hollow, collect journal pages and lore stones, defeat Grukk, and find Dad.
+  - Chapter 1, The Hollow King: follow Dad's trail through the forest to Bram's camp and into the Hollow, talk to witnesses, defeat Grukk, and find Dad.
   - Chapter 2, The Ashen Pass: Dad tells you about the Pale Court and Morwen. Cross the burning mountain road with Wren and face Ashmane, the Pale Mare.
   - Chapter 3, The Moon-Eater: reach Gloamhold, a drowned city in the rain, and fight Vael in the castle quarter.
   - Chapter 4, The Pale Court: convince the night ferryman to answer, cross the eastern sea, and search the outer gallery with Wren.
-- **Lore:** find stones, letters, and logs across the game, then reread them in the LORE tab. The story follows one timeline:
+- **Lore:** talk to witnesses across the game, then reread their stories in the LORE tab. The story follows one timeline:
   - Twenty winters ago, the moon-mage Morwen lost her daughter Lys in the Long Winter. She tried to pull the moon down to make one that never wanes, and the moon cracked. The biggest shard fell in the Hollow (the Moonfall), and Aldric's Silver Watch sealed it away.
   - Twelve winters ago, in the fever winter, the Black Tide drowned Gloamhold. The Pale Court took the city's moon-readers alive, including Rowan's mother Seren.
   - A week before the game starts, goblins led by Grukk dug up the Hollow shard and sold it to the Pale Court's riders. Without the barrow bell to quiet the shard, the wolves in the hills began to walk upright.

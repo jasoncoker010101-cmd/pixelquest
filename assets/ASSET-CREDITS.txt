@@ -101,3 +101,7 @@ Title music (assets/audio/music):
 
 Depths creatures (assets/depths):
 - Ansimuz, Legacy Collection (CC0), from assets/Legacy Collection.zip: Gothicvania Church acolyte, ghost (barrow shade), fire-breathing fiend, drowned, eye demon (gazer), and the Gothicvania dragon (Ignaroth). Goblin brutes, cutthroats, and rot shrooms are tinted versions of the existing goblin and mushroom sprites.
+
+Frostglass Ridge (assets/frost):
+- Admurin, Mega Admurin's Freebies: https://admurin.itch.io/mega-admurins-freebies
+  Pengu boss, Winter Canines and Snowy Mountains parallax. Selected art adapted for use in PixelQuest; not licensed for redistribution as standalone assets.

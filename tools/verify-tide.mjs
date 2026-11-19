@@ -18,7 +18,13 @@ const checks = `
     place(scene, x) { platformScene = scene; sidePlayer.x = x; sidePlayer.onGround = true; loadSceneMobs(scene); },
     closeDialogue() { const done = dialogue.onDone; dialogue = null; if (done) done(); },
     stash: (key, n) => { inventory[key] = n; }, reveal: id => addLore(id), get: () => ({ story, inventory, equipment, tide, panel, tideArena, tideFishing, sideMobs }),
-    down: () => keys.add('s'), completeWave: () => { for (const m of tideArena.mobs) m.dead = true; }
+    down: () => keys.add('s'), completeWave: () => { for (const m of tideArena.mobs) m.dead = true; },
+    interact: () => nearbyInteraction(),
+    defeat: type => defeatMob(sideMobs.find(m => m.type === type), 1),
+    music: desiredMusic, startAmbush: startNickAmbush,
+    stepAmbush: updateNickAmbush, health: () => stats.health, boss: theBoss,
+    ring: key => ringFerryBell(BELLS.find(b => b.key === key)),
+    clearControls: clearHeldInput, currentWeapon
   };
 `;
 new vm.Script(source.replace(marker, checks + marker)).runInNewContext(runtime);
@@ -102,3 +108,83 @@ for (const outcome of ['shutter', 'homeward']) {
   assert.equal(q.tideSave().ending, outcome);
 }
 console.log('Salt Coast regression checks passed: legacy saves, temper/repair, mastery, armor set, cooking, fishing, treasure, arena and both endings.');
+
+q.applySave({ ...legacy, story: { chapterDone: true, ch2Started: true, metWren: true, pages: ['watch'] } });
+q.clearControls();
+q.place('pass', 1971);
+assert.match(q.interact().label, /WORK ORDER/);
+q.interact().act(); q.closeDialogue();
+assert.equal(q.get().story.seamOrder, true);
+q.place('cinder', 1255);
+q.interact().act();
+assert.equal(q.getSaveData().platformScene, 'seam');
+assert.equal(q.get().story.seamSeen, true);
+q.place('seam', 245); q.interact().act();
+assert.ok(q.get().story.fires.includes('seam'));
+q.place('seam', 1052); q.interact().act();
+assert.equal(q.get().inventory.seamore, 0);
+q.defeat('seamFiend');
+q.interact().act();
+assert.equal(q.get().inventory.seamore, 1);
+assert.equal(q.interact(), null);
+q.applySave(q.getSaveData());
+q.place('seam', 1052);
+assert.ok(!q.get().sideMobs.some(m => m.type === 'seamFiend'));
+assert.equal(q.interact(), null);
+q.place('pass', 1971);
+const beforePay = q.get().inventory.coins;
+q.interact().act();
+assert.equal(q.get().inventory.coins, beforePay + 24);
+q.interact().act(); q.closeDialogue();
+assert.equal(q.get().inventory.coins, beforePay + 24);
+
+q.place('pass', 1750);
+assert.match(q.interact().label, /VI.*FORGE/);
+q.interact().act();
+for (let i = 0; i < 3; i++) q.tideKey('arrowdown');
+q.tideKey('e'); q.tideKey('e');
+assert.equal(q.get().inventory.seamore, 1, 'A failed recipe must not spend other materials');
+assert.equal(q.get().inventory.coins, beforePay + 24);
+q.tideKey('escape');
+q.place('pass', 2070);
+q.startAmbush(); const musicStart = q.music().bossIntro;
+q.stepAmbush(3.8);
+assert.ok(q.music().bossIntro > musicStart);
+q.stepAmbush(1.4);
+assert.equal(q.health(), 1);
+q.stepAmbush(3.4);
+assert.equal(q.health(), 1);
+assert.equal(q.get().story.nickAmbushed, true);
+assert.equal(q.getSaveData().sideX, 1917);
+q.applySave(q.getSaveData());
+assert.equal(q.health(), 1);
+q.place('pass', 2094); q.interact().act();
+assert.equal(q.getSaveData().platformScene, 'frost');
+assert.equal(q.boss().type, 'nick');
+q.defeat('nick');
+assert.equal(q.get().inventory.frostcore, 1);
+assert.equal(q.get().story.passBossDefeated, false, 'Optional boss must not complete Chapter 2');
+q.place('pass', 1750); q.interact().act();
+for (let i = 0; i < 3; i++) q.tideKey('arrowdown');
+q.tideKey('e'); q.tideKey('e');
+assert.equal(q.currentWeapon(), 'frostedge');
+assert.equal(q.get().inventory.seamore, 0);
+assert.equal(q.get().inventory.frostcore, 0);
+q.tideKey('e');
+assert.equal(q.get().inventory.frostedge, 1);
+q.tideKey('escape');
+q.applySave(q.getSaveData());
+assert.equal(q.currentWeapon(), 'frostedge');
+assert.ok(q.get().story.pages.includes('watch'), 'Existing journals keep their learned stories');
+
+q.applySave({ ...legacy, story: { ch4Done: false, saltBossDone: true } });
+q.place('harbor', 260);
+assert.match(q.interact().label, /NESSA/); q.interact().act(); q.closeDialogue();
+assert.ok(q.get().story.pages.includes('ferrysong'));
+for (const key of ['shell', 'star', 'anchor']) q.ring(key);
+assert.equal(q.get().story.ferryOpened, true);
+q.place('court', 655); q.interact().act(); q.closeDialogue();
+assert.equal(q.get().story.ch4Done, true);
+q.place('vault', 1960); q.interact().act(); q.closeDialogue();
+assert.ok(q.get().story.pages.includes('wellnames'));
+console.log('Exploration regression checks passed: work order, cave, checkpoint, guarded cache, payout, ambush, save, boss trophy, crafting, and spoken quest clues.');
