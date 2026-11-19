@@ -86,13 +86,16 @@ const Overworld = (() => {
     forest: { name: 'WOODLAND', width: FOREST_SIDE_WIDTH, entry: 72, color: '#ffe3a1' },
     hollow: { name: 'THE HOLLOW', width: HOLLOW_SIDE_WIDTH, entry: 130, color: '#c9a8ff', arena: { left: 2640, right: 3200, trigger: 2700 }, boss: 'ogre', bossX: 3020, bossFlag: 'bossDefeated' },
     pass:   { name: 'ASHEN PASS', width: PASS_SIDE_WIDTH, entry: 90, color: '#ffb48a', arena: { left: 3680, right: 4240, trigger: 3740 }, boss: 'mare', bossX: 4080, bossFlag: 'passBossDefeated' },
-    gloam:  { name: 'GLOAMHOLD', width: GLOAM_SIDE_WIDTH, entry: 90, color: '#8fd8ff', arena: { left: 4080, right: 4640, trigger: 4140 }, boss: 'demon', bossX: 4460, bossFlag: 'gloamBossDefeated' }
+    gloam:  { name: 'GLOAMHOLD', width: GLOAM_SIDE_WIDTH, entry: 90, color: '#8fd8ff', arena: { left: 4080, right: 4640, trigger: 4140 }, boss: 'demon', bossX: 4460, bossFlag: 'gloamBossDefeated' },
+    harbor: { name: 'LANTERN QUAY', width: 920, entry: 66, color: '#ffe1a1', peaceful: true, plats: [{ x: 0, y: SIDE_GROUND_Y, w: 920, h: 44 }] },
+    court: { name: 'THE PALE COURT', width: 846, entry: 65, color: '#b8e5d0', peaceful: true, plats: [{ x: 0, y: SIDE_GROUND_Y, w: 846, h: 44 }] }
   };
   // Rest points (also fast-travel points on the world map).
   const FIRES = [
     { id: 'camp', scene: 'forest', x: 3700, name: "Bram's Camp" },
     { id: 'lookout', scene: 'pass', x: 1900, name: "Wren's Lookout" },
-    { id: 'gate', scene: 'gloam', x: 2240, name: 'Gloamhold Gate' }
+    { id: 'gate', scene: 'gloam', x: 2240, name: 'Gloamhold Gate' },
+    { id: 'quay', scene: 'harbor', x: 177, name: 'Lantern Quay' }
   ];
   function region() { return REGIONS[platformScene] || REGIONS.forest; }
   // The live arena follows the current region (kept as one object so older code keeps working).
@@ -176,7 +179,8 @@ const Overworld = (() => {
   // Story flags that persist in the save slot.
   const STORY_DEFAULTS = { campReached: false, hollowEntered: false, hollowSeen: false, metBram: false, rested: false, bossStarted: false, bossDefeated: false, dadFound: false, chapterDone: false,
     ch2Started: false, passEntered: false, metWren: false, passBossStarted: false, passBossDefeated: false, ch2Done: false,
-    gloamEntered: false, gloamGate: false, gloamBossStarted: false, gloamBossDefeated: false, ch3Done: false };
+    gloamEntered: false, gloamGate: false, gloamBossStarted: false, gloamBossDefeated: false, ch3Done: false,
+    harborEntered: false, ferryOpened: false, courtEntered: false, ch4Done: false };
   const story = Object.assign({}, STORY_DEFAULTS, { pages: [], fires: [], lastFire: null });
 
   // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
@@ -193,6 +197,7 @@ const Overworld = (() => {
   function finishIntro() {
     introActive = false;
     introTime = INTRO_DURATION;
+    [introWolfHowlAudioOne, introWolfHowlAudioTwo].forEach(a => { a.pause(); a.currentTime = 0; });
     insideHouse = true;
     interiorPlayer.x = KID_SPAWN.x;
     interiorPlayer.y = KID_SPAWN.y;
@@ -207,6 +212,7 @@ const Overworld = (() => {
     keys.clear();
   }
   function introBlip() {
+    if (typeof settings !== 'undefined' && settings.sound === false) return;
     try {
       const AudioCtor = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtor) return;
@@ -236,6 +242,7 @@ const Overworld = (() => {
   introWolfHowlAudioOne.preload = 'auto';
   introWolfHowlAudioTwo.preload = 'auto';
   function playIntroWolfAudio(audio, volume, rate = 1) {
+    if (typeof settings !== 'undefined' && settings.sound === false) return;
     try {
       audio.pause(); audio.currentTime = 0; audio.volume = volume; audio.playbackRate = rate;
       const playback = audio.play();
@@ -1329,6 +1336,7 @@ const Overworld = (() => {
   };
   // Mini knight used in the top-down house once Dad's armor is on (2 cols x 4 rows of 90x45).
   const beastArt = { wrenIdle: loadImg('beasts/wren-idle.png'), wrenRun: loadImg('beasts/wren-run.png') };
+  const coastArt = Object.fromEntries(['coast-sky', 'coast-ridge', 'coast-rock', 'boat-far', 'boat-middle', 'boat-front', 'front', 'court-wall', 'court-tile', 'ferrier'].map(key => [key, loadImg('chapter4/' + key + '.png')]));
   const miniKnight = { idle: loadImg('knight/mini-idle.png'), run: loadImg('knight/mini-run.png') };
   function imgReady(i) { return i && i.complete && i.naturalWidth > 0; }
 
@@ -2600,21 +2608,20 @@ const Overworld = (() => {
   }
 
   function drawTopDownArmorStand(x, baseY) {
-    // Small top-down version of Dad's armor display (the side-view one is far too tall here).
-    ctx.save();
-    ctx.translate(x, baseY);
-    ctx.scale(0.26, 0.26);
-    ctx.translate(-x, -baseY);
-    if (equipment.armor) {
-      // Empty stand once the armor has been taken.
-      ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(x - 29, baseY - 2, 58, 4);
-      ctx.fillStyle = '#4b3027'; ctx.fillRect(x - 3, baseY - 69, 6, 65); ctx.fillRect(x - 18, baseY - 5, 36, 4);
-      ctx.fillRect(x - 22, baseY - 69, 44, 6);
-      ctx.fillStyle = '#80533a'; ctx.fillRect(x - 24, baseY - 3, 48, 3);
-    } else {
-      drawDadArmorStand(x, baseY);
-    }
-    ctx.restore();
+    const p = (c, dx, dy, w, h) => { ctx.fillStyle = c; ctx.fillRect(x + dx, baseY + dy, w, h); };
+    p('rgba(10,8,15,.52)', -11, -3, 22, 5);
+    p('#372b27', -2, -25, 4, 23); p('#82543b', -1, -24, 2, 21);
+    p('#4a3528', -9, -19, 18, 3); p('#a27850', -8, -19, 16, 1);
+    p('#4e3429', -9, -4, 18, 4); p('#b08a5d', -8, -4, 16, 1);
+    if (equipment.armor) return;
+    p('#172532', -5, -29, 10, 12); p('#7092a0', -4, -30, 8, 10);
+    p('#b9d7dd', -3, -30, 5, 2); p('#9ebcc6', -4, -28, 2, 7);
+    p('#121922', -4, -25, 8, 2); p('#cbdad8', -1, -23, 2, 3);
+    p('#192c35', -10, -18, 20, 6); p('#799ca8', -9, -18, 5, 4); p('#587582', 4, -18, 5, 4);
+    p('#b3cbd1', -9, -18, 4, 1); p('#9bbbc7', 5, -18, 4, 1);
+    p('#304852', -5, -17, 10, 10); p('#86a6b0', -4, -16, 7, 6);
+    p('#c8dce0', -3, -15, 4, 2); p('#594132', -5, -9, 10, 2); p('#dea85d', -1, -9, 2, 2);
+    p('#5f7d8c', -5, -7, 3, 4); p('#5f7d8c', 2, -7, 3, 4);
   }
 
   function drawHouseHUD() {
@@ -2924,6 +2931,8 @@ const Overworld = (() => {
     if (bossFight && bossFight.intro) return { bossIntro: 1 };
     if (bossFight && bossFight.active) { const b = theBoss(); return b && b.type === 'mare' ? { bossMare: 1 } : b && b.type === 'demon' ? { bossVael: 1 } : { boss: 1 }; }
     if (platformScene === 'pass') return Math.abs(sidePlayer.x - 1900) < 260 ? { camp: 0.8, pass: 0.4 } : { pass: 1 };
+    if (platformScene === 'harbor') return { camp: 0.7, ambience: 0.35 };
+    if (platformScene === 'court') return { gloam: 0.45 };
     if (platformScene === 'gloam') return Math.abs(sidePlayer.x - 2240) < 220 ? { camp: 0.7, gloam: 0.5 } : { gloam: 1, ambience: 0.25 };
     if (platformScene === 'hollow') {
       if (story.chapterDone) return { camp: 1 };
@@ -4587,7 +4596,12 @@ const Overworld = (() => {
     if (T.ai === 'demon' && m.st !== 'breath') return [A.idle, Math.floor(m.walk) % A.idle[1]];
     if (m.blockTime > 0 && A.block) return [A.block, Math.min(A.block[1] - 1, Math.floor((0.4 - m.blockTime) * 10))];
     if (m.hurtTime > 0 && A.hurt) return [A.hurt, Math.min(A.hurt[1] - 1, Math.floor((0.3 - m.hurtTime) / 0.3 * A.hurt[1]))];
-    if (m.attackTime > 0) { const n = A.attack[1]; return [A.attack, Math.min(n - 1, Math.floor((1 - m.attackTime / m.atkLen) * n))]; }
+    if (m.attackTime > 0) {
+      const n = A.attack[1], t = 1 - m.attackTime / m.atkLen;
+      // Show the raised hammer before contact. Frame five is the impact, not the wind-up.
+      const f = m.type === 'skarn' ? (t < T.hit[0] ? t / T.hit[0] * 5 : 5 + (t - T.hit[0]) / (1 - T.hit[0]) * 7) : t * n;
+      return [A.attack, clamp(Math.floor(f), 0, n - 1)];
+    }
     if (m.moving && !m.dormant) { const an = A.move; return [an, Math.floor(m.walk * an[2] / 14) % an[1]]; }
     return [A.idle, Math.floor(time * A.idle[2]) % A.idle[1]];
   }
@@ -4616,6 +4630,7 @@ const Overworld = (() => {
     if (flip) ctx.scale(-1, 1);
     if (squash !== 1) ctx.scale(1 + (1 - squash) * 0.4, squash);
     ctx.drawImage(img, frame * T.fw, 0, T.fw, T.fh, -T.ax * sc, -T.ay * sc, w, h);
+    if (m.type === 'skarn' && m.enraged && !m.dead) drawSkarnMask(anim[0], frame, T);
     if (m.flash > 0 || (m.tele && Math.floor(time * 14) % 2)) {
       mobFlashCanvas.width = T.fw; mobFlashCanvas.height = T.fh;
       mobFlashCtx.clearRect(0, 0, T.fw, T.fh);
@@ -4629,13 +4644,31 @@ const Overworld = (() => {
     ctx.restore();
   }
 
+  // Eye positions in the original hand-animated poses, relative to each source cell.
+  const SKARN_EYES = {
+    'skarn-idle': [[84,50],[84,50],[82,52],[82,52],[84,50],[84,50],[86,52],[86,52]],
+    'skarn-walk': [[84,50],[86,52],[86,52],[90,52],[94,52],[92,50]],
+    'skarn-attack': [[84,50],[82,52],[86,52],[86,52],[84,52],[84,52],[84,52],[84,52],[84,52],[86,52],[86,52],[84,50]],
+    'skarn-hurt': [[82,52],[82,52],[82,52],[82,52]]
+  };
+  function drawSkarnMask(anim, frame, T) {
+    const eye = SKARN_EYES[anim]?.[frame];
+    if (!eye) return;
+    const x = (eye[0] - T.ax) * T.scale, y = (eye[1] - T.ay) * T.scale;
+    const p = (c, dx, dy, w, h) => { ctx.fillStyle = c; ctx.fillRect(Math.round(x) + dx, Math.round(y) + dy, w, h); };
+    p('#271b24', -15, -12, 17, 19); p('#291d26', -12, -8, 19, 20);
+    p('#a67f60', -13, -9, 14, 17); p('#d4b791', -10, -7, 13, 15); p('#f8e5bd', -9, -7, 10, 3);
+    p('#bba080', -9, -15, 4, 7); p('#e9d3ad', -12, -18, 3, 7); p('#dcc39f', 0, -12, 3, 5);
+    p('#26191d', -2, -2, 6, 4); p('#ff9f61', 0, -1, 2, 2); p('#80514b', -2, 5, 5, 4);
+    p('#f3dfb9', -7, 7, 3, 4); p('#ecd4a9', 2, 7, 2, 3);
+  }
+
   // Original sprites for the three champions that used to borrow enemy sheets.
   // Draw on a small backing canvas so outlines stay sharp at the game's pixel scale.
   const championCanvas = document.createElement('canvas');
   championCanvas.width = 64; championCanvas.height = 60;
   const championInk = championCanvas.getContext('2d');
   const CHAMPION_COLORS = {
-    skarn: ['#160e16', '#57352f', '#7b4b3a', '#596238', '#8d9760', '#493e4e', '#a88578', '#f0b36e'],
     mourn: ['#101025', '#27263e', '#3e395a', '#454961', '#6b7a97', '#7d81a3', '#b2bad2', '#d0eeff'],
     tidemaw: ['#0d1a22', '#1e3540', '#2c5357', '#3f6259', '#678e77', '#667462', '#9da585', '#a0f8dc']
   };
@@ -4650,25 +4683,7 @@ const Overworld = (() => {
     };
     // Common coordinate system only: each body, head and carried object is distinct.
     g.save(); g.translate(0, bob);
-    if (id === 'skarn') {
-      shape(0, [[17,31],[44,30],[49,40],[46,51],[43,59],[31,59],[29,50],[23,58],[11,58],[11,53],[16,46]]);
-      box(1, 14 + stride, 48, 10, 8); box(2, 32 - stride, 48, 10, 9);
-      shape(1, [[19,28],[35,26],[46,32],[46,41],[37,49],[19,46],[14,41]]);
-      shape(2, [[19,29],[38,25],[44,34],[41,39],[18,36],[14,33]]);
-      box(0, 17, 41, 27, 4); box(7, 26, 41, 5, 3);
-      shape(0, [[11,13],[18,16],[23,11],[38,12],[46,9],[43,20],[39,25],[36,32],[20,32],[14,26]]);
-      shape(3, [[13,16],[20,20],[23,14],[37,14],[43,12],[38,21],[36,28],[21,29],[16,25]]);
-      shape(4, [[18,19],[23,15],[36,16],[36,22],[30,26],[21,23]]);
-      box(0, 18, 21, 4, 2); box(0, 28, 21, 4, 2); box(7, 19, 21, 2, 1); box(7, 29, 21, 2, 1);
-      box(0, 17, 26, 13, 2); box(6, 17, 24, 2, 4); box(6, 26, 25, 2, 4);
-      box(5, 22, 11, 15, 6); box(6, 24, 10, 3, 5); box(7, 31, 10, 2, 4);
-      g.save(); g.translate(strike ? -5 : 0, wind);
-      box(0, 7, 31, 4, 22); box(2, 8, 34, 2, 18);
-      shape(0, [[3,21],[16,20],[16,33],[8,39],[3,36]]);
-      shape(5, [[4,22],[15,21],[15,32],[8,37],[4,34]]);
-      shape(6, [[4,22],[7,22],[7,36],[4,34]]); box(7, 11, 25, 2, 2);
-      box(3, 12, 37, 9, 6); box(4, 10, 38, 5, 4); g.restore();
-    } else if (id === 'mourn') {
+    if (id === 'mourn') {
       shape(0, [[20,19],[37,18],[47,27],[48,42],[52,59],[42,57],[37,60],[24,56],[15,60],[11,56],[15,40],[13,31]]);
       shape(1, [[19,23],[35,22],[45,27],[45,43],[49,56],[40,54],[37,57],[26,53],[16,57],[15,54]]);
       shape(2, [[21,26],[33,30],[31,54],[25,50],[18,55],[19,44]]);
@@ -4683,6 +4698,10 @@ const Overworld = (() => {
       shape(4, [[8,4],[13,6],[13,12],[9,15],[5,13],[4,8]]);
       box(0, 6, 7, 5, 5); box(7, 7, 8, 3, 3); box(6, 6, 13, 6, 2);
       box(4, 8, 31, 9, 5); box(6, 8, 31, 2, 3); g.restore();
+      // Engraved mail, ragged hem, and a cold light leaking through the visor.
+      [[25,36],[30,38],[35,39],[27,42],[32,44],[37,45],[24,47]].forEach(([x,y]) => { box(3,x,y,3,1); box(1,x+2,y+1,2,1); });
+      shape(3, [[16,33],[21,32],[20,43],[15,47],[11,45]]);
+      box(6, 15, 34, 3, 1); box(0, 42, 49, 2, 3); box(0, 30 + stride, 53, 2, 3);
       box(5, 38, 42, 3, 7); box(6, 37, 47, 5, 2);
     } else {
       shape(0, [[11,26],[20,18],[42,17],[47,24],[52,35],[50,48],[54,55],[47,59],[36,56],[28,59],[19,55],[10,59],[5,54],[11,47],[7,39]]);
@@ -4699,6 +4718,12 @@ const Overworld = (() => {
       shape(5, [[6,38],[13,38],[15,42],[15,47],[18,51],[18,52],[3,52],[5,47],[5,41]]);
       box(6, 7, 40, 2, 9); box(4, 15, 48, 2, 2); box(7, 6, 52, 9, 1);
       box(0, 9, 54, 4, 2); g.restore();
+      // Encrusted iron and torn sailcloth instead of a second knight silhouette.
+      [[19,25],[37,25],[26,33],[33,35],[25,43],[41,42],[30,48]].forEach(([x,y], i) => {
+        box(1, x, y, 4, 3); box(i % 2 ? 5 : 4, x, y, 3, 2); box(6, x, y, 1, 1);
+      });
+      shape(4, [[47,32],[52,37],[50,45],[54,51],[51,53],[47,47]]);
+      box(7, 25, 21, 1, 1); box(4, 10 + stride, 50, 2, 2);
     }
     if (enrage) { box(7, 27, id === 'tidemaw' ? 15 : 12, 2, 1); box(7, 33, id === 'tidemaw' ? 17 : 16, 1, 2); }
     g.restore();
@@ -4910,11 +4935,14 @@ const Overworld = (() => {
     ctx.fillStyle = '#4b3027'; ctx.fillRect(x - 3, groundY - 69, 6, 65);
     ctx.fillRect(x - 18, groundY - 5, 36, 4);
     ctx.fillStyle = '#80533a'; ctx.fillRect(x - 24, groundY - 3, 48, 3);
+    ctx.fillStyle = '#a4774b'; ctx.fillRect(x - 24, groundY - 68, 48, 4);
+    if (equipment.armor) { ctx.restore(); return; }
     // Helmet and visor.
     ctx.fillStyle = '#202b36'; ctx.fillRect(x - 13, groundY - 91, 26, 23);
     ctx.fillStyle = '#718493'; ctx.fillRect(x - 10, groundY - 88, 20, 17);
     ctx.fillStyle = '#c5d0d3'; ctx.fillRect(x - 8, groundY - 87, 8, 4);
-    ctx.fillStyle = '#26313b'; ctx.fillRect(x - 10, groundY - 77, 20, 4);
+    ctx.fillStyle = '#111a24'; ctx.fillRect(x - 10, groundY - 79, 20, 4);
+    ctx.fillStyle = '#a5bac4'; ctx.fillRect(x - 2, groundY - 75, 4, 6);
     ctx.fillStyle = '#d9bd79'; ctx.fillRect(x - 2, groundY - 91, 4, 3);
     // Chest plate, pauldrons, arm guards and greaves.
     ctx.fillStyle = '#202b36'; ctx.fillRect(x - 19, groundY - 69, 38, 31);
@@ -5138,7 +5166,15 @@ const Overworld = (() => {
     { id: 'queen', kind: 'page', scene: 'gloam', x: 3760, title: 'Of the Pale Queen', where: 'A torn scholar\'s page', hint: 'Deep in the castle quarter.',
       text: "Morwen was not born cruel. She lost a child in the long winter and could not bear the dark. She swore she would make a moon that never wanes, so no mother would ever lose a child to the night again. That is the terrible thing about her. She believes she is saving us." },
     { id: 'seren', kind: 'page', scene: null, x: 0, title: "Seren's Locket", where: 'Found where Vael fell', hint: 'Defeat the Moon-Eater.',
-      text: "Inside the locket is a tiny painting of a baby and a folded note in your mother's hand: \"Rowan, if this ever finds you, I did not leave you. They came for my voice. Listen to the moon at night. I am still singing. I am still here.\"" }
+      text: "Inside the locket is a tiny painting of a baby and a folded note in your mother's hand: \"Rowan, if this ever finds you, I did not leave you. They came for my voice. Listen to the moon at night. I am still singing. I am still here.\"" },
+    { id: 'ferrysong', kind: 'stone', scene: 'harbor', x: 360, title: 'The Night Signal', where: 'Bellpost at Lantern Quay', hint: 'Look beyond the harbor fire.',
+      text: "NIGHT FERRY: Shell first, Star second, Anchor last. Wait for the lantern across the water. Seren put the shell first so the children could remember it." },
+    { id: 'boots', kind: 'page', scene: 'harbor', x: 530, title: 'The Boot List', where: 'Crates on Lantern Quay', hint: 'Search the quay beyond the bellpost.',
+      text: "Two left boots. One little mitten. A tin of buttons, don't put it near the salt. Put the dry blankets on the ferry before the good wine. If Jory asks, there wasn't any good wine.", sign: '- Nessa' },
+    { id: 'lysletter', kind: 'page', scene: 'court', x: 328, title: 'Lys and the Pear Tree', where: 'Bench in the outer gallery', hint: 'Look below the first gallery window.',
+      text: "Mum says the tree won't bear till next year. I tied a bit of ribbon around the branch I want. If a bird takes it, I hope Mum sees where it went. She doesn't look out the window much now.", sign: '- Lys, before the Long Winter' },
+    { id: 'serenledger', kind: 'page', scene: null, x: 0, title: 'The Lower Well Ledger', where: 'Outer gallery of the Pale Court', hint: 'Follow the singing through the gallery.',
+      text: "Seren, moon-reader. Taken alive the night Gloamhold went dark. Twelve years in service. Sent to the Court's lower well three nights ago. Someone crossed out her next shift and wrote, 'Please, not that song again.'" }
   ];
   function addLore(id) {
     if (story.pages.includes(id)) return false;
@@ -5155,11 +5191,25 @@ const Overworld = (() => {
     wren: { name: 'WREN', color: '#ffb48a' },
     ashmane: { name: 'ASHMANE', color: '#8fd8ff' },
     vael: { name: 'VAEL', color: '#b98cff' },
+    nessa: { name: 'NESSA', color: '#ffd891' },
+    register: { name: 'LOWER WELL LEDGER', color: '#c3ddd2' },
     stone: { name: 'RUNE STONE', color: '#b8d8ff' },
     page: { name: "DAD'S JOURNAL", color: '#e8d2a0' }
   };
   function startDialogue(lines, onDone) {
-    dialogue = { lines, i: 0, shown: 0, onDone, t: time };
+    ctx.save();
+    const pages = lines.flatMap(line => {
+      const rows = wrapText(line.text, 239, '8px monospace');
+      const parts = [];
+      for (let i = 0; i < rows.length; i += 4) {
+        const pageRows = rows.slice(i, i + 4);
+        parts.push({ who: line.who, rows: pageRows, text: pageRows.join(' ') });
+      }
+      return parts;
+    });
+    ctx.restore();
+    if (!pages.length) { if (onDone) onDone(); return; }
+    dialogue = { lines: pages, i: 0, shown: 0, onDone, t: time };
     keys.clear(); sideAttackQueued = false; sideJumpQueued = false;
     sidePlayer.atk = null;
   }
@@ -5196,6 +5246,11 @@ const Overworld = (() => {
       if (imgReady(img)) { ctx.translate(x + 40, y); ctx.scale(-1, 1); ctx.drawImage(img, 30, 0, 64, 64, -14, -6, 70, 70); }
     } else if (who === 'wren' && imgReady(beastArt.wrenIdle)) {
       ctx.drawImage(beastArt.wrenIdle, 52, 20, 24, 24, x - 4, y - 4, 48, 48);
+    } else if (who === 'nessa' && imgReady(coastArt.ferrier)) {
+      ctx.drawImage(coastArt.ferrier, 5, 3, 29, 31, x - 2, y - 2, 44, 47);
+    } else if (who === 'skarn') {
+      const T = MOB_TYPES.skarn, img = mobSheet(T, T.anims.idle);
+      if (imgReady(img)) ctx.drawImage(img, 52, 36, 45, 45, x, y, 40, 40);
     } else if (who === 'ashmane') {
       const img = mobSheet(MOB_TYPES.mare, MOB_TYPES.mare.anims.idle);
       if (imgReady(img)) ctx.drawImage(img, 24, 12, 48, 48, x - 4, y - 4, 48, 48);
@@ -5231,29 +5286,27 @@ const Overworld = (() => {
     if (!dialogue) return;
     const line = dialogue.lines[dialogue.i];
     const sp = SPEAKERS[line.who] || SPEAKERS.rowan;
-    const x = 8, y = 166, w = 304, h = 56;
+    const x = 8, y = 157, w = 304, h = 68;
     ctx.save();
     ctx.fillStyle = 'rgba(6,5,10,.94)'; ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = '#d6b477'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
     ctx.strokeStyle = '#5a4535'; ctx.strokeRect(x + 2.5, y + 2.5, w - 5, h - 5);
-    drawPortrait(line.who, x + 7, y + 8);
+    drawPortrait(line.who, x + 8, y + 11);
     ctx.font = 'bold 7px monospace';
     const tw = ctx.measureText(sp.name).width + 10;
     ctx.fillStyle = '#0d0a10'; ctx.fillRect(x + 52, y - 7, tw + 2, 12);
     ctx.fillStyle = sp.color; ctx.fillRect(x + 53, y - 6, tw, 10);
     ctx.fillStyle = '#140f16'; ctx.textAlign = 'left'; ctx.fillText(sp.name, x + 58, y + 2);
-    const lines = wrapText(line.text, w - 66, '7px monospace');
     let left = Math.floor(dialogue.shown);
-    lines.slice(0, 4).forEach((ln, i) => {
+    line.rows.forEach((ln, i) => {
       const part = ln.slice(0, Math.max(0, left)); left -= ln.length + 1;
-      invText(part, x + 54, y + 15 + i * 10, '#f3e7c9', '7px monospace');
+      invText(part, x + 55, y + 14 + i * 11, '#f3e7c9', '8px monospace');
     });
-    if (dialogue.shown >= line.text.length && Math.floor(time * 3) % 2) {
-      ctx.fillStyle = '#f2c14e';
-      const ax = x + w - 12, ay = y + h - 9;
-      ctx.fillRect(ax, ay, 5, 1); ctx.fillRect(ax + 1, ay + 1, 3, 1); ctx.fillRect(ax + 2, ay + 2, 1, 1);
-    }
-    invText((dialogue.i + 1) + '/' + dialogue.lines.length, x + w - 18, y + h - 5, '#6f6670', '5px monospace', 'right');
+    ctx.fillStyle = '#4b3c38'; ctx.fillRect(x + 7, y + 53, w - 14, 1);
+    invText((dialogue.i + 1) + ' / ' + dialogue.lines.length, x + 10, y + 63, '#ae9dad', '7px monospace');
+    const ready = dialogue.shown >= line.text.length;
+    const action = !ready ? 'SHOW TEXT' : dialogue.i === dialogue.lines.length - 1 ? 'CLOSE' : 'CONTINUE';
+    invText(K('E') + ' / TAP  ' + action, x + w - 10, y + 63, ready ? '#ffe19c' : '#c6b6af', 'bold 7px monospace', 'right');
     ctx.restore();
   }
 
@@ -6150,7 +6203,8 @@ const Overworld = (() => {
   const CHAPTERS = {
     1: { title: 'THE HOLLOW KING', color: '#ffe3a1', tease: 'The shard is still out there...', next: 'NEXT: TALK TO DAD IN THE HOLLOW' },
     2: { title: 'THE ASHEN PASS', color: '#ffb48a', tease: 'The riders went to the drowned city...', next: 'NEXT: CHAPTER 3 - GLOAMHOLD' },
-    3: { title: 'THE MOON-EATER', color: '#8fd8ff', tease: 'Mother is alive. The Pale Court has her.', next: 'CHAPTER 4: THE PALE COURT - COMING SOON' }
+    3: { title: 'THE MOON-EATER', color: '#8fd8ff', tease: 'Mother is alive. The Pale Court has her.', next: 'NEXT: FOLLOW THE EAST ROAD TO LANTERN QUAY' },
+    4: { title: 'THE PALE COURT', color: '#b8e5d0', tease: 'Somebody is singing beneath the gallery.', next: 'THE LOWER WELL REMAINS SEALED' }
   };
   let chapterShown = 1;
   function openChapterPanel(n) { chapterShown = n; openPanel('chapter'); sfx('victory', 0.6); }
@@ -6181,7 +6235,7 @@ const Overworld = (() => {
     ctx.globalAlpha = Math.min(1, Math.max(0, (t - 1.2) * 2));
     invText(C.tease, 160, 192, '#c9a8ff', '7px monospace', 'center');
     invText(C.next, 160, 204, '#8f8478', 'bold 6px monospace', 'center');
-    if (t > 1.5 && Math.floor(time * 2) % 2) invText(inputMode === 'pad' ? 'PRESS ✕ TO CONTINUE' : 'PRESS E TO CONTINUE', 160, 222, '#f3e7c9', '6px monospace', 'center');
+    if (t > 1.5) invText(K('E') + ' / TAP TO CONTINUE', 160, 222, '#f3e7c9', '7px monospace', 'center');
     ctx.restore();
   }
 
@@ -6284,7 +6338,7 @@ const Overworld = (() => {
     ogre: ['THE BROKEN CROWN', "Don't touch my crown!", '#a45987', '#ffbcaa', [[-27,-79,-7,35],[-10,-95,2,39],[1,-89,17,30]], [[-18,-49,10,5],[7,-33,6,3]]],
     mare: ['THE UNBRIDLED', 'I never needed reins.', '#8e48a5', '#ffe3aa', [[-30,-73,2,42],[-17,-61,13,37],[5,-45,32,30],[18,-35,44,25]], [[-20,-36,8,3],[-12,-34,4,5]]],
     demon: ['THE HUNGER', "Still here? Good. I'm hungry.", '#4757a6', '#a5edff', [[-12,-72,-79,54],[-6,-59,-58,35],[9,-75,76,53],[5,-56,56,34]], [[-37,-44,10,3],[-28,-42,4,5],[21,-34,6,2]]],
-    skarn: ['THE BONE MASK', 'You broke my good mask.', '#825340', '#f2d6a4', [[-26,-79,-15,37],[11,-71,24,29]], [[-18,-58,21,8],[-15,-50,15,4],[-16,-55,4,2,1],[-4,-55,5,2,1]]],
+    skarn: ['THE BONE MASK', "Fine. I'll wear hers.", '#825340', '#f2d6a4', [], []],
     mourn: ['THE LAST WATCH', 'I can hear them again.', '#536699', '#c9e1ff', [[-24,-96,-33,28],[-10,-106,-8,35],[5,-93,16,31],[20,-53,33,39]], [[-10,-81,11,2],[-10,-37,22,3],[0,-44,2,14]]],
     wyrm: ['THE EMBER STAR', "Get back. It's waking up.", '#be442a', '#ffdc7a', [[-34,-81,-50,32],[-20,-93,-29,43],[-7,-87,-3,36],[7,-73,18,47],[21,-61,36,32]], [[-28,-37,11,4],[-25,-33,8,3],[-20,-30,4,5]]],
     tidemaw: ['THE CRACKED BELL', 'No. Not the bell.', '#386e64', '#c3f8cb', [[-31,-76,-29,65],[27,-71,39,61],[-19,-91,-3,33]], [[-20,-60,6,3],[-16,-57,4,6],[-12,-54,7,2],[-7,-52,2,7],[-32,-36,7,3],[26,-29,7,3]]]
@@ -6769,7 +6823,10 @@ const Overworld = (() => {
       if (x > PASS_SIDE_WIDTH - 70 && story.passBossDefeated) return { label: 'ENTER GLOAMHOLD', act: () => enterRegion('gloam', REGIONS.gloam.entry, 1) };
     } else if (platformScene === 'gloam') {
       if (x < 70) return { label: 'BACK TO THE ASHEN PASS', act: () => enterRegion('pass', PASS_SIDE_WIDTH - 90, -1) };
+      if (story.ch3Done && x > GLOAM_SIDE_WIDTH - 76) return { label: 'WALK TO LANTERN QUAY', act: () => enterRegion('harbor', REGIONS.harbor.entry, 1) };
       if (wren && wren.state === 'idle' && Math.abs(x - wren.x) < 30) return { label: 'TALK TO WREN', act: talkToWren };
+    } else if (region().peaceful) {
+      return coastInteraction(x);
     }
     return null;
   }
@@ -6777,12 +6834,87 @@ const Overworld = (() => {
     const first = addLore(l.id);
     sfx(l.kind === 'stone' ? 'magic' : 'bookOpen');
     if (first) { notice = 'Lore found: ' + l.title + '  (' + story.pages.length + '/' + LORE.length + ')'; noticeUntil = time + 2.5; }
-    const parts = wrapText(l.text, 238, '7px monospace');
-    const chunks = [];
-    for (let i = 0; i < parts.length; i += 4) chunks.push(parts.slice(i, i + 4).join(' '));
-    const lines = chunks.map(t => ({ who: l.kind === 'stone' ? 'stone' : 'page', text: t }));
-    if (l.sign) lines[lines.length - 1].text += '  ' + l.sign;
-    startDialogue(lines, () => { if (onSave) onSave(getSaveData()); });
+    startDialogue([{ who: l.kind === 'stone' ? 'stone' : 'page', text: l.text + (l.sign ? '\n' + l.sign : '') }],
+      () => { if (onSave) onSave(getSaveData()); });
+  }
+  // Chapter 4: the ferry and the outer gallery. Correct signals unlock the route
+  // permanently; an unfinished signal is local to the current visit/save run.
+  const QUAY = { nessa: 260, wren: 442, dock: 853 };
+  const BELLS = [{ key: 'anchor', x: 610, pitch: 0.78 }, { key: 'shell', x: 679, pitch: 1.16 }, { key: 'star', x: 748, pitch: 1.45 }];
+  const FERRY_SIGNAL = ['shell', 'star', 'anchor'];
+  let bellCount = 0, bellFeedback = null, bellAnimation = null;
+  function ringFerryBell(bell) {
+    sfx('gem', 0.85, bell.pitch);
+    bellAnimation = { key: bell.key, until: time + 0.72 };
+    if (story.ferryOpened) return;
+    if (FERRY_SIGNAL[bellCount] !== bell.key) {
+      bellCount = bell.key === FERRY_SIGNAL[0] ? 1 : 0;
+      bellFeedback = { text: bellCount ? 'Signal restarted. 1 of 3.' : 'No answer. Start the signal again.', until: time + 3.2, error: true };
+      return;
+    }
+    bellCount++;
+    if (bellCount < FERRY_SIGNAL.length) {
+      bellFeedback = { text: 'Bell signal: ' + bellCount + ' of 3', until: time + 2.1 };
+      return;
+    }
+    story.ferryOpened = true;
+    bellFeedback = { text: 'A light answers. Head to the dock.', until: time + 4 };
+    sfx('ready', 0.6);
+    if (onSave) onSave(getSaveData());
+  }
+  function speakAtCoast(...lines) {
+    startDialogue(lines.map(([who, text]) => ({ who, text })));
+  }
+  function coastInteraction(x) {
+    const at = (point, distance = 25) => Math.abs(x - point) < distance;
+    if (platformScene === 'harbor') {
+      if (x < 57) return { label: 'BACK TO GLOAMHOLD', act: () => enterRegion('gloam', GLOAM_SIDE_WIDTH - 90, -1) };
+      if (at(QUAY.nessa)) return { label: 'TALK TO NESSA', act: () => story.ferryOpened
+        ? speakAtCoast(['nessa', "There, see that light? That's Jory. Tell him he still owes me a left boot."])
+        : speakAtCoast(['nessa', "Careful of that rope. It's the last good one I've got."],
+          ['rowan', "Do you still cross to the Court? I'm looking for Seren."],
+          ['nessa', "Seren? She used to help the children sleep on the crossing. Sang until she lost her voice."],
+          ['nessa', "Jory's out there now. Ring the night signal and he'll bring the skiff. The order's on the stone past my stall."]) };
+      if (at(QUAY.wren)) return { label: 'SIT WITH WREN', act: () => speakAtCoast(
+        ['wren', "My mother couldn't swim. She got seasick standing on this pier."],
+        ['rowan', "Mine used to carry pebbles in her coat. There was always something to throw in the water."],
+        ['wren', "Grab two while we're here. I'll keep one."]) };
+      const bell = BELLS.find(b => at(b.x, 23));
+      if (bell) return { label: 'RING ' + bell.key.toUpperCase(), act: () => ringFerryBell(bell) };
+      if (x > QUAY.dock - 24) return story.ferryOpened
+        ? { label: 'BOARD THE FERRY', act: () => enterRegion('court', REGIONS.court.entry, 1) }
+        : { label: 'CHECK THE DOCK', act: () => speakAtCoast(['rowan', "I can just make out a skiff. The ferryman's waiting for a signal."]) };
+    } else if (platformScene === 'court') {
+      if (x < 56) return { label: 'FERRY TO LANTERN QUAY', act: () => enterRegion('harbor', QUAY.dock - 30, -1) };
+      if (at(200)) return { label: 'INSPECT THE PEAR TREE', act: () => speakAtCoast(
+        ['rowan', "Somebody brings water up here. The soil's still damp."],
+        ['wren', "And somebody keeps tying ribbons on it. That bottom one looks older than either of us."]) };
+      if (at(490)) return { label: 'LISTEN WITH WREN', act: () => speakAtCoast(
+        ['wren', "Hold still a second. I thought I heard a voice."],
+        ['rowan', "I had a music box that played that tune. Dad always closed it before the end."],
+        ['wren', "Try the watch desk. I'll listen here."]) };
+      if (at(655, 30)) return { label: story.ch4Done ? 'REREAD THE LEDGER' : 'OPEN THE LEDGER', act: readMoonwellLedger };
+      if (x > 783) return { label: 'INSPECT THE SEALED DOOR', act: () => speakAtCoast(
+        ['rowan', "No handle on this side. There's warm air coming through the crack."]) };
+    }
+    return null;
+  }
+  function readMoonwellLedger() {
+    const entry = LORE.find(l => l.id === 'serenledger');
+    if (story.ch4Done) { readLore(entry); return; }
+    sfx('bookOpen');
+    startDialogue([
+      { who: 'register', text: entry.text },
+      { who: 'rowan', text: "That's her writing. The way she makes the S." },
+      { who: 'wren', text: "I heard her again. Below us, not down the hall." },
+      { who: 'rowan', text: "Mum? ...It's Rowan." },
+      { who: 'wren', text: "Here. Sit down for a minute. I'll keep watch." }
+    ], () => {
+      addLore(entry.id); story.ch4Done = true;
+      gainXp(100);
+      if (onSave) onSave(getSaveData());
+      openChapterPanel(4);
+    });
   }
   const CAMP = { start: 3590, tent: 3625, fire: 3700, log: 3738, bram: 3800, cart: 3842, sign: 3912 };
   function restAtFire(fire) {
@@ -6804,7 +6936,8 @@ const Overworld = (() => {
     if (onSave) onSave(getSaveData());
   }
   let restFlash = -10;
-  const REGION_SUBS = { forest: 'Edge of the woodland', hollow: 'Where the moon fell', pass: 'Chapter 2 - The road of embers', gloam: 'Chapter 3 - The drowned city' };
+  const REGION_SUBS = { forest: 'Edge of the woodland', hollow: 'Where the moon fell', pass: 'Chapter 2 - The road of embers', gloam: 'Chapter 3 - The drowned city',
+    harbor: 'Chapter 4 - The night ferry', court: 'Chapter 4 - The outer gallery' };
   // ===========================================================================
   // DEPTHS & WILDS: optional side areas off every chapter, each with its own
   // champion, plus things to do along the road: moon shrines, hunt bounties,
@@ -6837,9 +6970,10 @@ const Overworld = (() => {
                 fw: 48, fh: 48, ax: 24, ay: 34, scale: 1.0, bodyH: 26, width: 20, fly: 56, dive: true, hp: 6, speed: 100, chase: 250, reach: 40, dmg: 4,
                 atkTime: 0.7, hit: [0.4, 0.8], cd: [1.3, 1.9], xp: 18, coins: [2, 5], drops: [['eye', 0.5]], voice: 'eye' },
     // ---- Champions: one waits at the end of each side area ----
-    skarn:    { name: 'Skarn, the Mire Chief', boss: true, champion: true, art: 'skarn', drawH: 82,
-                bodyH: 66, width: 34, hp: 52, speed: 60, chase: 700, reach: 64, dmg: 6,
-                atkTime: 1.15, hit: [0.63, 0.85], cd: [1.8, 2.1], xp: 150, coins: [30, 40], drops: [['cleaver', 1], ['tonic', 1]], voice: 'goblin', armor: true, short: 'Skarn',
+    skarn:    { name: 'Skarn, the Mire Chief', boss: true, champion: true, src: 'warden/',
+                anims: { idle: ['skarn-idle', 8, 7], move: ['skarn-walk', 6, 11], attack: ['skarn-attack', 12], hurt: ['skarn-hurt', 4], death: ['skarn-death', 9, 8] },
+                fw: 156, fh: 106, ax: 67, ay: 104, scale: 1.08, bodyH: 62, width: 34, hp: 52, speed: 60, chase: 700, reach: 72, dmg: 6,
+                atkTime: 1.25, hit: [0.61, 0.74], cd: [1.95, 2.25], xp: 150, coins: [30, 40], drops: [['cleaver', 1], ['tonic', 1]], voice: 'goblin', armor: true, short: 'Skarn',
                 enrageText: 'Skarn whistles. Cutthroats drop from the trees...', summon: 'sneak' },
     mourn:    { name: 'Mourn, the Barrow Warden', boss: true, champion: true, art: 'mourn', drawH: 86,
                 bodyH: 84, width: 32, hp: 68, speed: 45, chase: 700, reach: 68, dmg: 6, volley: 2, shot: 'moon',
@@ -6880,7 +7014,8 @@ const Overworld = (() => {
   }
 
   // ---- The four side areas ----
-  const DEPTH_FLAGS = { mireChamp: false, mireStarted: false, barrowChamp: false, barrowStarted: false, cinderChamp: false, cinderStarted: false, archiveChamp: false, archiveStarted: false, peddlerMet: false };
+  const DEPTH_FLAGS = { mireChamp: false, mireStarted: false, mireChampSeen: false, barrowChamp: false, barrowStarted: false, barrowChampSeen: false,
+    cinderChamp: false, cinderStarted: false, cinderChampSeen: false, archiveChamp: false, archiveStarted: false, archiveChampSeen: false, peddlerMet: false };
   Object.assign(STORY_DEFAULTS, DEPTH_FLAGS); Object.keys(DEPTH_FLAGS).forEach(k => { if (!(k in story)) story[k] = false; });
   const DEPTH_W = 2400, DEPTH_ARENA = { left: 1800, right: 2360, trigger: 1860 };
   Object.assign(REGIONS, {
@@ -6923,7 +7058,7 @@ const Overworld = (() => {
         { who: 'skarn', text: story.bossDefeated ? "You got rid of Grukk? Good. I never liked him." : "If Grukk sent you, tell him he can dig up his own swamp." },
         { who: 'rowan', text: "I came because you're raiding the village road." },
         { who: 'skarn', text: "We're leaving. Have you looked up lately? I’m taking what I can carry. Starting with that helmet." }],
-      retry: [{ who: 'skarn', text: 'Back for more mud?' }], tip: 'His cleaver sends shockwaves. Jump them!', flag: 'mireStarted' },
+      retry: [{ who: 'skarn', text: 'Back for more mud?' }], tip: 'Jump when the hammer hits the ground.', flag: 'mireStarted' },
     mourn: { first: [
         { who: 'mourn', text: "Don't take another step. They've dug up enough graves." },
         { who: 'rowan', text: "I'm not with them. Aldric was my father. Is my father." },
@@ -7110,7 +7245,7 @@ const Overworld = (() => {
   // ---- Tess, the wandering peddler ----
   function rollPeddler(scene) {
     depths.peddler = null;
-    const R = REGIONS[scene]; if (!R || R.side) return;
+    const R = REGIONS[scene]; if (!R || R.side || R.peaceful) return;
     if (Math.random() > 0.38) return;
     const lo = 420, hi = (R.arena ? R.arena.left : R.width) - 400;
     let x = lo + Math.random() * (hi - lo);
@@ -7199,7 +7334,7 @@ const Overworld = (() => {
   // ---- Ambushes ----
   function rollAmbush(scene) {
     depths.ambush = null;
-    const R = REGIONS[scene]; if (!R || scene === 'forest' && !equipment.armor) return;
+    const R = REGIONS[scene]; if (!R || R.peaceful || scene === 'forest' && !equipment.armor) return;
     if (Math.random() > (R.side ? 0.45 : 0.3)) return;
     const hi = (R.arena ? R.arena.left : R.width - 400) - 260;
     const x = 500 + Math.random() * Math.max(100, hi - 500);
@@ -7288,7 +7423,7 @@ const Overworld = (() => {
     if (R && R.side && !story[R.bossFlag + 'Seen']) {
       story[R.bossFlag + 'Seen'] = true;
       const intro = {
-        mire: [{ who: 'rowan', text: "A trail into the marsh. Goblin tracks everywhere... and something big dragging a blade." }],
+        mire: [{ who: 'rowan', text: "Goblin tracks. And one square dent every few feet. What are they carrying?" }],
         barrow: [{ who: 'rowan', text: 'Graves. Hundreds of them. Every stone has the silver tree of the Watch on it.' }, { who: 'rowan', text: "Someone has been digging them up." }],
         cinder: [{ who: 'rowan', text: 'An old caravan mine. The air is hot enough to burn... and something down there is breathing.' }],
         archive: [{ who: 'rowan', text: story.ch3Done ? "Maybe there's something here about where they took Mother." : "The old Watch archive. Let's see what the flood left behind." }]
@@ -7624,13 +7759,18 @@ const Overworld = (() => {
     sideCameraX = clamp(sidePlayer.x - canvas.width * 0.43, 0, Math.max(0, sideWorldWidth() - canvas.width));
     pickups.length = 0; bossWaves.length = 0; mobShots.length = 0; groundFires.length = 0; playerWaves.length = 0; ambient.length = 0;
     bloodDrops.length = 0;
-    if (from !== scene) maybeBloodMoon(questChapter() > 1 || story.bossDefeated ? 0.12 : 0.06);
+    if (from !== scene) {
+      bellCount = 0; bellFeedback = bellAnimation = null;
+      if (!region().peaceful) maybeBloodMoon(questChapter() > 1 || story.bossDefeated ? 0.12 : 0.06);
+    }
     loadSceneMobs(scene);
     placeNpcs();
     bossOutro = null; restoreBossOutro();
     depthsOnEnter(scene, from);
     if (from !== scene) { sfx('creak'); sceneTitle = { text: scene === 'forest' && x > CAMP.start ? "BRAM'S CAMP" : region().name, sub: REGION_SUBS[scene], t: time }; }
     keys.clear();
+    if (scene === 'harbor') story.harborEntered = true;
+    if (scene === 'court') story.courtEntered = true;
     if (scene === 'hollow') story.hollowEntered = true;
     if (scene === 'hollow' && !story.hollowSeen) {
       story.hollowSeen = true;
@@ -7670,6 +7810,7 @@ const Overworld = (() => {
     wren = null;
     if (platformScene === 'pass') wren = story.passBossDefeated ? { x: 4150, dir: -1, state: 'idle', t: 0 } : { x: 1940, dir: -1, state: 'idle', t: 0 };
     if (platformScene === 'gloam') wren = story.gloamBossDefeated ? { x: 4300, dir: -1, state: 'idle', t: 0 } : { x: 2280, dir: -1, state: 'idle', t: 0 };
+    if (platformScene === 'harbor' || platformScene === 'court') wren = { x: platformScene === 'harbor' ? QUAY.wren : 490, dir: -1, state: 'idle', t: 0 };
   }
   function fastTravel(fire) {
     closeCurrentPanel();
@@ -7679,6 +7820,7 @@ const Overworld = (() => {
   }
   let fadeIn = -10;
   function safeZone() {
+    if (region().peaceful) return true;
     if (fireHere() || (FIRES.some(f => f.scene === platformScene && Math.abs(sidePlayer.x - f.x) < 90))) return true;
     return (platformScene === 'forest' && sidePlayer.x > CAMP.start - 10) || (platformScene !== 'forest' && sidePlayer.x < 160);
   }
@@ -7940,6 +8082,137 @@ const Overworld = (() => {
     ctx.restore();
   }
   function drawLayer(img, par, y, w, h) { if (imgReady(img)) tileImage(img, sideCameraX * par, y, w || img.width, h || img.height); }
+  function drawCoast() {
+    const harbor = platformScene === 'harbor', ground = SIDE_GROUND_Y;
+    const W = canvas.width, H = canvas.height;
+    const fill = (c, x, y, w, h) => { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), w, h); };
+    const art = (id, x, y, w, h) => {
+      const img = coastArt[id];
+      if (imgReady(img)) ctx.drawImage(img, Math.round(x), Math.round(y), w ?? img.width, h ?? img.height);
+    };
+    const aura = (x, y, c, r) => {
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, 'rgba(' + c + ',.44)'); g.addColorStop(1, 'rgba(' + c + ',0)');
+      ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    };
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    fill(harbor ? '#2b4f58' : '#101e25', 0, 0, W, H);
+    if (harbor) {
+      drawLayer(coastArt['coast-sky'], 0.08, -15, 264, 222);
+      drawLayer(coastArt['coast-ridge'], 0.23, 67, 199, 103);
+      fill('rgba(18,44,70,.36)', 0, 0, W, 153);
+      fill('#355e67', 0, 153, W, 53);
+      fill('#7c9994', 0, 153, W, 1);
+      for (let i = 0; i < 42; i++) {
+        const x = ((i * 57 - sideCameraX * 0.32 + Math.sin(i + time) * 5) % 336 + 336) % 336 - 8;
+        fill(i % 4 ? '#547e80' : '#99b7aa', x, 155 + (i * 13) % 41, 3 + i % 12, 1);
+      }
+      art('boat-far', 234 - sideCameraX * 0.16, 117, 53, 44);
+      art('boat-middle', 454 - sideCameraX * 0.37, 97, 89, 69);
+      art('boat-front', 415 - sideCameraX * 0.45, 65, 81, 95);
+      // A light offshore answers the signal; the dock lamp below repeats it.
+      const bx = 400 - sideCameraX * 0.2, by = 151 + Math.sin(time * 2);
+      if (story.ferryOpened) { aura(bx, by, '255,213,120', 25); fill('#fff0b4', bx, by, 2, 2); }
+      for (let i = 0; i < 4; i++) {
+        const gx = ((275 + i * 39 - time * (13 + i)) % 360 + 360) % 360 - 18;
+        const gy = 69 + i * 12 + Math.sin(time * 3 + i) * 3;
+        fill('#d4e4dd', gx, gy, 4, 1); fill('#d4e4dd', gx + 4, gy + 1, 3, 1); fill('#b6cbc8', gx + 7, gy, 3, 1);
+      }
+    } else {
+      drawLayer(coastArt['court-wall'], 0.43, 8, 720, 228);
+      fill('rgba(14,27,34,.27)', 0, 0, W, H);
+      for (let i = 0; i < 16; i++) {
+        const x = ((i * 51 - sideCameraX * 0.31) % 328 + 328) % 328;
+        const y = 49 + (i * 31) % 133 + Math.sin(time * 1.2 + i) * 3;
+        fill('rgba(186,224,197,.32)', x, y, 1, 1);
+      }
+    }
+    worldShake();
+    const x0 = Math.floor(sideCameraX / 32) * 32;
+    if (harbor) {
+      for (let x = x0 - 32; x < sideCameraX + W + 32; x += 32) {
+        if (x < 570) {
+          fill('#1c343b', x, ground, 32, 44);
+          if (imgReady(coastArt['coast-rock'])) ctx.drawImage(coastArt['coast-rock'], 128, 80, 32, 32, x, ground, 32, 32);
+          if (imgReady(coastArt.front)) ctx.drawImage(coastArt.front, 0, 32, 32, 25, x, ground + 21, 32, 25);
+        } else {
+          fill('#31282c', x + 2, ground - 11, 5, 50); fill('#6c4e3c', x + 3, ground - 10, 2, 30);
+          fill('#604033', x, ground, 32, 12); fill('#be9163', x, ground, 32, 2);
+          fill('#372832', x, ground + 7, 32, 1); fill('#e1aa70', x + 6, ground + 2, 1, 2);
+        }
+      }
+      drawCampfire(177);
+      // Nessa's stall: patched sail, stacked baskets and a lantern.
+      fill('#553c36', 214, 138, 4, 58); fill('#553c36', 288, 138, 4, 58);
+      fill('#3e3d48', 214, 142, 78, 34);
+      for (let i = 0; i < 9; i++) {
+        fill(i % 2 ? '#dfb077' : '#a36050', 212 + i * 9, 130 + (i > 1 && i < 7 ? 0 : 2), 9, 12);
+        fill(i % 2 ? '#9b6b57' : '#744b4b', 212 + i * 9, 141, 9, 4);
+      }
+      if (imgReady(coastArt.ferrier)) {
+        const f = [0, 1, 0, 2][Math.floor(time * 2.1) % 4];
+        ctx.drawImage(coastArt.ferrier, f * 39, 0, 39, 53, QUAY.nessa - 18, ground - 48, 35, 48);
+      }
+      [[224,17],[277,15],[506,16],[524,10],[550,21]].forEach(([x,h]) => {
+        fill('#483137', x, ground - h, 17, h); fill('#87634b', x + 1, ground - h, 15, 2);
+        fill('#a37d59', x + 3, ground - h + 4, 2, h - 5); fill('#61463e', x + 1, ground - 5, 15, 2);
+      });
+      BELLS.forEach(b => {
+        const lit = story.ferryOpened || FERRY_SIGNAL.indexOf(b.key) < bellCount;
+        const swing = bellAnimation?.key === b.key && time < bellAnimation.until ? Math.round(Math.sin((bellAnimation.until - time) * 34) * 2) : 0;
+        fill('#3b3538', b.x - 19, 139, 5, 57); fill('#8c705b', b.x - 18, 142, 2, 54);
+        fill('#6c564a', b.x - 20, 137, 28, 4); fill('#c09463', b.x - 19, 137, 26, 1);
+        fill('#273239', b.x + swing, 141, 1, 7);
+        fill('#6e5540', b.x - 5 + swing, 149, 12, 9);
+        fill(lit ? '#fae3a4' : '#c79d68', b.x - 3 + swing, 147, 8, 10);
+        fill(lit ? '#e5b769' : '#936f50', b.x - 8 + swing, 156, 18, 3);
+        fill('#3d302d', b.x - 1 + swing, 159, 4, 2);
+        if (lit) aura(b.x, 154, '255,220,122', 25);
+        fill('#23343c', b.x - 18, 171, 36, 12);
+        invText(b.key.toUpperCase(), b.x, 179, lit ? '#fff0b4' : '#dbcfb3', 'bold 6px monospace', 'center');
+      });
+      fill('#513c37', QUAY.dock - 11, 132, 5, 64); fill('#a47856', QUAY.dock - 11, 132, 25, 3);
+      fill('#382f33', QUAY.dock + 7, 136, 8, 11);
+      fill(story.ferryOpened ? '#ffe5ac' : '#635f52', QUAY.dock + 9, 138, 4, 6);
+      if (story.ferryOpened) aura(QUAY.dock + 11, 141, '255,211,115', 35);
+      art('boat-middle', 868, 145 + Math.sin(time * 2), 61, 47);
+    } else {
+      fill('#19282b', x0 - 32, ground, W + 96, 44);
+      for (let x = x0 - 32; x < sideCameraX + W + 32; x += 32) {
+        if (imgReady(coastArt['court-tile'])) ctx.drawImage(coastArt['court-tile'], 320, 128, 32, 32, x, ground, 32, 32);
+        fill('#859781', x, ground, 31, 1); fill('#304440', x, ground + 1, 32, 2);
+        fill('#253634', x + 5, ground + 16, 26, 1);
+      }
+      fill('#3b3831', 180, 181, 41, 15); fill('#62654e', 181, 181, 39, 2);
+      fill('#89674f', 198, 144, 6, 40); fill('#604738', 203, 143, 3, 41);
+      [[181,129,22,8],[190,115,19,20],[202,122,15,17],[174,135,24,10],[207,137,18,9]].forEach(([x,y,w,h], i) => {
+        fill(i % 2 ? '#759077' : '#4a6959', x, y, w, h); fill('#a3af7b', x + 3, y - 1, w - 7, 2);
+      });
+      [[180,140],[210,133],[194,151]].forEach(([x,y]) => { fill('#bb7c7e', x, y, 2, 8); fill('#e9baa3', x, y, 1, 4); });
+      fill('#584b42', 313, 183, 32, 4); fill('#3b3332', 315, 187, 4, 9); fill('#3b3332', 340, 187, 4, 9);
+      fill('#4c4037', 630, 172, 48, 6); fill('#716252', 630, 172, 48, 1);
+      fill('#322d30', 634, 178, 4, 18); fill('#322d30', 670, 178, 4, 18);
+      fill('#4f4240', 648, 166, 17, 6); fill('#dac5a0', 649, 166, 15, 4); aura(656, 160, '222,196,133', 25);
+      fill('#3d514a', 786, 98, 54, 98); fill('#728174', 790, 103, 46, 4);
+      fill('#152b2e', 791, 110, 44, 86); fill('#283938', 795, 113, 36, 83);
+      for (let i = 0; i < 5; i++) fill('#1b2b2d', 798 + i * 7, 113, 1, 83);
+      fill('#b9a96f', 813, 117, 1, 74); aura(813, 159, '216,211,127', 18);
+      fill('#556151', 795, 144, 36, 2); fill('#101d25', 793, 168, 39, 5);
+    }
+    drawLoreSpots(); drawWren(); drawSidePlayer(); drawPlayerWaves(); drawCombatFx(); drawFortuneFx();
+    ctx.restore();
+    drawSideOverlays(region().name);
+    if (!dialogue && !panel) {
+      if (harbor && bellFeedback && time < bellFeedback.until) {
+        invBox(56, 48, 208, 15, '#192a34', bellFeedback.error ? '#dfa48b' : '#e3bd7e');
+        invText(bellFeedback.text, 160, 58, '#fff2d1', '7px monospace', 'center');
+      } else if (!sceneTitle) {
+        const goal = harbor ? (story.ferryOpened ? 'Board at the east dock' : 'Find the night ferry signal')
+          : (story.ch4Done ? 'The outer gallery is safe to explore' : "Follow Seren's voice");
+        invText(goal, 312, 31, '#fff0ce', 'bold 7px monospace', 'right');
+      }
+    }
+  }
   function worldShake() {
     const sx = screenShake > 0 ? Math.round((Math.random() - 0.5) * screenShake * 2) : 0;
     const sy = screenShake > 0 ? Math.round((Math.random() - 0.5) * screenShake * 1.4) : 0;
@@ -8320,7 +8593,7 @@ const Overworld = (() => {
     drawDepthsGrade();
     if (bossFight && bossFight.cine) { drawBossCine(); return; }
     const W = canvas.width;
-    drawBloodMoonOverlay();
+    if (!region().peaceful) drawBloodMoonOverlay();
     if (sidePlayer.deadTime > 0 && sidePlayer.deadTime < 0.7) {
       ctx.fillStyle = 'rgba(0,0,0,' + (1 - sidePlayer.deadTime / 0.7) + ')'; ctx.fillRect(0, 0, W, canvas.height);
     }
@@ -8340,7 +8613,8 @@ const Overworld = (() => {
     ctx.fillStyle = 'rgba(8,9,16,.72)'; ctx.fillRect(0, 226, W, 14);
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
     ctx.font = '6px monospace';
-    ctx.fillText(inputMode === 'pad' ? '✕ JUMP  □ ATTACK (HOLD = MOONBLADE)  ↑+□ UPPER  ↓+□ AIR POGO  ○ ROLL  △ BAG' : 'SPACE JUMP  J ATTACK (HOLD=MOONBLADE)  U UPPER  S+J AIR POGO  K ROLL  I BAG', 4, 235);
+    ctx.fillText(region().peaceful ? (inputMode === 'pad' ? 'STICK MOVE   ✕ JUMP / INTERACT   △ JOURNAL' : 'A/D MOVE   SPACE JUMP   E INTERACT   I JOURNAL')
+      : inputMode === 'pad' ? '✕ JUMP  □ ATTACK (HOLD = MOONBLADE)  ↑+□ UPPER  ↓+□ AIR POGO  ○ ROLL  △ BAG' : 'SPACE JUMP  J ATTACK (HOLD=MOONBLADE)  U UPPER  S+J AIR POGO  K ROLL  I BAG', 4, 235);
     if (time < flashUntil) { ctx.fillStyle = 'rgba(190,230,255,' + Math.min(0.5, (flashUntil - time) * 3) + ')'; ctx.fillRect(0, 0, W, canvas.height); }
     if (time - fadeIn < 0.8) { ctx.fillStyle = 'rgba(0,0,0,' + (1 - (time - fadeIn) / 0.8) + ')'; ctx.fillRect(0, 0, W, canvas.height); }
     const near = !dialogue && !panel && nearbyInteraction();
@@ -8440,6 +8714,7 @@ const Overworld = (() => {
     else if (art === 'hollow') drawSideHollow();
     else if (art === 'pass') drawSidePass();
     else if (art === 'gloam') drawSideGloam();
+    else if (region().peaceful) drawCoast();
     else drawSideForest();
     if (!(bossFight && bossFight.cine)) drawSideHUD();
     drawPanel();
@@ -8538,7 +8813,7 @@ const Overworld = (() => {
     } else if (near) {
       near.act();
     } else {
-      notice = platformScene === 'hollow' ? 'Only cold mist here.' : 'The path continues through the trees.';
+      notice = region().peaceful ? 'Nothing nearby to interact with.' : platformScene === 'hollow' ? 'Only cold mist here.' : 'The path continues through the trees.';
       noticeUntil = time + 1.6;
     }
   }
@@ -8939,6 +9214,13 @@ const Overworld = (() => {
       return;
     }
     if (dialogue) { advanceDialogue(); e.preventDefault(); return; }
+    if (panel === 'chapter') {
+      if (time - invOpenTime > 1.5 && p.y >= 210) { panel = null; sfx('uiConfirm'); if (onSave) onSave(getSaveData()); }
+      e.preventDefault(); return;
+    }
+    if (!panel && platformMode && region().peaceful && nearbyInteraction() && p.y >= 144 && p.y < 172) {
+      interactPlatformer(); e.preventDefault(); return;
+    }
     if (fortunePanel()) { fortunePointer(p); e.preventDefault(); return; }
     if (panel === 'shop') {
       SHOP_ITEMS.forEach((it, i) => { if (inside(66, 74 + i * 18, 188, 16)) { if (shopSel === i) buyShopItem(i); else { shopSel = i; sfx('uiMove'); } } });
@@ -8971,7 +9253,7 @@ const Overworld = (() => {
       for (let j = 0; j < LORE_ROWS; j++) { const i = j + off; if (i < LORE.length && inside(120, 42 + j * 12, 182, 11)) { if (loreSel === i) useSelectedItem(); else { loreSel = i; sfx('uiMove'); } return; } }
     } else if (invTab === 5) {
       const fl = mapFires();
-      for (let i = 0; i < fl.length; i++) if (inside(120, 168 + i * 12, 182, 11)) { if (mapSel === i) mapConfirm(); else { mapSel = i; sfx('uiMove'); } return; }
+      for (let i = 0; i < fl.length; i++) if (inside(120, 168 + i * 9, 182, 9)) { if (mapSel === i) mapConfirm(); else { mapSel = i; sfx('uiMove'); } return; }
     } else if (invTab === 6) {
       for (let i = 0; i < RELIC_ORDER.length; i++) { const r = relicSlotRect(i); if (inside(r.x, r.y, r.w, r.h)) { if (relicSel === i) toggleRelic(); else { relicSel = i; sfx('uiMove'); } return; } }
     }
@@ -9343,8 +9625,10 @@ const Overworld = (() => {
       ['Defeat the Moon-Eater', story.gloamBossDefeated]
     ];
     if (ch === 4) return [
-      ['Find a way across the eastern sea', false],
-      ['Find the Pale Court', false]
+      ['Follow the east road to Lantern Quay', story.harborEntered],
+      ['Ring the night signal for the ferry', story.ferryOpened],
+      ['Cross to the Pale Court', story.courtEntered],
+      ["Find Seren's entry in the ledger", story.ch4Done]
     ];
     const inForest = outdoorScene() && !insideHouse;
     return [
@@ -9399,7 +9683,8 @@ const Overworld = (() => {
     { id: 'hollow', name: 'The Hollow', x: 88, y: 52, known: () => story.hollowEntered },
     { id: 'pass', name: 'Ashen Pass', x: 120, y: 64, known: () => story.passEntered },
     { id: 'gloam', name: 'Gloamhold', x: 146, y: 40, known: () => story.gloamEntered },
-    { id: 'court', name: 'Pale Court?', x: 166, y: 16, known: () => false }
+    { id: 'harbor', name: 'Lantern Quay', x: 159, y: 61, known: () => story.harborEntered },
+    { id: 'court', name: 'Pale Court', x: 167, y: 16, known: () => story.courtEntered }
   ];
   function mapFires() { return FIRES.filter(f => story.fires.includes(f.id)); }
   function mapNodeHere() {
@@ -9431,9 +9716,10 @@ const Overworld = (() => {
       const px = mx0 + n.x, py = my0 + n.y, known = n.known();
       ctx.fillStyle = '#3a2412'; ctx.fillRect(px - 3, py - 3, 7, 7);
       ctx.fillStyle = known ? (n.id === 'court' ? '#b98cff' : '#f2e2b0') : '#a08a60'; ctx.fillRect(px - 2, py - 2, 5, 5);
-      const fire = FIRES.find(f => (f.id === 'camp' && n.id === 'camp') || (f.id === 'lookout' && n.id === 'pass') || (f.id === 'gate' && n.id === 'gloam'));
+      const fire = FIRES.find(f => (f.id === 'camp' && n.id === 'camp') || (f.id === 'lookout' && n.id === 'pass') || (f.id === 'gate' && n.id === 'gloam') || (f.id === 'quay' && n.id === 'harbor'));
       if (fire && story.fires.includes(fire.id)) { ctx.fillStyle = '#e8542e'; ctx.fillRect(px + 4, py - 7, 3, 4); ctx.fillStyle = '#ffd36a'; ctx.fillRect(px + 5, py - 6, 1, 2); }
-      invText(known || n.id === 'court' ? n.name : '???', n.id === 'court' ? px + 12 : px, n.id === 'court' ? py + 3 : py + 11, known ? '#3a2412' : n.id === 'court' ? '#5a2a7a' : '#8a7450', 'bold 5px monospace', n.id === 'court' ? 'right' : 'center');
+      const coast = n.id === 'harbor' || n.id === 'court';
+      invText(known ? n.name : '???', coast ? px - 5 : px, coast ? py + 2 : py + 11, known ? '#3a2412' : '#8a7450', 'bold 5px monospace', coast ? 'right' : 'center');
       if (n.id === here) {
         const r = 5 + (Math.sin(time * 5) + 1) * 2;
         ctx.strokeStyle = 'rgba(200,40,40,' + (0.9 - (r - 5) / 8) + ')'; ctx.beginPath(); ctx.arc(px + 0.5, py + 0.5, r, 0, Math.PI * 2); ctx.stroke();
@@ -9451,13 +9737,13 @@ const Overworld = (() => {
     invText(at ? 'Fast travel ready' : 'Rest at a fire to travel', x + w - 8, y + 123, at ? '#9be37a' : '#8f8478', '5px monospace', 'right');
     if (!fl.length) invText('No campfires discovered yet.', x + w / 2, y + 145, '#8f8478', '6px monospace', 'center');
     fl.forEach((f, i) => {
-      const ry = y + 128 + i * 12, sel = i === mapSel;
-      ctx.fillStyle = sel ? '#2c2433' : '#231d2a'; ctx.fillRect(x + 4, ry, w - 8, 11);
-      ctx.fillStyle = '#e8542e'; ctx.fillRect(x + 8, ry + 3, 3, 5); ctx.fillStyle = '#ffd36a'; ctx.fillRect(x + 9, ry + 5, 1, 2);
-      invText(f.name, x + 16, ry + 8, sel ? '#ffe3a1' : '#f3e7c9', (sel ? 'bold ' : '') + '6px monospace');
-      invText(REGIONS[f.scene].name, x + w - 10, ry + 8, '#8f8478', '5px monospace', 'right');
-      if (at && at.id === f.id) invText('HERE', x + w - 58, ry + 8, '#9be37a', 'bold 5px monospace', 'right');
-      if (sel) invCursor(x + 4, ry, w - 8, 11);
+      const ry = y + 128 + i * 9, sel = i === mapSel;
+      ctx.fillStyle = sel ? '#2c2433' : '#231d2a'; ctx.fillRect(x + 4, ry, w - 8, 8);
+      ctx.fillStyle = '#e8542e'; ctx.fillRect(x + 8, ry + 2, 3, 5); ctx.fillStyle = '#ffd36a'; ctx.fillRect(x + 9, ry + 4, 1, 2);
+      invText(f.name, x + 16, ry + 7, sel ? '#ffe3a1' : '#f3e7c9', (sel ? 'bold ' : '') + '6px monospace');
+      invText(REGIONS[f.scene].name, x + w - 10, ry + 7, '#a19487', '5px monospace', 'right');
+      if (at && at.id === f.id) invText('HERE', x + w - 58, ry + 7, '#9be37a', 'bold 5px monospace', 'right');
+      if (sel) invCursor(x + 4, ry, w - 8, 8);
     });
   }
   function mapConfirm() {
@@ -9962,13 +10248,20 @@ const Overworld = (() => {
   }
 
   function onKeyUp(e) { const k = e.key.toLowerCase(); keys.delete(k); if (k === 'j' || k === 'f') attackReleased(); }
+  function clearHeldInput() {
+    keys.clear(); attackHeld = false;
+    sideAttackQueued = sideJumpQueued = sideRollQueued = sideUpperQueued = false;
+    sidePlayer.charge = null;
+  }
 
   function init(c, exitCallback, saveData = null, saveCallback = null) {
+    if (Array.isArray(saveData)) saveData = null;
     canvas = c;
     ctx = canvas.getContext('2d');
     onExit = exitCallback;
     onSave = saveCallback;
     saveTimer = 0;
+    bellCount = 0; bellFeedback = bellAnimation = null;
     map = buildMap();
     keys.clear();
     panel = null;
@@ -9987,9 +10280,10 @@ const Overworld = (() => {
     });
     applySave(saveData);
     platformMode = true;
-    platformScene = saveData && REGIONS[saveData.platformScene] ? saveData.platformScene : 'house';
+    const savedScene = saveData?.houseSpawnMigrated === true && Object.hasOwn(REGIONS, saveData.platformScene);
+    platformScene = savedScene ? saveData.platformScene : 'house';
     syncArena();
-    sidePlayer.x = saveData && Number.isFinite(saveData.sideX) ? clamp(saveData.sideX, 20, sideWorldWidth() - 20) : (platformScene === 'house' ? 410 : 72);
+    sidePlayer.x = savedScene && Number.isFinite(saveData.sideX) ? clamp(saveData.sideX, 20, sideWorldWidth() - 20) : (platformScene === 'house' ? 410 : region().entry);
     // Never resume mid-arena: start the boss walk-in from the Hollow's last stretch instead.
     if (REGIONS[platformScene] && region().arena && !story[region().bossFlag] && sidePlayer.x > BOSS_ARENA.left - 60) sidePlayer.x = BOSS_ARENA.left - 120;
     sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
@@ -10023,6 +10317,7 @@ const Overworld = (() => {
     if (introActive) { insideHouse = true; interiorPlayer.x = KID_SPAWN.x; interiorPlayer.y = KID_SPAWN.y; interiorPlayer.facing = KID_SPAWN.facing; }
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', clearHeldInput);
     canvas.addEventListener('pointerdown', onCanvasPointer);
     const maxCamX = Math.max(0, MAP_W * TILE - canvas.width);
     const maxCamY = Math.max(0, MAP_H * TILE - canvas.height);
@@ -10033,6 +10328,7 @@ const Overworld = (() => {
   function stop() {
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp);
+    window.removeEventListener('blur', clearHeldInput);
     if (canvas) canvas.removeEventListener('pointerdown', onCanvasPointer);
     keys.clear();
     Object.values(musicTracks).forEach(t => { try { t.a.pause(); } catch (_) {} t.playing = false; t.v = 0; });

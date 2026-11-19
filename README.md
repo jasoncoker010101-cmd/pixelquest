@@ -4,7 +4,14 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
 
 **Play online:** https://jasoncoker010101-cmd.github.io/pixelquest/
 
-## Combat and account update
+## The Pale Court update
+
+- **Chapter 4 is playable:** after Vael's final scene, take the east road out of Gloamhold to Lantern Quay. Learn the night-ferry signal, visit the Court's outer gallery, and look for a fresh trace of Seren. Both new areas are non-combat maps with optional conversations and lore. The Court's lower well is not open yet.
+- **New art:** Skarn has his own animated hammer-wielder, with a bone mask that tracks his second-form animation. Mourn and Tidemaw have extra costume detail. The house armor is a steel suit on a wooden rack that empties when equipped.
+- **Readability and input:** dialogue paginates instead of cutting off long lines. The touch controls sit below the screen on phones. The CRT effect, sound and music can be switched off from Settings; Blood Effects also has a pause-menu switch.
+- **Release checks:** `node tools/verify-build.mjs` validates scripts, lore IDs, spawn locations, boss configuration, sprite-sheet frame bounds and runtime asset references. GitHub Pages checks the staged game before uploading it and excludes editable/source packs from the website.
+
+## Combat and accounts
 
 - All seven bosses now reveal a second form at half health. The short cutscene can be skipped with the same controls as the first entrance; combat resumes with a brief grace period.
 - Skarn, Mourn and Tidemaw use their own pixel art. Both opening moon shots show the fracture, and each outdoor region has its own set of scenery and lighting accents. See `assets/ASSET-CREDITS.txt` for the scenery source.
@@ -23,11 +30,12 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
 - **Wolf encounters:** wolves can trigger a battle when you get close. Choose to fight or attempt to run.
 - **Player stats:** health, stamina, level, strength, defense, steps, and play time.
 - **Animated main menu:** title letters drop in, a cracked moon sheds glowing shards, shooting stars cross the sky, and Rowan waits by a campfire. Menu options are rune stones with a sword cursor, and the save screen shows each slot's chapter, area, and level.
-- **Story:** three chapters so far.
+- **Story:** four playable chapters so far.
   - Chapter 1, The Hollow King: follow Dad's trail through the forest to Bram's camp and into the Hollow, collect journal pages and lore stones, defeat Grukk, and find Dad.
   - Chapter 2, The Ashen Pass: Dad tells you about the Pale Court and Morwen. Cross the burning mountain road with Wren and face Ashmane, the Pale Mare.
-  - Chapter 3, The Moon-Eater: reach Gloamhold, a drowned city in the rain, and fight Vael in the castle quarter. The chapter ends with a tease for Chapter 4, The Pale Court.
-- **Lore:** about 32 lore entries on stones, letters, and logs across every area, all readable in the LORE tab. The story follows one timeline:
+  - Chapter 3, The Moon-Eater: reach Gloamhold, a drowned city in the rain, and fight Vael in the castle quarter.
+  - Chapter 4, The Pale Court: convince the night ferryman to answer, cross the eastern sea, and search the outer gallery with Wren.
+- **Lore:** find stones, letters, and logs across the game, then reread them in the LORE tab. The story follows one timeline:
   - Twenty winters ago, the moon-mage Morwen lost her daughter Lys in the Long Winter. She tried to pull the moon down to make one that never wanes, and the moon cracked. The biggest shard fell in the Hollow (the Moonfall), and Aldric's Silver Watch sealed it away.
   - Twelve winters ago, in the fever winter, the Black Tide drowned Gloamhold. The Pale Court took the city's moon-readers alive, including Rowan's mother Seren.
   - A week before the game starts, goblins led by Grukk dug up the Hollow shard and sold it to the Pale Court's riders. Without the barrow bell to quiet the shard, the wolves in the hills began to walk upright.
@@ -38,11 +46,11 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
   - The Sunken Archive, off Gloamhold: Tidemaw, the Drowned Bell.
 - **Things to do along the road:**
   - **Moon shrines:** pray for a random two-minute blessing (speed, damage, defense, luck, or healing). Sometimes the moon sends a trial of elites instead. Shrines rekindle when you rest.
-  - **Hunt boards:** at each campfire. Take a random bounty and come back to claim coins and a prize.
+  - **Hunt boards:** find them at the earlier roadside campfires. Take a random bounty and come back to claim coins and a prize.
   - **Moon moths:** 24 to find, with rewards at 6, 12, 18, and 24.
   - **Tess the peddler:** sometimes found on the road, selling relics, tonics, charms, and mystery bundles.
   - **Ambushes:** sometimes spring on the road and leave a chest behind when you win.
-- **Areas:** the house, the forest, Bram's camp (campfire rest point and shop), the Hollow, the Ashen Pass, and Gloamhold. Each area has its own music, weather and particles (fireflies, embers, rain), and boss arena.
+- **Areas:** the house, the Woodland and Bram's camp, the Hollow, the Ashen Pass, Gloamhold, Lantern Quay and the Pale Court. Regions have distinct lighting and sound; not every area has a fight.
 - **Boss entrances:** each boss gets a cinematic. Letterbox bars slide in and the camera swings to the boss. Grukk smashes the ground and roars, Ashmane gallops in on a trail of blue fire and rears up in a ring of flame, and Vael drops out of the sky and breathes moonfire. Then the boss's name and title burn in above its head. Press E / ✕ to skip.
 - **Boss music:** a dramatic entrance theme plays during the cinematic, and each boss has its own battle theme.
 - **World map and fast travel:** the MAP tab shows every region and your position. While resting at a campfire, you can pick another fire you have visited to travel there.
@@ -59,24 +67,23 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
 | Action | Keyboard | PS5 controller | Touch button |
 |---|---|---|---|
 | Move | WASD or Arrow keys | Left stick or D-pad | Direction pad |
-| Jump (forest) | Space / W / Up | ✕ Cross | — |
-| Attack (forest) | J / F | □ Square (or R2) | — |
-| Moonblade (blue power slash) | Hold J / F, then release | Hold □, then release | — |
+| Jump (outdoors) | Space / W / Up | ✕ Cross | JUMP |
+| Attack | J / F | □ Square (or R2) | ATK |
+| Moonblade (blue power slash) | Hold J / F, then release | Hold □, then release | Hold ATK, then release |
 | Upper slash | U (or Up + J) | Up + □ | — |
 | Down slash / pogo (in the air) | Down + J | Down + □ | — |
-| Dodge roll | K / L | ○ Circle | — |
+| Dodge roll | K / L | ○ Circle | ROLL |
 | Plunge attack | J while in the air | □ while in the air | — |
-| Quick item (forest/Hollow) | H | Touchpad | — |
-| Talk / read / rest / shop | E | ✕ Cross | E |
-| Interact / confirm | E / Enter | ✕ Cross | E |
+| Quick item (outdoors) | H | Touchpad | ITEM |
+| Talk / read / rest / shop | E | ✕ Cross | USE |
+| Interact / confirm | E / Enter | ✕ Cross | USE |
 | Back / close | Escape | ○ Circle | — |
 | Run | Hold Shift | Hold L1, R1, or L2 | RUN |
 | Inventory | I | △ Triangle | BAG |
 | Inventory: select / actions / switch tab | Arrows / E / Q, R, Tab | D-pad / ✕ / L1, R1 | tap |
 | Inventory: back out of a menu | Escape / X / Backspace | ○ Circle | — |
-| Stats | C | Touchpad (indoors) or Create | STATS |
-| Pause | Escape / P | Options | — |
-| Fight / escape encounter | 1 / 2 | ✕ or □ / ○ | FIGHT / RUN |
+| Stats | C | Touchpad (indoors) or Create | BAG → STATS |
+| Pause | Escape / P | Options | PAUSE |
 | Skip opening cinematic | Any key | Any button | Tap |
 
 In the forest, ✕ interacts when a prompt is shown (for example, returning home) and jumps otherwise. On-screen prompts switch to PlayStation buttons while a controller is in use, and the controller rumbles on hits. Both the standard browser layout and Firefox's raw DualSense layout are supported.

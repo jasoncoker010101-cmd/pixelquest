@@ -22,10 +22,11 @@
   .tv-shell::after {
     content: ""; position: absolute; inset: clamp(10px, 2vw, 24px);
     border-radius: 4% / 5%; pointer-events: none; z-index: 3;
-    background: repeating-linear-gradient(to bottom, transparent 0, #05030b18 2px, transparent 4px),
-      radial-gradient(ellipse at center, transparent 58%, #05020b66 100%);
-    box-shadow: inset 0 0 24px #0009;
+    background: radial-gradient(ellipse at center, transparent 66%, #05020b45 100%);
+    box-shadow: inset 0 0 16px #0007;
   }
+  .tv-shell.clean-screen::after { display: none; }
+  .tv-shell.clean-screen canvas { filter: none; }
   canvas {
     display: block; width: 100%; height: 100%; border-radius: 4% / 5%;
     image-rendering: pixelated; image-rendering: crisp-edges;
@@ -40,19 +41,18 @@
     .tv-shell::after { inset: 7px; }
   }
   .mobile-controls {
-    display: none; position: absolute; z-index: 5; left: 4%; right: 4%; bottom: 5%;
-    align-items: flex-end; justify-content: space-between; pointer-events: none;
+    display: none; position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 10px);
+    align-items: end; justify-content: space-between; gap: 8px; pointer-events: none;
   }
-  .mobile-pad { display: grid; grid-template-columns: repeat(3, 34px); grid-template-rows: repeat(2, 34px); gap: 3px; pointer-events: none; }
-  .mobile-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; width: 118px; pointer-events: none; }
+  .mobile-pad, .mobile-actions { display: grid; grid-template-columns: repeat(3, minmax(40px, 1fr)); gap: 4px; }
+  .mobile-actions { grid-template-columns: repeat(4, minmax(41px, 1fr)); }
   .mobile-controls button {
-    width: 34px; height: 34px; padding: 0; border: 1px solid #f1d18a; border-radius: 8px;
+    min-width: 0; height: 42px; padding: 0 3px; border: 1px solid #967b57; border-radius: 8px;
     background: #241a2bd9; color: #fff0c5; font: bold 12px monospace;
     box-shadow: 0 2px 5px #0009; touch-action: none; pointer-events: auto; user-select: none;
   }
-  .mobile-actions button { width: 34px; height: 30px; font-size: 9px; }
+  .mobile-actions button { font-size: 9px; }
   .mobile-pad button:active, .mobile-actions button:active { background: #9a6847; }
-  .tv-shell.playing .mobile-controls { display: flex; }
 
   .tv-fullscreen-btn {
     position: absolute; z-index: 6; right: 5%; bottom: 1.2%;
@@ -88,8 +88,17 @@
     .tv-fullscreen-btn { right: 4%; bottom: 1%; padding: 4px 7px; font-size: 9px; }
   }
 
-  @media (pointer: coarse) {
+  @media (any-pointer: coarse) {
     .tv-shell { -webkit-tap-highlight-color: transparent; }
+    .tv-shell.playing { margin-bottom: 108px; }
+    .tv-shell.playing .mobile-controls { display: flex; }
+    .tv-shell.playing:not(:fullscreen) { width: min(94vw, 1040px, calc((100dvh - 134px) * 4 / 3)); }
+    .tv-shell:fullscreen .mobile-controls { top: auto; left: 4%; right: 4%; bottom: 18px; }
+    @media (orientation: landscape) {
+      .tv-shell.playing:not(:fullscreen) { width: min(65vw, calc(89dvh * 4 / 3)); margin-bottom: 0; }
+      .tv-shell.playing .mobile-controls { top: auto; left: -24%; right: -24%; bottom: 4px; }
+      .tv-shell:fullscreen .mobile-controls { left: 2%; right: 2%; bottom: 18px; }
+    }
   }
   #account-dialog { width: min(92vw, 400px); max-height: 90dvh; overflow: auto; border: 1px solid #a78355; border-radius: 12px; padding: 24px; background: #19151e; color: #f6ead5; font: 15px/1.5 system-ui, sans-serif; }
   #account-dialog::backdrop { background: #07060bd9; }
@@ -141,20 +150,21 @@
   });
 </script>
 <div class="tv-shell" id="tvShell">
-  <canvas id="game" width="320" height="240"></canvas>
+  <canvas id="game" width="320" height="240" aria-label="PixelQuest game">PixelQuest needs a browser with Canvas support.</canvas>
   <button type="button" class="tv-fullscreen-btn" id="tvFullscreen" aria-label="Enter TV fullscreen">⛶ TV FULLSCREEN</button>
   <div class="mobile-controls" aria-label="Touch game controls">
     <div class="mobile-pad">
-      <span></span><button type="button" data-game-key="ArrowUp">▲</button><span></span>
-      <button type="button" data-game-key="ArrowLeft">◀</button><button type="button" data-game-key="ArrowDown">▼</button><button type="button" data-game-key="ArrowRight">▶</button>
+      <span></span><button type="button" data-game-key="ArrowUp" aria-label="Up">▲</button><span></span>
+      <button type="button" data-game-key="ArrowLeft" aria-label="Move left">◀</button><button type="button" data-game-key="ArrowDown" aria-label="Down">▼</button><button type="button" data-game-key="ArrowRight" aria-label="Move right">▶</button>
     </div>
     <div class="mobile-actions">
-      <button type="button" data-game-key="e">E</button>
+      <button type="button" data-game-key="e" aria-label="Interact or continue">USE</button>
       <button type="button" data-game-key="Shift">RUN</button>
-      <button type="button" data-game-key="j">ATK</button>
-      <button type="button" data-game-key="ArrowUp">JUMP</button>
+      <button type="button" data-game-key="j" aria-label="Attack or hold to charge">ATK</button>
+      <button type="button" data-game-key=" ">JUMP</button>
       <button type="button" data-game-key="i">BAG</button>
-      <button type="button" data-game-key="c">STATS</button>
+      <button type="button" data-game-key="k">ROLL</button>
+      <button type="button" data-game-key="h" aria-label="Use quick item">ITEM</button>
       <button type="button" data-game-key="Escape">PAUSE</button>
     </div>
   </div>
@@ -167,36 +177,22 @@
   const currentRev = params.get('pqrev') || '';
   async function getLatestRevision(){
     try {
-      const response = await fetch(repoApi, { cache: 'no-store', headers: { Accept: 'application/vnd.github+json' } });
+      const response = await fetch(repoApi, { cache: 'no-store', headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(3500) });
       if (!response.ok) throw new Error('GitHub update check failed');
       const data = await response.json();
       return data && data.commit && data.commit.sha ? data.commit.sha : '';
     } catch (_) { return ''; }
   }
   const latest = official ? await getLatestRevision() : '';
-  if (latest && latest !== currentRev) {
-    params.set('pqrev', latest);
-    location.replace(location.pathname + '?' + params.toString() + location.hash);
-    return;
-  }
+  // Only select a runtime asset revision. Never reload the page or interrupt play.
   window.PQ_REV = latest || currentRev || String(Date.now());
   const gameScript = document.createElement('script');
   gameScript.src = 'world.js?rev=' + encodeURIComponent(window.PQ_REV);
-  gameScript.onload = () => {
-    // Check periodically so an already-open game notices new commits too.
-    if (official) setInterval(async () => {
-      const newer = await getLatestRevision();
-      if (newer && newer !== window.PQ_REV) {
-        const next = new URL(location.href);
-        next.searchParams.set('pqrev', newer);
-        location.replace(next.toString());
-      }
-    }, 120000);
-  };
   gameScript.onerror = () => {
     // If GitHub's API is unavailable, still bypass the browser's cached script.
     const fallback = document.createElement('script');
     fallback.src = 'world.js?reload=' + Date.now();
+    fallback.onerror = () => { message = 'GAME COULD NOT LOAD. REFRESH TO RETRY.'; };
     document.body.appendChild(fallback);
   };
   document.body.appendChild(gameScript);
@@ -229,9 +225,21 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 let t = 0, last = performance.now(), message = '';
-const settings = { music: true, sound: true, blood: true };
+const settings = { music: true, sound: true, blood: true, crt: true };
 const BLOOD_PREF = 'pixelquest-blood-effects';
-try { settings.blood = localStorage.getItem(BLOOD_PREF) !== 'off'; } catch {}
+let browserSavesAvailable = true;
+try {
+  settings.blood = localStorage.getItem(BLOOD_PREF) !== 'off';
+  settings.music = localStorage.getItem('pixelquest-music') !== 'off';
+  settings.sound = localStorage.getItem('pixelquest-sound') !== 'off';
+  settings.crt = localStorage.getItem('pixelquest-crt') !== 'off';
+} catch { browserSavesAvailable = false; }
+tvShell.classList.toggle('clean-screen', !settings.crt);
+function toggleDisplaySetting(key) {
+  settings[key] = !settings[key];
+  if (key === 'crt') tvShell.classList.toggle('clean-screen', !settings.crt);
+  try { localStorage.setItem('pixelquest-' + key, settings[key] ? 'on' : 'off'); } catch {}
+}
 function toggleBloodEffects() {
   settings.blood = !settings.blood;
   try { localStorage.setItem(BLOOD_PREF, settings.blood ? 'on' : 'off'); } catch {}
@@ -453,7 +461,10 @@ async function syncCloudSlot(slot) {
 function slotKey(slot, user = sessionUser()) { return SAVE_KEY + (user ? user + '-' : '') + slot; }
 function readSlot(slot, user = sessionUser()) {
   const key = slotKey(slot, user);
-  try { return JSON.parse(memorySlots.get(key) || localStorage.getItem(key) || 'null'); }
+  try {
+    const data = JSON.parse(memorySlots.get(key) || localStorage.getItem(key) || 'null');
+    return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
+  }
   catch { return null; }
 }
 
@@ -468,7 +479,7 @@ function saveActiveSlot(data) {
   const slot = activeSlot, user = sessionUser(), key = slotKey(slot, user), snapshot = JSON.stringify({ ...data, savedAt: Date.now() });
   memorySlots.set(key, snapshot);
   try { localStorage.setItem(key, snapshot); }
-  catch (error) { console.warn('Could not save Pixel Quest slot.', error); }
+  catch (error) { browserSavesAvailable = false; console.warn('Could not save Pixel Quest slot.', error); }
   if (user) {
     const job = (slotWrites.get(key) || Promise.resolve()).catch(() => {}).then(async () => {
       if (sessionUser() !== user) throw new Error('Account changed.');
@@ -500,14 +511,16 @@ async function enterWorld(slot) {
     activeSlot = selected;
     titleMusic.pause(); titleMusic.volume = 0;
     Overworld.init(canvas, exitWorld, save, saveActiveSlot);
-    inWorld = true; message = '';
-  } catch { message = 'Cloud load failed. Retry or sign out to play as a guest.'; }
+    inWorld = true; tvShell.classList.add('playing'); message = '';
+  } catch {
+    message = user ? 'CLOUD LOAD FAILED. RETRY OR SIGN OUT.' : 'COULD NOT START. REFRESH AND RETRY.';
+  }
   finally { enteringWorld = false; }
 }
 
 function exitWorld(data) {
   if (data) saveActiveSlot(data);
-  inWorld = false;
+  inWorld = false; tvShell.classList.remove('playing');
 }
 
 function rnd(i) { return Math.abs(Math.sin(i * 12.9898 + 78.233) * 43758.5453) % 1; }
@@ -527,7 +540,7 @@ const motes = [...Array(22)].map((_, i) => ({
 const screens = {
   title:    { y: 134, items: () => ['START GAME', 'ACCOUNT', 'SETTINGS', 'CREDITS'] },
   slots:    { y: 138, items: slotLabels },
-  settings: { y: 140, items: () => ['MUSIC: ' + (settings.music ? 'ON' : 'OFF'), 'SOUND: ' + (settings.sound ? 'ON' : 'OFF'), 'BLOOD EFFECTS: ' + (settings.blood ? 'ON' : 'OFF'), 'BACK'] },
+  settings: { y: 136, items: () => ['MUSIC: ' + (settings.music ? 'ON' : 'OFF'), 'SOUND: ' + (settings.sound ? 'ON' : 'OFF'), 'BLOOD EFFECTS: ' + (settings.blood ? 'ON' : 'OFF'), 'CRT FILTER: ' + (settings.crt ? 'ON' : 'OFF'), 'BACK'] },
   credits:  { y: 198, items: () => ['BACK'] },
   account:  { y: 146, items: () => cloudSession ? ['PROFILE / NAME', 'SIGN OUT', 'BACK'] : ['SIGN IN', 'CREATE ACCOUNT', 'BACK'] },
   deleteConfirm: { y: 154, items: () => ['YES, DELETE', 'CANCEL'] }
@@ -564,9 +577,10 @@ function activate() {
   }
   else if (id === 'account') { enterAccountAction(sel); }
   else if (id === 'settings') {
-    if (sel === 0) settings.music = !settings.music;
-    else if (sel === 1) settings.sound = !settings.sound;
+    if (sel === 0) toggleDisplaySetting('music');
+    else if (sel === 1) toggleDisplaySetting('sound');
     else if (sel === 2) toggleBloodEffects();
+    else if (sel === 3) toggleDisplaySetting('crt');
     else go('title');
   }
   else if (id === 'credits') go('title');
@@ -1338,7 +1352,9 @@ function drawScreen() {
       ctx.strokeStyle = '#4a4678'; ctx.strokeRect(MENU_X + 4.5, 200.5, 169, 21);
       ctx.fillStyle = '#c9a24a'; ctx.fillRect(MENU_X + 4, 200, 2, 22);
       pixText(l1, MENU_X + 10, 203, '#bfe2ff');
-      pixText(l2, MENU_X + 10, 212, '#d8d0ee');
+      const warning = message || (!cloudSession && !browserSavesAvailable ? 'GUEST SAVES LAST UNTIL PAGE CLOSES' : '');
+      if (warning) smallText(warning, MENU_X + 10, 212, '#ffd27a');
+      else pixText(l2, MENU_X + 10, 212, '#d8d0ee');
     } else if (message) smallText(message.slice(0, 40), MENU_X + 8, 212, '#ffd27a');
   } else if (state.screen === 'deleteConfirm') {
     drawHeading('DELETE SLOT ' + state.deleteSlot + '?', 114);
@@ -1550,14 +1566,15 @@ function drawFireflies() {
 }
 
 function drawCRT() {
+  if (!settings.crt) return;
   ctx.save();
   // Fine horizontal phosphor lines and a soft curved-screen vignette.
-  ctx.fillStyle = 'rgba(5, 3, 12, 0.13)';
+  ctx.fillStyle = 'rgba(5, 3, 12, 0.07)';
   for (let y = 1; y < 240; y += 2) ctx.fillRect(0, y, 320, 1);
   const shade = ctx.createRadialGradient(160, 120, 72, 160, 120, 190);
   shade.addColorStop(0, 'rgba(0,0,0,0)');
   shade.addColorStop(0.72, 'rgba(0,0,0,0.04)');
-  shade.addColorStop(1, 'rgba(0,0,0,0.34)');
+  shade.addColorStop(1, 'rgba(0,0,0,0.24)');
   ctx.fillStyle = shade;
   ctx.fillRect(0, 0, 320, 240);
   ctx.restore();
@@ -1584,7 +1601,7 @@ window.addEventListener('gamepaddisconnected', e => {
   gamepadState.held.forEach(key => dispatchPadKey(key, false));
   gamepadState.held.clear(); gamepadState.repeatAt.clear(); gamepadState.actions.clear();
   gamepadState.index = -1;
-  if (Overworld.setInputMode) Overworld.setInputMode('keyboard');
+  if (typeof Overworld !== 'undefined' && Overworld.setInputMode) Overworld.setInputMode('keyboard');
 });
 // Real keyboard use switches on-screen prompts back to keyboard keys.
 window.addEventListener('keydown', e => {

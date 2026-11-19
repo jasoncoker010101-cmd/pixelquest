@@ -3,7 +3,17 @@ Pixel Quest asset credits
 Regional scenery (assets/scenery):
 - Ansimuz Legacy Collection: https://ansimuz.itch.io/gothicvania-patreon-collection
 - Four in-game props from the project's existing Legacy archive: woods, pillars, crystal and plant.
-- Skarn, Mourn and Tidemaw sprites and the phase-two overlays are original to this game.
+- Mourn and Tidemaw are original game artwork, as are the phase-two overlays and the armor rack.
+
+Skarn (assets/warden):
+- The Pixel Alchemist, Goblin Pack (Goblin Tank): https://thepixelalchemist.itch.io/goblin-pack
+- The game uses resized idle, walk, attack, hurt and death strips from the project's supplied sheet.
+  The creator permits modification and use in games. Do not redistribute the sheets as an asset pack.
+
+Lantern Quay and the Pale Court (assets/chapter4):
+- Ansimuz, Legacy Collection: https://ansimuz.itch.io/gothicvania-patreon-collection
+- Rocky Beach sky, ridge and terrain; Ships Graveyard wrecks and reef layer; Old Dark Castle
+  walls and tiles; Dancing Girl frames adapted for Nessa. Used from the bundled Legacy collection.
 
 Interior furniture spritesheet:
 - Original artist/source: Kenney (Kenney.nl)
