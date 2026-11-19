@@ -185,23 +185,37 @@ const Overworld = (() => {
   const story = Object.assign({}, STORY_DEFAULTS, { pages: [], fires: [], lastFire: null });
 
   // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
-  let introActive = false, introTime = 0, introAudio = null, introSoundChar = 0, introTextSegment = '', introLastReveal = 0, introWolfHowlOne = false, introWolfHowlTwo = false, introWolfHowlEcho = false;
+  let introActive = false, introTime = 0, introAudio = null, introWolfHowlOne = false, introWolfHowlTwo = false, introWolfHowlEcho = false;
   const INTRO_SPACE_END = 8.5;
   const INTRO_LORE = [
-    { id: 'long-winter', title: 'THE LONG WINTER', seconds: 7.4,
-      text: "Twenty winters ago, the moon stayed dark for nine nights. Morwen's daughter Lys did not wake." },
-    { id: 'morwens-vow', title: "MORWEN'S VOW", seconds: 6.4,
-      text: 'That spring, Morwen tried to pull down the moon. She wanted one that would never wane.' },
-    { id: 'moonfall', title: 'THE MOONFALL', seconds: 6.7,
-      text: 'The Silver Watch stopped her, but the moon broke. Burning shards scattered across the land.' },
-    { id: 'hollow-seal', title: 'THE HOLLOW', seconds: 5.4,
-      text: 'The greatest shard fell in the Hollow. It was later buried beneath a seal.' }
+    { id: 'long-winter', seconds: 11.0 },
+    { id: 'morwens-vow', seconds: 9.7 },
+    { id: 'moonfall', seconds: 8.4 },
+    { id: 'hollow-seal', seconds: 7.8 }
   ];
   const INTRO_LORE_LENGTH = INTRO_LORE.reduce((n, scene) => n + scene.seconds, 0);
-  const INTRO_DURATION = 45.5 + INTRO_LORE_LENGTH;
+  const INTRO_DURATION = 46.5 + INTRO_LORE_LENGTH;
+  const INTRO_CAPTIONS = [
+    [1.1, 7.0, "Come a little closer. That's Earth down there. Looks peaceful enough, doesn't it?"],
+    [9.05, 13.9, 'Twenty winters ago, the moon went dark for nine nights. And on one of those nights…'],
+    [13.9, 19.3, 'Morwen lost her little girl. Lys never woke.'],
+    [20.05, 25.4, 'Come spring, Morwen reached up to pull the moon down herself.'],
+    [25.4, 29.0, 'She meant to make another. One that would never, ever wane.'],
+    [29.75, 37.5, 'The Silver Watch stopped her. But the moon? It broke. Burning pieces rained across the land.'],
+    [38.15, 45.3, 'The biggest fell in the Hollow. They buried it. Sealed it away. Or so the Watch told us.'],
+    [46.72, 52.27, "Oh, the years went by. Folks lit their hearths again. But the land didn't forget."],
+    [52.46, 57.9, 'Where those pieces fell, beasts changed. Even the dead stopped resting.'],
+    [61.0, 66.7, 'Hear that? Some nights, the wolves in those hills walk on two legs.'],
+    [66.7, 71.2, 'Still, people make a home here. They always have.'],
+    [75.58, 82.05, 'And here, right at the edge of it all… Rowan. Time to wake up.'],
+  ];
   // The MP3 includes silent gaps for the scene cuts and countryside sound effects.
   // Follow the visual clock after a slow frame, a seek, or a background-tab pause.
   let introNarrator = null, introNarratorBlocked = false, introNarratorPlaying = false;
+  function introVoiceAvailable() {
+    return settings.sound !== false && !introNarratorBlocked && introNarrator &&
+      !introNarrator.error && !introNarrator.paused && introNarrator.readyState >= 3;
+  }
   function syncIntroNarration() {
     const a = introNarrator;
     if (!a || introNarratorBlocked) return;
@@ -263,24 +277,6 @@ const Overworld = (() => {
     sideCameraX = Math.max(0, sidePlayer.x - (canvas ? canvas.width : 320) * 0.43); sideJumpQueued = false; panel = null;
     keys.clear();
   }
-  function introBlip() {
-    if (typeof settings !== 'undefined' && settings.sound === false) return;
-    try {
-      const ac = audioCtx();
-      if (!ac) return;
-      const osc = ac.createOscillator();
-      const gain = ac.createGain();
-      const now = ac.currentTime;
-      osc.type = 'square';
-      const notes = [690, 760, 720, 820];
-      osc.frequency.setValueAtTime(notes[introSoundChar % notes.length], now);
-      gain.gain.setValueAtTime(0.012, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.019);
-      osc.connect(gain); gain.connect(ac.destination);
-      osc.start(now); osc.stop(now + 0.02);
-      introSoundChar++;
-    } catch (_) {}
-  }
   // Use the user's actual uploaded howl recordings from the assets folder.
   const introWolfHowlAudioOne = new Audio('./assets/first-wolf-howl.mp3');
   const introWolfHowlAudioTwo = new Audio('./assets/distant-wolf-howl.mp3');
@@ -294,33 +290,18 @@ const Overworld = (() => {
       if (playback && playback.catch) playback.catch(() => {});
     } catch (_) {}
   }
-  function introTextBox(lines, reveal, segment) {
-    if (introTextSegment !== segment) { introTextSegment = segment; introLastReveal = 0; }
-    const full = lines.join(' ');
-    const spoken = !!introNarrator && !introNarratorBlocked && settings.sound !== false;
-    const targetReveal = spoken ? full.length : Math.min(full.length, Math.max(0, Math.floor(reveal)));
-    // Play exactly once for each newly revealed letter or number. Spaces and punctuation stay silent.
-    for (let i = introLastReveal; i < targetReveal; i++) {
-      if (!spoken && /[A-Za-z0-9]/.test(full[i])) introBlip();
-    }
-    introLastReveal = Math.max(introLastReveal, targetReveal);
-    const shown = full.slice(0, targetReveal);
-    const words = shown.split(' ');
-    const output = [];
-    let line = '';
-    for (const word of words) {
-      const next = line ? line + ' ' + word : word;
-      if (next.length > 43 && line) { output.push(line); line = word; }
-      else line = next;
-    }
-    if (line) output.push(line);
-    const visible = Math.min(3, output.length);
-    const y = 186;
+  function drawIntroFallbackCaptions() {
+    if (introVoiceAvailable()) return;
+    const caption = INTRO_CAPTIONS.find(([start, end]) => introTime >= start && introTime < end);
+    if (!caption) return;
+    const output = wrapText(caption[2], 272, '8px monospace');
+    const height = 10 + output.length * 10;
+    const y = 223 - height;
     ctx.fillStyle = 'rgba(8,10,22,.88)';
-    ctx.fillRect(13, y, 294, 39);
-    ctx.strokeStyle = '#d7bd83'; ctx.lineWidth = 1; ctx.strokeRect(13.5, y + .5, 293, 38);
+    ctx.fillRect(13, y, 294, height);
+    ctx.strokeStyle = '#d7bd83'; ctx.lineWidth = 1; ctx.strokeRect(13.5, y + .5, 293, height - 1);
     ctx.font = '8px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff0ce';
-    for (let i = 0; i < visible; i++) ctx.fillText(output[i], 22, y + 12 + i * 10);
+    output.forEach((line, i) => ctx.fillText(line, 22, y + 11 + i * 10));
   }
   // Broken, pixel-stepped sound distortions. These are intentionally not smooth circles.
   function drawGlitchHowl(x, y, intensity, seed = 0) {
@@ -734,20 +715,6 @@ const Overworld = (() => {
     ctx.globalCompositeOperation = 'source-over';
     drawIntroVignette(0.9);
 
-    // Title card with tracked lettering.
-    const ta = Math.max(0, Math.min(1, (t - 0.6) / 1.2)) * (1 - Math.max(0, Math.min(1, (t - 5.6) / 0.8)));
-    if (ta > 0) {
-      ctx.globalAlpha = ta;
-      ctx.textAlign = 'center'; ctx.font = 'bold 12px monospace';
-      const word = 'E A R T H';
-      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillText(word, 161, 30);
-      ctx.fillStyle = '#f4e8c5'; ctx.fillText(word, 160, 29);
-      const lw = 30 + 24 * Math.min(1, (t - 0.6) / 1.4);
-      const lg = ctx.createLinearGradient(160 - lw, 0, 160 + lw, 0);
-      lg.addColorStop(0, 'rgba(215,189,131,0)'); lg.addColorStop(0.5, 'rgba(215,189,131,.9)'); lg.addColorStop(1, 'rgba(215,189,131,0)');
-      ctx.fillStyle = lg; ctx.fillRect(160 - lw, 34, lw * 2, 1);
-      ctx.globalAlpha = 1;
-    }
   }
 
   // ---- Night countryside (side view, parallax) ----
@@ -1328,7 +1295,7 @@ const Overworld = (() => {
       loreShape('#100e1c', [[0,26],[38,23],[57,52],[77,53],[92,82],[116,89],[120,106],[193,106],[203,82],[227,70],[242,50],[275,34],[320,26],[320,194],[0,194]]);
       loreShape('#30253d', [[0,141],[48,126],[72,131],[94,109],[128,116],[165,98],[189,114],[227,108],[261,126],[320,121],[320,186],[0,186]]);
       loreShape('#4b3a58', [[63,168],[91,147],[121,141],[145,147],[171,130],[188,143],[216,146],[252,168],[225,180],[91,180]]);
-      const ward = smooth01((t - 2.3) / 1.4);
+      const ward = smooth01((t - 4.0) / 1.4);
       const light = ctx.createRadialGradient(161, 127, 4, 161, 127, 72);
       light.addColorStop(0, `rgba(184,133,251,${.55 - ward * .29})`); light.addColorStop(1, 'rgba(184,133,251,0)');
       ctx.fillStyle = light; ctx.fillRect(89, 55, 144, 130);
@@ -1350,11 +1317,12 @@ const Overworld = (() => {
       drawIntroBrightStars(0, 0, .6, motion);
       loreShape('#2a2b4c', [[0,127],[32,118],[51,102],[65,111],[90,83],[109,112],[129,117],[160,110],[185,124],[211,115],[233,88],[252,113],[270,102],[298,117],[320,108],[320,185],[0,185]]);
       loreShape('#191b32', [[0,146],[62,151],[105,133],[147,144],[186,132],[221,149],[260,138],[304,145],[320,135],[320,187],[0,187]]);
-      const fractured = scene.id === 'moonfall' && t > 1.15;
+      const moonBreakAt = 4.45; // Lands under “It broke” in the narrator track.
+      const fractured = scene.id === 'moonfall' && t >= moonBreakAt;
       const y = scene.id === 'morwens-vow' ? 58 + Math.round(smooth01(t / 5) * 13) : 71;
       if (fractured) {
         drawFracturedMoon(206, y, 19, getIntroSkyMoon(), motion, 1);
-        const fall = prefersReducedMotion() ? .6 : smooth01((t - 1.15) / 4.2);
+        const fall = prefersReducedMotion() ? .6 : smooth01((t - moonBreakAt) / 3.1);
         for (let i = 0; i < 7; i++) {
           const dx = (i - 2.8) * 19, x = Math.round(206 + fall * dx), sy = Math.round(y + fall * (34 + i * 9));
           loreShape(i === 4 ? '#f4dfb9' : '#c196e0', [[x, sy],[x - Math.sign(dx) * 9, sy - 18],[x + 3, sy - 6]]);
@@ -1380,9 +1348,6 @@ const Overworld = (() => {
     }
     drawIntroVignette(.6);
     drawIntroLetterbox();
-    ctx.font = 'bold 7px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#e0c99c';
-    ctx.fillText(scene.title, 17, 24);
-    introTextBox([scene.text], (t - .3) * 21, scene.id);
     const shade = Math.max(0, 1 - t / .55, 1 - (scene.seconds - t) / .45);
     if (shade > 0) { ctx.fillStyle = `rgba(0,0,0,${shade})`; ctx.fillRect(0, 0, 320, 240); }
   }
@@ -1396,7 +1361,6 @@ const Overworld = (() => {
     } else if (introTime < INTRO_SPACE_END) {
       drawIntroSpace(t);
       drawIntroLetterbox();
-      if (t > 1.6) introTextBox(['Earth. A world of oceans, forests, and endless skies.'], (t - 1.6) * 17, 'earth');
       const fadeIn = 1 - Math.min(1, t / 1.2);
       const fadeOut = Math.max(0, Math.min(1, (t - 6.6) / 1.9));
       const a = Math.max(fadeIn, fadeOut);
@@ -1404,17 +1368,6 @@ const Overworld = (() => {
     } else if (t < 38.5) {
       drawIntroNight(t);
       drawIntroLetterbox();
-      if (t > 9.0 && t < 14.3) {
-        introTextBox(['Years passed. Quiet homes still stand beneath the scarred moon.'], (t - 9.0) * 19, 'settled-world');
-      } else if (t >= 14.8 && t < 20.0) {
-        introTextBox(['But the land remembers what fell from the sky.'], (t - 14.8) * 17, 'awakening');
-      } else if (t >= 20.5 && t < 25.7) {
-        introTextBox(['Where the shards fell, beasts changed. The dead stopped resting.'], (t - 20.5) * 17, 'creatures');
-      } else if (t >= 26.2 && t < 32.0) {
-        introTextBox(['On certain nights, the wolves in the hills walk upright.'], (t - 26.2) * 17, 'nightfall');
-      } else if (t >= 32.2 && t < 37.4) {
-        introTextBox(['Still, people make a life here, once guarded by the Silver Watch.'], (t - 32.2) * 17, 'frontier');
-      }
       const fadeIn = 1 - Math.min(1, (t - 8.5) / 1.4);
       const fadeOut = Math.max(0, Math.min(1, (t - 36.8) / 1.7));
       const a = Math.max(fadeIn, fadeOut);
@@ -1427,13 +1380,11 @@ const Overworld = (() => {
       ctx.restore();
       const fadeIn = 1 - Math.min(1, (t - 38.5) / 0.9);
       if (fadeIn > 0) { ctx.fillStyle = 'rgba(0,0,0,' + fadeIn + ')'; ctx.fillRect(0, 0, 320, 240); }
-      if (t < 44.4) {
-        if (t >= 39.0) introTextBox(['Here, at the edge of the wilderness, a new day begins.'], (t - 39.0) * 17, 'new-day');
-      }
-      const fade = Math.max(0, Math.min(1, (t - 44.5) / 1));
+      const fade = Math.max(0, Math.min(1, (t - 45.5) / 1));
       if (fade > 0) { ctx.fillStyle = 'rgba(0,0,0,' + fade + ')'; ctx.fillRect(0, 0, 320, 240); }
     }
-    if (introTime < INTRO_DURATION - 1) {
+    drawIntroFallbackCaptions();
+    if (introTime < 4) {
       ctx.fillStyle = 'rgba(235,229,211,.55)'; ctx.font = '6px monospace'; ctx.textAlign = 'right';
       ctx.fillText(inputMode === 'touch' ? 'TAP TO SKIP' : 'PRESS ANY BUTTON TO SKIP', 306, 236);
     }
@@ -10556,7 +10507,7 @@ const Overworld = (() => {
       const countryTime = introTime - INTRO_LORE_LENGTH;
       if (countryTime >= 17.2 && !introWolfHowlOne) { introWolfHowlOne = true; introWolfHowlAudioOne.pause(); introWolfHowlAudioOne.currentTime = 0; }
       // This recording is an environmental howl from beyond the visible wolves, not from the wolf on the right.
-      if (countryTime >= 21.4 && !introWolfHowlTwo) { introWolfHowlTwo = true; playIntroWolfAudio(introWolfHowlAudioTwo, introNarrator && !introNarratorBlocked ? .09 : .18, .92); }
+      if (countryTime >= 21.4 && !introWolfHowlTwo) { introWolfHowlTwo = true; playIntroWolfAudio(introWolfHowlAudioTwo, .18, .92); }
       if (introTime >= INTRO_DURATION) finishIntro();
       return;
     }
@@ -12139,13 +12090,13 @@ const Overworld = (() => {
     sideCameraX = clamp(sidePlayer.x - canvas.width * 0.43, 0, Math.max(0, sideWorldWidth() - canvas.width));
     insideHouse = platformScene === 'house';
     introActive = !saveData || typeof saveData !== 'object';
-    introTime = 0; introSoundChar = 0; introTextSegment = ''; introLastReveal = 0;
+    introTime = 0;
     stopIntroNarration(); introNarratorBlocked = false;
     introWolfFleePaths = null;
     introWolfHowlOne = false; introWolfHowlTwo = false; introWolfHowlEcho = false;
     if (introActive && (typeof settings === 'undefined' || settings.sound !== false)) {
       try { audioCtx(); } catch (_) {}
-      introNarrator = new Audio('./assets/audio/intro-narrator.mp3');
+      introNarrator = new Audio('./assets/audio/intro-storyteller.mp3');
       introNarrator.volume = .85;
       introNarrator.preload = 'auto';
       document.addEventListener('visibilitychange', syncIntroNarration);
