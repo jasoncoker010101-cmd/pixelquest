@@ -186,11 +186,14 @@ const Overworld = (() => {
   // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
   let introActive = false, introTime = 0, introAudio = null, introSoundChar = 0, introTextSegment = '', introLastReveal = 0, introWolfHowlOne = false, introWolfHowlTwo = false, introWolfHowlEcho = false;
   const INTRO_DURATION = 45.5;
-  // 'pad' while a controller is being used, so prompts show PlayStation buttons.
   let inputMode = 'keyboard';
-  function setInputMode(mode) { inputMode = mode === 'pad' ? 'pad' : 'keyboard'; }
+  function setInputMode(mode) { inputMode = mode === 'pad' || mode === 'touch' ? mode : 'keyboard'; }
   const PAD_LABELS = { E: '✕', ENTER: '✕', SPACE: '✕', J: '□', I: '△', C: 'TOUCHPAD', ESC: '○', P: 'OPTIONS' };
-  function K(key) { return inputMode === 'pad' ? (PAD_LABELS[key] || key) : key; }
+  const TOUCH_LABELS = { E: 'USE', ENTER: 'USE', SPACE: 'JUMP', J: 'ATK', I: 'BAG', ESC: 'PAUSE' };
+  function K(key) {
+    const labels = inputMode === 'pad' ? PAD_LABELS : inputMode === 'touch' ? TOUCH_LABELS : null;
+    return labels?.[key] || key;
+  }
   function padRumble(strong, weak, ms) {
     if (inputMode === 'pad' && typeof window.pqRumble === 'function') window.pqRumble(strong, weak, ms);
   }
@@ -8613,7 +8616,8 @@ const Overworld = (() => {
     ctx.fillStyle = 'rgba(8,9,16,.72)'; ctx.fillRect(0, 226, W, 14);
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
     ctx.font = '6px monospace';
-    ctx.fillText(region().peaceful ? (inputMode === 'pad' ? 'STICK MOVE   ✕ JUMP / INTERACT   △ JOURNAL' : 'A/D MOVE   SPACE JUMP   E INTERACT   I JOURNAL')
+    ctx.fillText(inputMode === 'touch' ? (region().peaceful ? 'D-PAD MOVE    USE INTERACT    BAG JOURNAL' : 'D-PAD MOVE    JUMP    HOLD ATK TO CHARGE    ROLL DODGE')
+      : region().peaceful ? (inputMode === 'pad' ? 'STICK MOVE   ✕ JUMP / INTERACT   △ JOURNAL' : 'A/D MOVE   SPACE JUMP   E INTERACT   I JOURNAL')
       : inputMode === 'pad' ? '✕ JUMP  □ ATTACK (HOLD = MOONBLADE)  ↑+□ UPPER  ↓+□ AIR POGO  ○ ROLL  △ BAG' : 'SPACE JUMP  J ATTACK (HOLD=MOONBLADE)  U UPPER  S+J AIR POGO  K ROLL  I BAG', 4, 235);
     if (time < flashUntil) { ctx.fillStyle = 'rgba(190,230,255,' + Math.min(0.5, (flashUntil - time) * 3) + ')'; ctx.fillRect(0, 0, W, canvas.height); }
     if (time - fadeIn < 0.8) { ctx.fillStyle = 'rgba(0,0,0,' + (1 - (time - fadeIn) / 0.8) + ')'; ctx.fillRect(0, 0, W, canvas.height); }
@@ -8678,7 +8682,7 @@ const Overworld = (() => {
         drawItemIcon(ITEM_DEFS[q].icon, 147, 9, 1);
         ctx.fillStyle = '#fff'; ctx.font = 'bold 5px monospace'; ctx.textAlign = 'right'; ctx.fillText(String(inventory[q]), 163, 24);
       } else { ctx.fillStyle = '#4a4050'; ctx.fillRect(149, 11, 8, 8); }
-      ctx.fillStyle = '#ffe3a1'; ctx.font = 'bold 5px monospace'; ctx.textAlign = 'left'; ctx.fillText(inputMode === 'pad' ? 'TP' : 'H', 144, 10);
+      ctx.fillStyle = '#ffe3a1'; ctx.font = 'bold 5px monospace'; ctx.textAlign = 'left'; ctx.fillText(inputMode === 'pad' ? 'TP' : inputMode === 'touch' ? 'ITEM' : 'H', 144, 10);
       if (time - invUseFlash < 0.3) { ctx.fillStyle = 'rgba(155,227,122,.5)'; ctx.fillRect(142, 4, 22, 22); }
       ctx.textAlign = 'left'; ctx.font = '6px monospace';
       drawFortuneHUD();
@@ -9350,8 +9354,10 @@ const Overworld = (() => {
       if (i === 4 && story.pages.some(id => !loreSeen.has(id))) { ctx.fillStyle = '#ff5a4a'; ctx.fillRect(x + tabW - 4, 18, 3, 3); }
     });
     const pad = inputMode === 'pad';
-    invText(pad ? 'L1' : 'Q', tabX0 - 3, 27, '#8f8478', '6px monospace', 'right');
-    invText(pad ? 'R1' : 'R', tabX0 + INV_TABS.length * (tabW + 2), 27, '#8f8478', '6px monospace', 'left');
+    if (inputMode !== 'touch') {
+      invText(pad ? 'L1' : 'Q', tabX0 - 3, 27, '#8f8478', '6px monospace', 'right');
+      invText(pad ? 'R1' : 'R', tabX0 + INV_TABS.length * (tabW + 2), 27, '#8f8478', '6px monospace', 'left');
+    }
     ctx.fillStyle = '#d6b477'; ctx.fillRect(116, 34, W - 132, 1);
 
     // Left: hero card.
@@ -10243,7 +10249,7 @@ const Overworld = (() => {
     if (GAME_KEYS.includes(k) || k === 'shift' || k === ' ') {
       keys.add(k);
       if (GAME_KEYS.includes(k) || k === ' ') e.preventDefault();
-      if (platformMode && (k === 'arrowup' || k === 'w' || k === ' ') && !e.repeat && !String(e.code || '').startsWith('Pad')) sideJumpQueued = true;
+      if (platformMode && (k === 'arrowup' || k === 'w' || k === ' ') && !e.repeat && !/^(Pad|TouchMove)/.test(e.code || '')) sideJumpQueued = true;
     }
   }
 
@@ -10251,6 +10257,7 @@ const Overworld = (() => {
   function clearHeldInput() {
     keys.clear(); attackHeld = false;
     sideAttackQueued = sideJumpQueued = sideRollQueued = sideUpperQueued = false;
+    attackBuffer = rollBuffer = 0;
     sidePlayer.charge = null;
   }
 
@@ -10438,5 +10445,5 @@ const Overworld = (() => {
       enemies: sideMobs.filter(m => !m.dead && Math.abs(m.x - sidePlayer.x) < 220)
         .map(m => ({ type: m.type, x: Math.round(m.x), y: Math.round(m.y), hp: m.hp })) });
   }
-  return { init, update, draw, stop, controllerAction, setInputMode, setBloodEffects, renderState };
+  return { init, update, draw, stop, controllerAction, clearHeldInput, setInputMode, setBloodEffects, renderState };
 })();

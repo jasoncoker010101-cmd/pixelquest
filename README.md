@@ -64,6 +64,8 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
 
 ## Controls
 
+On phones and tablets, slide one thumb across the direction pad and use the other to jump or attack. The touch controls hide when you use a keyboard or mouse or connect a controller. After disconnecting the controller, tap the game to return to touch controls.
+
 | Action | Keyboard | PS5 controller | Touch button |
 |---|---|---|---|
 | Move | WASD or Arrow keys | Left stick or D-pad | Direction pad |

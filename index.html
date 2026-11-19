@@ -43,16 +43,39 @@
   .mobile-controls {
     display: none; position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 10px);
     align-items: end; justify-content: space-between; gap: 8px; pointer-events: none;
+    -webkit-tap-highlight-color: transparent;
   }
-  .mobile-pad, .mobile-actions { display: grid; grid-template-columns: repeat(3, minmax(40px, 1fr)); gap: 4px; }
-  .mobile-actions { grid-template-columns: repeat(4, minmax(41px, 1fr)); }
+  .tv-shell.playing[data-input="touch"] .mobile-controls { display: flex; }
+  .mobile-pad {
+    display: grid; flex: 0 0 112px; width: 112px; height: 112px;
+    grid-template: repeat(3, 1fr) / repeat(3, 1fr); padding: 3px;
+    border: 1px solid #80694e; border-radius: 27%; background: #18131e;
+    box-shadow: 0 3px 8px #0009; touch-action: none; pointer-events: auto; user-select: none;
+  }
+  .mobile-pad span {
+    display: grid; place-items: center; color: #f1dfb7; background: #352a3a; font: bold 16px monospace;
+    pointer-events: none;
+  }
+  .mobile-pad [data-dir="ArrowUp"] { grid-area: 1 / 2; border-radius: 10px 10px 0 0; }
+  .mobile-pad [data-dir="ArrowLeft"] { grid-area: 2 / 1; border-radius: 10px 0 0 10px; }
+  .mobile-pad [data-dir="ArrowRight"] { grid-area: 2 / 3; border-radius: 0 10px 10px 0; }
+  .mobile-pad [data-dir="ArrowDown"] { grid-area: 3 / 2; border-radius: 0 0 10px 10px; }
+  .mobile-pad .pad-center { grid-area: 2 / 2; color: #a58e72; background: #3e3041; }
+  .mobile-right { width: min(184px, calc(100% - 120px)); display: grid; gap: 4px; }
+  .mobile-utility, .mobile-actions { display: grid; gap: 4px; }
+  .mobile-utility { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .mobile-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .mobile-controls button {
-    min-width: 0; height: 42px; padding: 0 3px; border: 1px solid #967b57; border-radius: 8px;
-    background: #241a2bd9; color: #fff0c5; font: bold 12px monospace;
+    min-width: 0; min-height: 44px; padding: 0 2px; border: 1px solid #80694e; border-radius: 9px;
+    background: #292131; color: #fff0c5; font: bold 10px monospace;
     box-shadow: 0 2px 5px #0009; touch-action: none; pointer-events: auto; user-select: none;
   }
-  .mobile-actions button { font-size: 9px; }
-  .mobile-pad button:active, .mobile-actions button:active { background: #9a6847; }
+  .mobile-utility button { background: #201927; color: #e3d1c0; }
+  .mobile-actions .touch-attack { grid-column: span 2; background: #572b39; border-color: #c07872; }
+  .mobile-actions .touch-jump {
+    grid-area: 1 / 3 / span 2; background: #304255; border-color: #829cb5; border-radius: 18px;
+  }
+  .mobile-controls .pressed, .mobile-controls button:active { background: #a36d43; color: #fff8e6; }
 
   .tv-fullscreen-btn {
     position: absolute; z-index: 6; right: 5%; bottom: 1.2%;
@@ -88,16 +111,30 @@
     .tv-fullscreen-btn { right: 4%; bottom: 1%; padding: 4px 7px; font-size: 9px; }
   }
 
-  @media (any-pointer: coarse) {
-    .tv-shell { -webkit-tap-highlight-color: transparent; }
-    .tv-shell.playing { margin-bottom: 108px; }
-    .tv-shell.playing .mobile-controls { display: flex; }
-    .tv-shell.playing:not(:fullscreen) { width: min(94vw, 1040px, calc((100dvh - 134px) * 4 / 3)); }
-    .tv-shell:fullscreen .mobile-controls { top: auto; left: 4%; right: 4%; bottom: 18px; }
-    @media (orientation: landscape) {
-      .tv-shell.playing:not(:fullscreen) { width: min(65vw, calc(89dvh * 4 / 3)); margin-bottom: 0; }
-      .tv-shell.playing .mobile-controls { top: auto; left: -24%; right: -24%; bottom: 4px; }
-      .tv-shell:fullscreen .mobile-controls { left: 2%; right: 2%; bottom: 18px; }
+  .tv-shell.playing[data-input="touch"]:not(:fullscreen) {
+    margin-bottom: 154px; width: min(94vw, 680px, calc((100dvh - 172px) * 4 / 3));
+  }
+  .tv-shell.playing[data-input="touch"]:not(:fullscreen) .mobile-controls {
+    width: max(100%, min(94vw, 312px)); left: 50%; right: auto; transform: translateX(-50%);
+  }
+  .tv-shell.playing[data-input="touch"]:fullscreen canvas {
+    width: min(100vw, calc((100dvh - 166px) * 4 / 3)); height: auto; aspect-ratio: 4 / 3;
+    transform: translateY(-77px);
+  }
+  .tv-shell.playing[data-input="touch"]:fullscreen .mobile-controls {
+    top: auto; left: 3%; right: 3%; bottom: max(8px, env(safe-area-inset-bottom));
+  }
+  .tv-shell.playing[data-input="touch"]:fullscreen .tv-fullscreen-btn { top: 10px; bottom: auto; }
+  @media (orientation: landscape) and (min-width: 590px) {
+    .tv-shell.playing[data-input="touch"]:not(:fullscreen) {
+      width: min(calc(100vw - 356px), calc(92dvh * 4 / 3), 1040px);
+      margin-bottom: 0; transform: translateX(-36px);
+    }
+    .tv-shell.playing[data-input="touch"]:not(:fullscreen) .mobile-controls {
+      width: 94vw; top: auto; bottom: 5px; left: calc(50% + 36px);
+    }
+    .tv-shell.playing[data-input="touch"]:fullscreen canvas {
+      width: min(calc(100vw - 356px), calc(100dvh * 4 / 3)); transform: translateX(-36px);
     }
   }
   #account-dialog { width: min(92vw, 400px); max-height: 90dvh; overflow: auto; border: 1px solid #a78355; border-radius: 12px; padding: 24px; background: #19151e; color: #f6ead5; font: 15px/1.5 system-ui, sans-serif; }
@@ -152,20 +189,25 @@
 <div class="tv-shell" id="tvShell">
   <canvas id="game" width="320" height="240" aria-label="PixelQuest game">PixelQuest needs a browser with Canvas support.</canvas>
   <button type="button" class="tv-fullscreen-btn" id="tvFullscreen" aria-label="Enter TV fullscreen">⛶ TV FULLSCREEN</button>
-  <div class="mobile-controls" aria-label="Touch game controls">
-    <div class="mobile-pad">
-      <span></span><button type="button" data-game-key="ArrowUp" aria-label="Up">▲</button><span></span>
-      <button type="button" data-game-key="ArrowLeft" aria-label="Move left">◀</button><button type="button" data-game-key="ArrowDown" aria-label="Down">▼</button><button type="button" data-game-key="ArrowRight" aria-label="Move right">▶</button>
+  <div class="mobile-controls" role="group" aria-label="Touch game controls">
+    <div class="mobile-pad" role="group" aria-label="Directional pad. Slide your thumb to change direction.">
+      <span data-dir="ArrowUp" aria-hidden="true">▲</span>
+      <span data-dir="ArrowLeft" aria-hidden="true">◀</span><span class="pad-center" aria-hidden="true">•</span><span data-dir="ArrowRight" aria-hidden="true">▶</span>
+      <span data-dir="ArrowDown" aria-hidden="true">▼</span>
     </div>
-    <div class="mobile-actions">
-      <button type="button" data-game-key="e" aria-label="Interact or continue">USE</button>
-      <button type="button" data-game-key="Shift">RUN</button>
-      <button type="button" data-game-key="j" aria-label="Attack or hold to charge">ATK</button>
-      <button type="button" data-game-key=" ">JUMP</button>
-      <button type="button" data-game-key="i">BAG</button>
-      <button type="button" data-game-key="k">ROLL</button>
-      <button type="button" data-game-key="h" aria-label="Use quick item">ITEM</button>
-      <button type="button" data-game-key="Escape">PAUSE</button>
+    <div class="mobile-right">
+      <div class="mobile-utility">
+        <button type="button" data-game-key="Shift">RUN</button>
+        <button type="button" data-game-key="h" aria-label="Use quick item">ITEM</button>
+        <button type="button" data-game-key="i">BAG</button>
+        <button type="button" data-game-key="Escape">PAUSE</button>
+      </div>
+      <div class="mobile-actions">
+        <button type="button" data-game-key="e" aria-label="Interact or continue">USE</button>
+        <button type="button" data-game-key="k">ROLL</button>
+        <button type="button" class="touch-jump" data-game-key=" ">JUMP</button>
+        <button type="button" class="touch-attack" data-game-key="j" aria-label="Attack or hold to charge">ATK</button>
+      </div>
     </div>
   </div>
 </div>
@@ -512,6 +554,7 @@ async function enterWorld(slot) {
     titleMusic.pause(); titleMusic.volume = 0;
     Overworld.init(canvas, exitWorld, save, saveActiveSlot);
     inWorld = true; tvShell.classList.add('playing'); message = '';
+    Overworld.setInputMode(controlMode);
   } catch {
     message = user ? 'CLOUD LOAD FAILED. RETRY OR SIGN OUT.' : 'COULD NOT START. REFRESH AND RETRY.';
   }
@@ -520,6 +563,7 @@ async function enterWorld(slot) {
 
 function exitWorld(data) {
   if (data) saveActiveSlot(data);
+  cancelTouchControls();
   inWorld = false; tvShell.classList.remove('playing');
 }
 
@@ -638,24 +682,98 @@ canvas.addEventListener('click', e => {
   if (i >= 0) { state.sel = i; activate(); }
 });
 
-// Touch controls send the same keyboard events used by the desktop controls.
-document.querySelectorAll('[data-game-key]').forEach(button => {
-  const key = button.dataset.gameKey;
-  const code = key === 'z' ? 'KeyZ' : key === 'Shift' ? 'ShiftLeft' : key.startsWith('Arrow') ? key : '';
-  const press = event => {
-    event.preventDefault();
-    button.setPointerCapture?.(event.pointerId);
-    window.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true, cancelable: true }));
-  };
-  const release = event => {
-    event.preventDefault();
-    window.dispatchEvent(new KeyboardEvent('keyup', { key, code, bubbles: true, cancelable: true }));
-  };
-  button.addEventListener('pointerdown', press);
-  button.addEventListener('pointerup', release);
-  button.addEventListener('pointercancel', release);
-  button.addEventListener('lostpointercapture', release);
+// Keep the last local input type so unplugging a pad restores the appropriate layout.
+let localControl = matchMedia('(pointer: coarse) and (hover: none)').matches ? 'touch' : 'keyboard';
+let controlMode = localControl, controllerConnected = false;
+tvShell.dataset.input = controlMode;
+function syncControlMode() {
+  const mode = controllerConnected ? 'pad' : localControl;
+  if (mode === controlMode) return;
+  if (controlMode === 'touch') cancelTouchControls();
+  controlMode = mode;
+  tvShell.dataset.input = mode;
+  if (inWorld) Overworld.setInputMode(mode);
+}
+function selectLocalControl(mode) { localControl = mode; syncControlMode(); }
+window.addEventListener('pointerdown', event => {
+  if (event.isTrusted) selectLocalControl(event.pointerType === 'touch' ? 'touch' : 'keyboard');
+}, true);
+window.addEventListener('keydown', event => {
+  if (event.isTrusted && !event.isComposing && !['Alt', 'Control', 'Meta', 'CapsLock'].includes(event.key)) {
+    selectLocalControl('keyboard');
+  }
+}, true);
+
+// One captured thumb slides across the whole D-pad. Other fingers can hold actions.
+const touchPad = document.querySelector('.mobile-pad');
+const touchDirections = [...touchPad.querySelectorAll('[data-dir]')];
+const touchActions = new Map();
+let touchPadPointer = null;
+let touchMoveKeys = new Set();
+function dispatchTouchKey(key, down, direction = false) {
+  window.dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', {
+    key, code: direction ? 'TouchMove' + key : 'TouchAction', bubbles: true, cancelable: true
+  }));
+}
+function setTouchDirections(next) {
+  for (const key of touchMoveKeys) if (!next.has(key)) dispatchTouchKey(key, false, true);
+  for (const key of next) if (!touchMoveKeys.has(key)) dispatchTouchKey(key, true, true);
+  touchMoveKeys = next;
+  for (const arrow of touchDirections) arrow.classList.toggle('pressed', next.has(arrow.dataset.dir));
+}
+function trackTouchPad(event) {
+  if (event.pointerId !== touchPadPointer) return;
+  const box = touchPad.getBoundingClientRect();
+  const x = (event.clientX - box.left) / box.width * 2 - 1;
+  const y = (event.clientY - box.top) / box.height * 2 - 1;
+  const next = new Set();
+  if (Math.abs(x) > .21 && Math.abs(x) >= Math.abs(y) * .5) next.add(x < 0 ? 'ArrowLeft' : 'ArrowRight');
+  if (Math.abs(y) > .21 && Math.abs(y) >= Math.abs(x) * .5) next.add(y < 0 ? 'ArrowUp' : 'ArrowDown');
+  setTouchDirections(next);
+}
+function releaseTouchPad(event) {
+  if (event.pointerId !== touchPadPointer) return;
+  touchPadPointer = null;
+  setTouchDirections(new Set());
+}
+function cancelTouchControls() {
+  const active = touchPadPointer !== null || touchActions.size > 0;
+  touchPadPointer = null;
+  touchMoveKeys.clear();
+  for (const arrow of touchDirections) arrow.classList.remove('pressed');
+  for (const button of touchActions.values()) button.classList.remove('pressed');
+  touchActions.clear();
+  if (active && inWorld) Overworld.clearHeldInput();
+}
+touchPad.addEventListener('pointerdown', event => {
+  if (event.pointerType !== 'touch' || controlMode !== 'touch' || touchPadPointer !== null) return;
+  event.preventDefault();
+  touchPadPointer = event.pointerId;
+  touchPad.setPointerCapture(event.pointerId);
+  trackTouchPad(event);
 });
+touchPad.addEventListener('pointermove', trackTouchPad);
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) touchPad.addEventListener(type, releaseTouchPad);
+for (const button of document.querySelectorAll('[data-game-key]')) {
+  const key = button.dataset.gameKey;
+  button.addEventListener('pointerdown', event => {
+    if (event.pointerType !== 'touch' || controlMode !== 'touch' || button.classList.contains('pressed')) return;
+    event.preventDefault();
+    touchActions.set(event.pointerId, button);
+    button.setPointerCapture(event.pointerId);
+    button.classList.add('pressed');
+    dispatchTouchKey(key, true);
+  });
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(type, event => {
+    if (touchActions.get(event.pointerId) !== button) return;
+    if (type !== 'pointerup') { cancelTouchControls(); return; }
+    touchActions.delete(event.pointerId);
+    button.classList.remove('pressed');
+    dispatchTouchKey(key, false);
+  });
+}
+window.addEventListener('blur', cancelTouchControls);
+document.addEventListener('visibilitychange', () => { if (document.hidden) cancelTouchControls(); });
 
 function update(dt) {
   updateMenuFx(dt);
@@ -1593,20 +1711,19 @@ function drawCRT() {
 //   L1 / R1 / L2        Hold to run
 const gamepadState = { held: new Set(), repeatAt: new Map(), actions: new Set(), index: -1 };
 window.addEventListener('gamepadconnected', e => {
-  gamepadState.index = e.gamepad.index;
-  if (inWorld && Overworld.setInputMode) Overworld.setInputMode('pad');
+  if (!controllerConnected) gamepadState.index = e.gamepad.index;
+  controllerConnected = true; syncControlMode();
 });
-window.addEventListener('gamepaddisconnected', e => {
-  if (e.gamepad.index !== gamepadState.index && gamepadState.index !== -1) return;
-  gamepadState.held.forEach(key => dispatchPadKey(key, false));
+function clearGamepad() {
   gamepadState.held.clear(); gamepadState.repeatAt.clear(); gamepadState.actions.clear();
   gamepadState.index = -1;
-  if (typeof Overworld !== 'undefined' && Overworld.setInputMode) Overworld.setInputMode('keyboard');
+  if (inWorld) Overworld.clearHeldInput();
+}
+window.addEventListener('gamepaddisconnected', e => {
+  if (gamepadState.index >= 0 && e.gamepad.index !== gamepadState.index) return;
+  clearGamepad();
+  controllerConnected = !!currentPad(); syncControlMode();
 });
-// Real keyboard use switches on-screen prompts back to keyboard keys.
-window.addEventListener('keydown', e => {
-  if (e.isTrusted && typeof Overworld !== 'undefined' && Overworld.setInputMode) Overworld.setInputMode('keyboard');
-}, true);
 function dispatchPadKey(key, down, repeat = false) {
   // The "Pad" code lets the game tell stick/D-pad input apart from the keyboard,
   // so pushing up on the stick never makes the knight jump.
@@ -1624,15 +1741,18 @@ function rumble(strong, weak, ms) {
   } catch (_) {}
 }
 window.pqRumble = rumble;
+let gamepadAccessDenied = false;
 function currentPad() {
-  if (!navigator.getGamepads) return null;
-  const pads = navigator.getGamepads();
+  if (gamepadAccessDenied || !navigator.getGamepads) return null;
+  let pads;
+  try { pads = navigator.getGamepads(); }
+  catch { gamepadAccessDenied = true; return null; }
   if (gamepadState.index >= 0 && pads[gamepadState.index] && pads[gamepadState.index].connected) return pads[gamepadState.index];
   let fallback = null;
   for (let i = 0; i < pads.length; i++) {
     const p = pads[i];
     if (!p || !p.connected) continue;
-    if (p.mapping === 'standard') { gamepadState.index = i; return p; }
+    if (p.mapping === 'standard') return p;
     if (!fallback) fallback = p;
   }
   return fallback;
@@ -1660,7 +1780,15 @@ function readPad(pad) {
 }
 function pollGamepad(now) {
   const pad = currentPad();
-  if (!pad) return;
+  if (!pad) {
+    if (controllerConnected) { clearGamepad(); controllerConnected = false; syncControlMode(); }
+    return;
+  }
+  if (gamepadState.index !== pad.index) {
+    if (controllerConnected) clearGamepad();
+    gamepadState.index = pad.index;
+  }
+  if (!controllerConnected) { controllerConnected = true; syncControlMode(); }
   const { pressed, lx, ly } = readPad(pad);
   const DEAD = 0.42;
   const next = new Set();
@@ -1670,8 +1798,6 @@ function pollGamepad(now) {
   if (pressed(13) || ly > DEAD) next.add('ArrowDown');
   // Either shoulder (or L2) runs; release only after all are released.
   if (pressed(4) || pressed(5) || pressed(6)) next.add('Shift');
-  const anyInput = next.size > 0 || [0, 1, 2, 3, 7, 8, 9, 16, 17].some(pressed);
-  if (anyInput && inWorld && Overworld.setInputMode) Overworld.setInputMode('pad');
   for (const key of gamepadState.held) {
     if (!next.has(key)) { dispatchPadKey(key, false); gamepadState.repeatAt.delete(key); }
   }
