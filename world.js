@@ -131,159 +131,12 @@ const Overworld = (() => {
     }
     if (line) output.push(line);
     const visible = Math.min(3, output.length);
-    const y = 190;
+    const y = 186;
     ctx.fillStyle = 'rgba(8,10,22,.88)';
     ctx.fillRect(13, y, 294, 39);
     ctx.strokeStyle = '#d7bd83'; ctx.lineWidth = 1; ctx.strokeRect(13.5, y + .5, 293, 38);
     ctx.font = '8px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff0ce';
     for (let i = 0; i < visible; i++) ctx.fillText(output[i], 22, y + 12 + i * 10);
-  }
-  function drawPixelEarth(rotation) {
-    // A larger, richly shaded pixel planet with moving cloud bands and a soft atmosphere.
-    const size = 80, center = 39.5, radius = 36.5;
-    ctx.save();
-    ctx.translate(160, 108);
-    ctx.fillStyle = 'rgba(0,0,0,.38)';
-    ctx.beginPath(); ctx.ellipse(3, 43, 47, 9, 0, 0, Math.PI * 2); ctx.fill();
-
-    // Atmospheric rim and subtle glow behind the planet.
-    ctx.shadowColor = 'rgba(72,164,255,.55)';
-    ctx.shadowBlur = 13;
-    ctx.fillStyle = '#17243e';
-    ctx.beginPath(); ctx.arc(0, 0, 42, 0, Math.PI * 2); ctx.fill();
-    ctx.shadowBlur = 0;
-
-    const landShapes = [
-      // North and South America
-      [[-2.75,.78],[-2.35,1.05],[-1.95,1.05],[-1.55,.88],[-1.38,.58],[-1.65,.35],[-1.72,.1],[-1.5,-.22],[-1.7,-.55],[-1.95,-.9],[-2.15,-1.28],[-2.48,-1.05],[-2.72,-.52]],
-      [[-1.9,-.1],[-1.55,-.24],[-1.35,-.55],[-1.25,-.9],[-1.45,-1.25],[-1.62,-1.62],[-1.9,-1.48],[-2.05,-1.02]],
-      // Europe, Africa, Asia
-      [[-.65,.85],[-.35,1.05],[.1,1.02],[.45,.92],[.62,.72],[.95,.7],[1.25,.9],[1.6,.78],[1.85,.55],[2.2,.58],[2.55,.35],[2.85,.12],[2.62,-.18],[2.25,-.28],[1.95,-.35],[1.72,-.65],[1.4,-.6],[1.2,-.25],[.95,-.12],[.72,-.38],[.45,-.5],[.28,-.88],[-.05,-1.15],[-.4,-.92],[-.62,-.45],[-.8,-.15],[-.72,.35]],
-      // India and southeast Asia
-      [[.7,.18],[.92,.1],[1.05,-.25],[.9,-.65],[.68,-.52],[.55,-.15]],
-      [[1.8,-.35],[2.05,-.48],[2.28,-.72],[2.15,-.95],[1.92,-.85],[1.72,-.62]],
-      // Australia and islands
-      [[2.35,-1.05],[2.72,-1.12],[2.85,-1.38],[2.58,-1.52],[2.28,-1.38]],
-      [[-2.9,-.08],[-2.72,-.2],[-2.62,-.38],[-2.8,-.52]],
-      [[-2.2,.15],[-2.05,.25],[-1.9,.15],[-2.02,-.02]],
-      [[-.25,-.12],[.02,-.2],[.12,-.35],[-.1,-.48],[-.32,-.32]]
-    ];
-    const inPoly = (x, y, poly) => {
-      let inside = false;
-      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-        const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
-        if (((yi > y) !== (yj > y)) && x < (xj - xi) * (y - yi) / ((yj - yi) || .0001) + xi) inside = !inside;
-      }
-      return inside;
-    };
-    for (let py = 0; py < size; py++) {
-      for (let px = 0; px < size; px++) {
-        const dx = (px - center) / radius, dy = (py - center) / radius;
-        const rr = dx * dx + dy * dy;
-        if (rr > 1) continue;
-        const z = Math.sqrt(1 - rr);
-        const lat = Math.asin(-dy);
-        const lon = Math.atan2(dx, z) + rotation;
-        const noise = Math.sin(lon * 8 + Math.sin(lat * 10)) * .055 + Math.sin(lon * 15 + lat * 12) * .035;
-        const land = landShapes.some(poly => inPoly(lon, lat, poly)) || (noise > .065 && lat > -.25 && lat < .7);
-        const light = Math.max(0, Math.min(1, .27 + (-dx * .58 - dy * .45 + z * .72) * .7));
-        const oceanDepth = Math.sin(lon * 3.4 + lat * 5) * .035;
-        let color;
-        if (land) {
-          const terrain = Math.sin(lon * 11 + lat * 9) * .08 + Math.cos(lat * 15 - lon * 4) * .05;
-          color = light + terrain > .68 ? '#a6cf79' : light + terrain > .43 ? '#579c60' : '#326452';
-          if (lat > 1.15 || lat < -1.18) color = '#d9e8d9';
-        } else {
-          color = light + oceanDepth > .68 ? '#66c0df' : light + oceanDepth > .42 ? '#347da9' : '#19466f';
-        }
-        // Broad, fragmented cloud bands move slowly independently of the continents.
-        const cloudNoise = Math.sin(px * .29 + py * .16 + rotation * 2.2) +
-          Math.sin(px * .13 - py * .31 + rotation * 1.3) +
-          Math.cos(py * .24 + rotation * 1.7);
-        if (cloudNoise > 1.55 && light > .28) color = land ? '#c9e2c0' : '#d9edf0';
-        ctx.fillStyle = color;
-        ctx.fillRect(px - 40, py - 40, 1, 1);
-      }
-    }
-
-    // Fine pixel highlights on the limb and an illuminated atmosphere.
-    ctx.strokeStyle = 'rgba(176,225,255,.8)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(0, 0, 36.5, -.9, 2.65); ctx.stroke();
-    ctx.strokeStyle = 'rgba(63,135,226,.55)';
-    ctx.beginPath(); ctx.arc(0, 0, 38.5, 0, Math.PI * 2); ctx.stroke();
-    // Tiny satellite-like glint to make the planet feel alive.
-    const glint = .35 + .3 * Math.sin(introTime * 2.2);
-    ctx.fillStyle = 'rgba(220,245,255,' + glint + ')';
-    ctx.fillRect(-28, -20, 2, 1); ctx.fillRect(25, 15, 1, 2);
-    ctx.restore();
-  }
-  function drawIntroWorld(zoom, centerX, centerY) {
-    const oldX = camX, oldY = camY;
-    // The distant howl hits with a brief, uneven pixel-camera shake.
-    const howlAge = introTime - 21.4;
-    const shakeEnvelope = howlAge >= 0 && howlAge < 2.6 ? (1 - howlAge / 2.6) * (0.65 + 0.35 * Math.abs(Math.sin(howlAge * 8))) : 0;
-    const shakeX = shakeEnvelope * (Math.sin(introTime * 39) * 2.8 + Math.sin(introTime * 17) * 1.3);
-    const shakeY = shakeEnvelope * (Math.cos(introTime * 31) * 2.1 + Math.sin(introTime * 23) * 0.9);
-    ctx.save();
-    ctx.translate(160 + shakeX, 120 + shakeY);
-    ctx.scale(zoom, zoom);
-    ctx.translate(-centerX, -centerY);
-    camX = 0; camY = 0;
-    for (let ty = 0; ty < MAP_H; ty++) {
-      for (let tx = 0; tx < MAP_W; tx++) drawTile(map[ty][tx], tx * TILE, ty * TILE, tx, ty);
-    }
-    drawHouse();
-    drawMailbox();
-    drawFish();
-    bunnies.forEach(drawBunny);
-    // Two wolves pace, freeze at the distant howl, then follow clear routes away.
-    if (introTime >= 15 && introTime < 27.2) {
-      const howlAt = 21.4;
-      const fleeStart = 22.15;
-      const routeTime = Math.min(introTime, howlAt);
-      const wanderX = Math.sin(routeTime * 0.85) * 13 + Math.sin(routeTime * 1.7) * 4;
-      const wanderY = Math.sin(routeTime * 1.15 + 1) * 7;
-      const wanderVX = Math.cos(routeTime * 0.85) * 13 * 0.85 + Math.cos(routeTime * 1.7) * 4 * 1.7;
-      const wanderVY = Math.cos(routeTime * 1.15 + 1) * 7 * 1.15;
-      const walking = introTime < howlAt;
-      const running = introTime >= fleeStart;
-
-      let wolfOne = { x: 24 * TILE + wanderX, y: 18 * TILE + wanderY, vx: walking ? wanderVX : 0, vy: walking ? wanderVY : 0 };
-      let wolfTwo = { x: 29 * TILE - wanderX * 0.72, y: 20 * TILE - wanderY * 0.65, vx: walking ? -wanderVX * 0.72 : 0, vy: walking ? -wanderVY * 0.65 : 0 };
-
-      if (running) {
-        if (!introWolfFleePaths) {
-          const startOneX = 24 * TILE + Math.sin(howlAt * 0.85) * 13 + Math.sin(howlAt * 1.7) * 4;
-          const startOneY = 18 * TILE + Math.sin(howlAt * 1.15 + 1) * 7;
-          const startTwoX = 29 * TILE - (startOneX - 24 * TILE) * 0.72;
-          const startTwoY = 20 * TILE - (startOneY - 18 * TILE) * 0.65;
-          introWolfFleePaths = [
-            introWolfFindPath(startOneX, startOneY, 280, 352) || [{ x: startOneX, y: startOneY }, { x: 280, y: 352 }],
-            introWolfFindPath(startTwoX, startTwoY, 376, 376) || [{ x: startTwoX, y: startTwoY }, { x: 376, y: 376 }]
-          ];
-        }
-        const routeDuration = 2.35;
-        const rawProgress = Math.max(0, Math.min(1, (introTime - fleeStart) / routeDuration));
-        const travelProgress = rawProgress * rawProgress;
-        // After crossing the scripted route, keep their last running direction
-        // so they leave the scene instead of stopping on a visible run frame.
-        const extraDistance = Math.max(0, introTime - fleeStart - routeDuration) * 190;
-        const one = introWolfPathEscapePoint(introWolfFleePaths[0], travelProgress, extraDistance);
-        const two = introWolfPathEscapePoint(introWolfFleePaths[1], travelProgress, extraDistance);
-        if (one) wolfOne = one;
-        if (two) wolfTwo = two;
-      }
-
-      // The run cycle continues until the wolves have moved beyond the camera.
-      const runMoving = running;
-      drawIntroWolf(wolfOne.x, wolfOne.y, false, wolfOne.vx, running ? 'run' : 'walk', walking || runMoving, running ? introTime - fleeStart : routeTime - 15);
-      drawIntroWolf(wolfTwo.x, wolfTwo.y, true, wolfTwo.vx, running ? 'run' : 'walk', walking || runMoving, running ? introTime - fleeStart : routeTime - 15);
-      if (introTime >= 21.4 && introTime < 24.8) {
-        drawDistantHowlGlitch(37 * TILE, 8 * TILE, (introTime - 21.4) / 3.4);
-      }
-    }
-    camX = oldX; camY = oldY;
-    ctx.restore();
   }
   // Broken, pixel-stepped sound distortions. These are intentionally not smooth circles.
   function drawGlitchHowl(x, y, intensity, seed = 0) {
@@ -329,246 +182,871 @@ const Overworld = (() => {
     }
     ctx.restore();
   }
-  function introWolfPointBlocked(px, py) {
-    const worldW = MAP_W * TILE, worldH = MAP_H * TILE;
-    if (px < TILE || py < TILE || px > worldW - TILE || py > worldH - TILE) return true;
-    const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
-    const tile = tileAt(tx, ty);
-    if (tile === 'B' || tile === 'W' || tile === 'H' || tile === 'R' || tile === 'D') return true;
+  // ===========================================================================
+  // Cinematic intro renderer.
+  //  0.0 - 8.5   Space: textured, lit Earth with clouds, city lights and a Moon.
+  //  8.5 - 38.5  Side-view moonlit countryside: village, werewolves, the home.
+  //  38.5 - end  Bedroom (unchanged).
+  // Textures are NASA public-domain maps (Blue Marble, Earth at Night,
+  // Clementine lunar map), downsampled into assets/intro/.
+  // ===========================================================================
+  function introTexture(src) {
+    const tex = { img: new Image(), data: null, w: 0, h: 0 };
+    tex.img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = tex.img.naturalWidth; c.height = tex.img.naturalHeight;
+        const g = c.getContext('2d');
+        g.drawImage(tex.img, 0, 0);
+        tex.data = g.getImageData(0, 0, c.width, c.height).data;
+        tex.w = c.width; tex.h = c.height;
+      } catch (_) { tex.data = null; }
+    };
+    tex.img.src = pqAsset(src);
+    return tex;
+  }
+  const introEarthDay = introTexture('./assets/intro/earth-day.png');
+  const introEarthNight = introTexture('./assets/intro/earth-night.png');
+  const introMoonTex = introTexture('./assets/intro/moon.png');
+  const introBlackIdle = new Image();
+  introBlackIdle.src = pqAsset('./assets/werewolves/Black_Werewolf/Idle.png');
+  const introRedIdle = new Image();
+  introRedIdle.src = pqAsset('./assets/werewolves/Red_Werewolf/Idle.png');
+  const introBlackHurt = new Image();
+  introBlackHurt.src = pqAsset('./assets/werewolves/Black_Werewolf/Hurt.png');
+  const introRedHurt = new Image();
+  introRedHurt.src = pqAsset('./assets/werewolves/Red_Werewolf/Hurt.png');
 
-    // Trees have a small trunk collision area, not a full-tile wall.
-    for (let y = Math.max(0, ty - 1); y <= Math.min(MAP_H - 1, ty + 1); y++) {
-      for (let x = Math.max(0, tx - 1); x <= Math.min(MAP_W - 1, tx + 1); x++) {
-        if (tileAt(x, y) !== 'T') continue;
-        const trunkX = x * TILE + 8;
-        const trunkY = y * TILE + 13;
-        if (Math.abs(px - trunkX) < 6 && py >= y * TILE + 9 && py <= y * TILE + 17) return true;
+  function introHash(n) {
+    const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+    return s - Math.floor(s);
+  }
+  function introNoise3(x, y, z) {
+    const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+    const xf = x - xi, yf = y - yi, zf = z - zi;
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf), w = zf * zf * (3 - 2 * zf);
+    const h = (a, b, c) => introHash(a * 57 + b * 113 + c * 271);
+    const l = (a, b, k) => a + (b - a) * k;
+    return l(
+      l(l(h(xi, yi, zi), h(xi + 1, yi, zi), u), l(h(xi, yi + 1, zi), h(xi + 1, yi + 1, zi), u), v),
+      l(l(h(xi, yi, zi + 1), h(xi + 1, yi, zi + 1), u), l(h(xi, yi + 1, zi + 1), h(xi + 1, yi + 1, zi + 1), u), v),
+      w);
+  }
+  function introFbm(x, y, z, oct = 4) {
+    let a = 0.5, f = 1, s = 0;
+    for (let i = 0; i < oct; i++) { s += a * introNoise3(x * f, y * f, z * f); f *= 2.03; a *= 0.5; }
+    return s;
+  }
+  const smooth01 = p => { p = Math.max(0, Math.min(1, p)); return p * p * (3 - 2 * p); };
+  const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+
+  // Seamless equirectangular cloud map, generated once on the sphere surface.
+  let introCloudMap = null;
+  function getIntroCloudMap() {
+    if (introCloudMap) return introCloudMap;
+    const W = 160, H = 80, map = new Float32Array(W * H);
+    for (let j = 0; j < H; j++) {
+      const lat = (0.5 - (j + 0.5) / H) * Math.PI;
+      for (let i = 0; i < W; i++) {
+        const lon = ((i + 0.5) / W) * Math.PI * 2;
+        const x = Math.cos(lat) * Math.cos(lon), y = Math.sin(lat), z = Math.cos(lat) * Math.sin(lon);
+        // Stretch along longitude for banded, weather-like systems.
+        let n = introFbm(x * 2.6 + 9, y * 4.4, z * 2.6, 5);
+        const band = 0.55 + 0.45 * Math.abs(Math.sin(lat * 3.1));
+        n = (n - 0.47) * 3.2 * band;
+        map[j * W + i] = Math.max(0, Math.min(1, n));
       }
     }
-    return false;
+    introCloudMap = { W, H, map };
+    return introCloudMap;
   }
 
-  function introWolfFindPath(startX, startY, endX, endY) {
-    // Plan on an 8px grid so wolves can take a route around solid tiles and
-    // tree trunks instead of being pushed sideways after they hit an obstacle.
-    const STEP = 8;
-    const COLS = MAP_W * TILE / STEP;
-    const ROWS = MAP_H * TILE / STEP;
-    const clampCell = (v, max) => Math.max(1, Math.min(max - 2, Math.round(v / STEP)));
-    const sx = clampCell(startX, COLS), sy = clampCell(startY, ROWS);
-    const ex = clampCell(endX, COLS), ey = clampCell(endY, ROWS);
-    const start = sy * COLS + sx, goal = ey * COLS + ex;
-    const toX = id => (id % COLS) * STEP;
-    const toY = id => Math.floor(id / COLS) * STEP;
-    const total = COLS * ROWS;
-    const scores = new Float64Array(total);
-    scores.fill(Infinity);
-    const parents = new Int32Array(total);
-    parents.fill(-1);
-    const closed = new Uint8Array(total);
-    const heap = [];
-
-    const push = (id, priority) => {
-      let i = heap.length;
-      heap.push({ id, priority });
-      while (i > 0) {
-        const parent = (i - 1) >> 1;
-        if (heap[parent].priority <= priority) break;
-        heap[i] = heap[parent];
-        i = parent;
-      }
-      heap[i] = { id, priority };
-    };
-    const pop = () => {
-      const first = heap[0];
-      const last = heap.pop();
-      if (heap.length) {
-        let i = 0;
-        while (true) {
-          const left = i * 2 + 1, right = left + 1;
-          if (left >= heap.length) break;
-          let child = left;
-          if (right < heap.length && heap[right].priority < heap[left].priority) child = right;
-          if (heap[child].priority >= last.priority) break;
-          heap[i] = heap[child];
-          i = child;
+  const introSphereCanvases = {};
+  // Per-pixel lit sphere. kind: 'earth' or 'moon'. rotation in radians.
+  function renderIntroSphere(kind, radius, rotation, light) {
+    const D = radius * 2 + 2;
+    const key = kind + D;
+    let entry = introSphereCanvases[key];
+    if (!entry) {
+      const c = document.createElement('canvas'); c.width = D; c.height = D;
+      const g = c.getContext('2d');
+      entry = introSphereCanvases[key] = { c, g, img: g.createImageData(D, D) };
+    }
+    const out = entry.img.data;
+    out.fill(0);
+    const ll = Math.hypot(light[0], light[1], light[2]);
+    const Lx = light[0] / ll, Ly = light[1] / ll, Lz = light[2] / ll;
+    let Hx = Lx, Hy = Ly, Hz = Lz + 1; const hl = Math.hypot(Hx, Hy, Hz); Hx /= hl; Hy /= hl; Hz /= hl;
+    const tilt = kind === 'earth' ? -0.41 : 0.1, ct = Math.cos(tilt), st = Math.sin(tilt);
+    const day = kind === 'earth' ? introEarthDay : introMoonTex;
+    const clouds = kind === 'earth' ? getIntroCloudMap() : null;
+    const cloudRot = rotation * 1.18 + 0.6;
+    const R = radius;
+    for (let j = 0; j < D; j++) {
+      for (let i = 0; i < D; i++) {
+        const nx = (i + 0.5 - D / 2) / R, ny = (j + 0.5 - D / 2) / R;
+        const r2 = nx * nx + ny * ny;
+        if (r2 > 1) continue;
+        const nz = Math.sqrt(1 - r2);
+        // Body coordinates with an axial tilt.
+        const bx = nx * ct - ny * st, by = nx * st + ny * ct;
+        const lat = Math.asin(Math.max(-1, Math.min(1, -by)));
+        const lonBase = Math.atan2(bx, nz);
+        let u = ((lonBase + rotation) / (Math.PI * 2)) % 1; if (u < 0) u += 1;
+        const v = 0.5 - lat / Math.PI;
+        const lambert = nx * Lx + ny * Ly + nz * Lz;
+        const bayer = (BAYER4[(j & 3) * 4 + (i & 3)] / 16 - 0.5) * 0.09;
+        const k = (j * D + i) * 4;
+        let r, g, b;
+        if (kind === 'earth') {
+          let dr = 20, dg = 60, db = 140;
+          if (day.data) {
+            const ti = ((Math.min(day.h - 1, Math.floor(v * day.h)) * day.w) + Math.min(day.w - 1, Math.floor(u * day.w))) * 4;
+            dr = day.data[ti]; dg = day.data[ti + 1]; db = day.data[ti + 2];
+          }
+          const ocean = db > dr + 18 && db > dg;
+          // Richer, slightly stylised palette.
+          if (ocean) { dr = dr * 0.55 + 6; dg = dg * 0.8 + 22; db = db * 0.95 + 40; }
+          else { dr *= 1.08; dg *= 1.12; db *= 0.92; }
+          let cloud = 0;
+          if (clouds) {
+            let cu = ((lonBase + cloudRot) / (Math.PI * 2)) % 1; if (cu < 0) cu += 1;
+            cloud = clouds.map[Math.min(clouds.H - 1, Math.floor(v * clouds.H)) * clouds.W + Math.min(clouds.W - 1, Math.floor(cu * clouds.W))];
+          }
+          const lit = Math.max(0, Math.min(1, (lambert + 0.1) / 0.32 + bayer * 4));
+          const shade = 0.25 + 0.75 * Math.max(0, lambert);
+          let cr = dr * shade, cg = dg * shade, cb = db * shade;
+          if (ocean) {
+            const spec = Math.pow(Math.max(0, nx * Hx + ny * Hy + nz * Hz), 38) * (1 - cloud);
+            cr += spec * 190; cg += spec * 200; cb += spec * 210;
+          }
+          cr = cr * (1 - cloud) + 245 * shade * cloud;
+          cg = cg * (1 - cloud) + 248 * shade * cloud;
+          cb = cb * (1 - cloud) + 255 * shade * cloud;
+          // Night side: deep blue base plus warm city lights under thin cloud.
+          let city = 0;
+          if (introEarthNight.data) {
+            const ni = ((Math.min(introEarthNight.h - 1, Math.floor(v * introEarthNight.h)) * introEarthNight.w) + Math.min(introEarthNight.w - 1, Math.floor(u * introEarthNight.w))) * 4;
+            city = Math.max(0, introEarthNight.data[ni] - 30) / 225;
+          }
+          city *= (1 - cloud * 0.8);
+          const nr = 4 + city * 255, ng = 8 + city * 190, nb = 22 + city * 90;
+          r = cr * lit + nr * (1 - lit);
+          g = cg * lit + ng * (1 - lit);
+          b = cb * lit + nb * (1 - lit);
+          // Atmosphere: blue fresnel rim, strongest on the sunlit limb.
+          const rim = Math.pow(1 - nz, 2.6);
+          const rimLit = Math.max(0.15, Math.min(1, lambert + 0.55));
+          r += rim * 70 * rimLit; g += rim * 150 * rimLit; b += rim * 255 * rimLit;
+          // Warm sunset band along the terminator.
+          const term = Math.max(0, 1 - Math.abs(lambert - 0.06) / 0.07) * 0.3 * lit;
+          r += term * 90; g += term * 28;
+        } else {
+          let m = 170;
+          if (day.data) {
+            const ti = ((Math.min(day.h - 1, Math.floor(v * day.h)) * day.w) + Math.min(day.w - 1, Math.floor(u * day.w))) * 4;
+            m = day.data[ti];
+          }
+          m = 70 + (m - 60) * 1.25;
+          const lit = Math.max(0, Math.min(1, (lambert + 0.03) / 0.16 + bayer * 3));
+          const shade = (0.35 + 0.65 * Math.max(0, lambert)) * lit + 0.05;
+          // Slight limb darkening for a real, rounded moon.
+          const limb = 0.72 + 0.28 * nz;
+          r = m * shade * limb * 1.02 + 6; g = m * shade * limb * 1.0 + 8; b = m * shade * limb * 0.94 + 14;
         }
-        heap[i] = last;
-      }
-      return first;
-    };
-    const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-    const startXGrid = toX(start), startYGrid = toY(start);
-    const goalXGrid = toX(goal), goalYGrid = toY(goal);
-    if (introWolfPointBlocked(startXGrid, startYGrid) || introWolfPointBlocked(goalXGrid, goalYGrid)) return null;
-
-    scores[start] = 0;
-    push(start, Math.hypot(ex - sx, ey - sy) * STEP);
-    while (heap.length) {
-      const current = pop().id;
-      if (closed[current]) continue;
-      if (current === goal) break;
-      closed[current] = 1;
-      const x = current % COLS, y = Math.floor(current / COLS);
-      for (const [dx, dy] of dirs) {
-        const nx = x + dx, ny = y + dy;
-        if (nx < 1 || ny < 1 || nx >= COLS - 1 || ny >= ROWS - 1) continue;
-        const px = nx * STEP, py = ny * STEP;
-        if (introWolfPointBlocked(px, py)) continue;
-        // Do not cut diagonally through the corners of trees, rocks, or walls.
-        if (dx && dy && (
-          introWolfPointBlocked((x + dx) * STEP, y * STEP) ||
-          introWolfPointBlocked(x * STEP, (y + dy) * STEP)
-        )) continue;
-        const next = ny * COLS + nx;
-        if (closed[next]) continue;
-        const nextScore = scores[current] + (dx && dy ? STEP * Math.SQRT2 : STEP);
-        if (nextScore >= scores[next]) continue;
-        scores[next] = nextScore;
-        parents[next] = current;
-        const heuristic = Math.hypot(ex - nx, ey - ny) * STEP;
-        push(next, nextScore + heuristic);
+        out[k] = Math.min(255, r); out[k + 1] = Math.min(255, g); out[k + 2] = Math.min(255, b);
+        // Anti-aliased, but still pixel-crisp edge.
+        const edge = Math.max(0, Math.min(1, (1 - Math.sqrt(r2)) * R * 1.4));
+        out[k + 3] = 255 * Math.min(1, edge + 0.25);
       }
     }
-    if (start !== goal && parents[goal] === -1) return null;
-
-    const path = [];
-    let node = goal;
-    while (node !== -1) {
-      path.push({ x: toX(node), y: toY(node) });
-      if (node === start) break;
-      node = parents[node];
-    }
-    if (!path.length || path[path.length - 1].x !== startXGrid || path[path.length - 1].y !== startYGrid) return null;
-    path.reverse();
-    // Preserve the exact scripted start and destination so the route has no snap.
-    path[0] = { x: startX, y: startY };
-    path[path.length - 1] = { x: endX, y: endY };
-    return path;
+    entry.g.putImageData(entry.img, 0, 0);
+    return entry.c;
   }
 
-  function introWolfPathPoint(path, progress) {
-    if (!path || !path.length) return null;
-    if (path.length === 1) return { x: path[0].x, y: path[0].y, vx: 0, vy: 0 };
-    let totalLength = 0;
-    for (let i = 1; i < path.length; i++) {
-      totalLength += Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y);
-    }
-    let remaining = totalLength * Math.max(0, Math.min(1, progress));
-    let lastHorizontalDirection = 1;
-    for (let i = 1; i < path.length; i++) {
-      const a = path[i - 1], b = path[i];
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const length = Math.hypot(dx, dy);
-      if (dx !== 0) lastHorizontalDirection = dx;
-      if (remaining <= length || i === path.length - 1) {
-        const t = length > 0 ? Math.max(0, Math.min(1, remaining / length)) : 0;
-        return { x: a.x + dx * t, y: a.y + dy * t, vx: dx || lastHorizontalDirection, vy: dy };
+  // Static full moon for the night sky (rendered once).
+  let introSkyMoon = null;
+  function getIntroSkyMoon() {
+    if (!introSkyMoon && introMoonTex.data) introSkyMoon = renderIntroSphere('moon', 19, 0.2, [-0.12, -0.08, 1]);
+    return introSkyMoon;
+  }
+
+  // ---- Starfield and Milky Way (pre-rendered) ----
+  let introStarfield = null;
+  function getIntroStarfield() {
+    if (introStarfield) return introStarfield;
+    const c = document.createElement('canvas'); c.width = 360; c.height = 240;
+    const g = c.getContext('2d');
+    const img = g.createImageData(360, 240), d = img.data;
+    for (let y = 0; y < 240; y++) {
+      for (let x = 0; x < 360; x++) {
+        const k = (y * 360 + x) * 4;
+        // Diagonal galactic band with dusty structure.
+        const along = (x * 0.55 + y * 0.83), across = (x * 0.83 - y * 0.55) - 60;
+        const band = Math.exp(-(across * across) / (2 * 38 * 38));
+        const dust = introFbm(x / 34, y / 34, 3.3, 5);
+        const lanes = Math.max(0, introFbm(x / 18 + 7, y / 18, 1.1, 4) - 0.52) * 2.4;
+        const glow = Math.max(0, band * (dust * 1.25 - 0.28) - lanes * band * 0.6);
+        const hue = introNoise3(along / 70, 2.2, 0.5);
+        d[k] = 6 + glow * (55 + hue * 45);
+        d[k + 1] = 8 + glow * (48 + hue * 10);
+        d[k + 2] = 20 + glow * (95 - hue * 20);
+        d[k + 3] = 255;
+        const sr = introHash(x * 0.913 + y * 37.17);
+        const density = 0.006 + band * 0.05;
+        if (sr < density) {
+          const bright = 90 + introHash(x * 3.1 + y * 0.77) * 165;
+          const tint = introHash(x + y * 3.7);
+          d[k] = Math.min(255, bright * (tint < 0.2 ? 1 : 0.85 + tint * 0.15));
+          d[k + 1] = Math.min(255, bright * 0.92);
+          d[k + 2] = Math.min(255, bright * (tint > 0.75 ? 1 : 0.9 + 0.1 * tint) + 18);
+        }
       }
-      remaining -= length;
     }
-    return { x: path[path.length - 1].x, y: path[path.length - 1].y, vx: lastHorizontalDirection, vy: 0 };
+    g.putImageData(img, 0, 0);
+    introStarfield = c;
+    return c;
+  }
+  const INTRO_BRIGHT_STARS = Array.from({ length: 22 }, (_, i) => ({
+    x: introHash(i * 7.3) * 340, y: introHash(i * 3.9 + 1) * 200,
+    s: introHash(i * 5.1 + 2), tw: introHash(i * 9.7 + 4) * 6.28,
+    c: ['#ffffff', '#cfe0ff', '#ffe7c2', '#d9d0ff'][i % 4]
+  }));
+  function drawIntroBrightStars(offsetX, offsetY, alpha, t) {
+    for (const s of INTRO_BRIGHT_STARS) {
+      const tw = 0.55 + 0.45 * Math.sin(t * (1.3 + s.s * 2) + s.tw);
+      const x = Math.round(((s.x - offsetX) % 340 + 340) % 340 - 10), y = Math.round(s.y - offsetY);
+      ctx.globalAlpha = alpha * tw;
+      ctx.fillStyle = s.c;
+      ctx.fillRect(x, y, 1, 1);
+      if (s.s > 0.62) {
+        ctx.globalAlpha = alpha * tw * 0.45;
+        ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3);
+        if (s.s > 0.86) { ctx.globalAlpha = alpha * tw * 0.2; ctx.fillRect(x - 3, y, 7, 1); ctx.fillRect(x, y - 3, 1, 7); }
+      }
+    }
+    ctx.globalAlpha = 1;
   }
 
-  function introWolfPathEscapePoint(path, progress, extraDistance) {
-    const point = introWolfPathPoint(path, progress);
-    if (!point || !path || path.length < 2 || extraDistance <= 0) return point;
-    const previous = path[path.length - 2];
-    const last = path[path.length - 1];
-    const dx = last.x - previous.x, dy = last.y - previous.y;
-    const length = Math.hypot(dx, dy);
-    if (length < 0.001) return point;
-    return {
-      ...point,
-      x: point.x + dx / length * extraDistance,
-      y: point.y + dy / length * extraDistance,
-      vx: dx,
-      vy: dy
-    };
+  let introVignette = null;
+  function drawIntroVignette(strength) {
+    if (!introVignette) {
+      const c = document.createElement('canvas'); c.width = 320; c.height = 240;
+      const g = c.getContext('2d');
+      const grad = g.createRadialGradient(160, 120, 70, 160, 120, 215);
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(0.7, 'rgba(0,0,0,.35)');
+      grad.addColorStop(1, 'rgba(0,0,0,.85)');
+      g.fillStyle = grad; g.fillRect(0, 0, 320, 240);
+      introVignette = c;
+    }
+    ctx.globalAlpha = strength; ctx.drawImage(introVignette, 0, 0); ctx.globalAlpha = 1;
+  }
+  function drawIntroLetterbox() {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, 320, 12);
+    ctx.fillRect(0, 228, 320, 12);
   }
 
-  function drawIntroWolf(x, y, isRed, vx, animation, moving, animationTime) {
-    const px = Math.round(x), groundY = Math.round(y);
-    const running = animation === 'run';
-    const sheet = running
-      ? (isRed ? introRedRun : introBlackRun)
-      : (isRed ? introRedWalk : introBlackWalk);
-    ctx.save();
-    // The shadow is attached to the ground point, not the animated body frame.
-    ctx.fillStyle = 'rgba(0,0,0,.38)';
-    ctx.beginPath();
-    ctx.ellipse(px, groundY + 3, running ? 15 : 13, 3.5, 0, 0, Math.PI * 2);
-    ctx.fill();
+  // ---- Space scene ----
+  function drawIntroSpace(t) {
+    const drift = t * 1.6;
+    ctx.drawImage(getIntroStarfield(), -Math.round(drift), 0);
+    drawIntroBrightStars(drift * 1.4, 0, 1, t);
+    // Off-screen sun: warm glare from the upper left, consistent with the lighting.
+    let glare = ctx.createRadialGradient(-30, 30, 4, -30, 30, 190);
+    glare.addColorStop(0, 'rgba(255,240,215,.55)');
+    glare.addColorStop(0.25, 'rgba(255,200,150,.14)');
+    glare.addColorStop(1, 'rgba(255,190,140,0)');
+    ctx.fillStyle = glare; ctx.fillRect(0, 0, 320, 240);
 
-    // Never substitute either legacy standing PNG. If a sheet is not ready, wait for it.
-    if (sheet.complete && sheet.naturalWidth && sheet.naturalHeight) {
+    const push = smooth01(t / 8.5);
+    const R = Math.round(50 + push * 6);
+    const ex = 160, ey = 106 + Math.round(push * 2);
+    const light = [-0.86, -0.3, 0.32];
+    // Soft atmospheric halo, brighter on the lit side.
+    const halo = ctx.createRadialGradient(ex - 8, ey - 4, R * 0.9, ex, ey, R * 1.32);
+    halo.addColorStop(0, 'rgba(110,180,255,.42)');
+    halo.addColorStop(0.45, 'rgba(70,140,255,.14)');
+    halo.addColorStop(1, 'rgba(40,90,220,0)');
+    ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(ex, ey, R * 1.35, 0, Math.PI * 2); ctx.fill();
+    ctx.imageSmoothingEnabled = false;
+    if (introEarthDay.data) {
+      const earth = renderIntroSphere('earth', R, 1.9 + t * 0.085, light);
+      ctx.drawImage(earth, Math.round(ex - earth.width / 2), Math.round(ey - earth.height / 2));
+    }
+    // The Moon drifts across the foreground on its orbit.
+    const mp = t / 8.5;
+    const mx = 286 - mp * 38, my = 52 + mp * 12;
+    const moonR = 12;
+    if (introMoonTex.data) {
+      const moonGlow = ctx.createRadialGradient(mx, my, moonR * 0.8, mx, my, moonR * 2.1);
+      moonGlow.addColorStop(0, 'rgba(220,225,240,.16)');
+      moonGlow.addColorStop(1, 'rgba(220,225,240,0)');
+      ctx.fillStyle = moonGlow; ctx.beginPath(); ctx.arc(mx, my, moonR * 2.2, 0, Math.PI * 2); ctx.fill();
+      const moon = renderIntroSphere('moon', moonR, 0.4 + t * 0.01, light);
+      ctx.drawImage(moon, Math.round(mx - moon.width / 2), Math.round(my - moon.height / 2));
+    }
+    // Faint lens ghosts along the sun axis.
+    ctx.globalCompositeOperation = 'lighter';
+    [[70, 58, 7, 'rgba(255,190,120,.06)'], [118, 82, 3, 'rgba(160,210,255,.08)'], [214, 128, 11, 'rgba(140,170,255,.035)']].forEach(([x, y, r, c]) => {
+      ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.globalCompositeOperation = 'source-over';
+    drawIntroVignette(0.9);
+
+    // Title card with tracked lettering.
+    const ta = Math.max(0, Math.min(1, (t - 0.6) / 1.2)) * (1 - Math.max(0, Math.min(1, (t - 5.6) / 0.8)));
+    if (ta > 0) {
+      ctx.globalAlpha = ta;
+      ctx.textAlign = 'center'; ctx.font = 'bold 12px monospace';
+      const word = 'E A R T H';
+      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillText(word, 161, 30);
+      ctx.fillStyle = '#f4e8c5'; ctx.fillText(word, 160, 29);
+      const lw = 30 + 24 * Math.min(1, (t - 0.6) / 1.4);
+      const lg = ctx.createLinearGradient(160 - lw, 0, 160 + lw, 0);
+      lg.addColorStop(0, 'rgba(215,189,131,0)'); lg.addColorStop(0.5, 'rgba(215,189,131,.9)'); lg.addColorStop(1, 'rgba(215,189,131,0)');
+      ctx.fillStyle = lg; ctx.fillRect(160 - lw, 34, lw * 2, 1);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // ---- Night countryside (side view, parallax) ----
+  const INTRO_HOUSE_X = 1392;
+  const INTRO_RIDGE_X = 660;
+  function introGroundY(x) {
+    const ridge = Math.exp(-Math.pow((x - INTRO_RIDGE_X) / 150, 2)) * 24;
+    const yard = Math.exp(-Math.pow((x - INTRO_HOUSE_X) / 170, 2)) * 6;
+    return 186 - ridge + yard * 0.6 + Math.sin(x / 61) * 2.6 + Math.sin(x / 23 + 1.3) * 1.1;
+  }
+  const introLayers = {};
+  function introLayer(name, width, painter) {
+    if (introLayers[name]) return introLayers[name];
+    const c = document.createElement('canvas'); c.width = width; c.height = 240;
+    const g = c.getContext('2d');
+    painter(g, width);
+    introLayers[name] = c;
+    return c;
+  }
+  function paintPine(g, x, baseY, h, col, lit) {
+    const w = h * 0.42;
+    g.fillStyle = col;
+    for (let tier = 0; tier < 4; tier++) {
+      const ty = baseY - h + tier * h * 0.2;
+      const tw = w * (0.35 + tier * 0.22);
+      g.beginPath();
+      g.moveTo(x, ty - 2);
+      g.lineTo(x - tw, ty + h * 0.3);
+      g.lineTo(x + tw, ty + h * 0.3);
+      g.closePath(); g.fill();
+    }
+    g.fillRect(Math.round(x - 1), Math.round(baseY - h * 0.15), 2, Math.round(h * 0.15) + 1);
+    if (lit) {
+      // Moonlit edge on the upper-right of each tier.
+      g.fillStyle = lit;
+      for (let tier = 0; tier < 4; tier++) {
+        const ty = baseY - h + tier * h * 0.2;
+        const tw = w * (0.35 + tier * 0.22);
+        g.beginPath();
+        g.moveTo(x, ty - 2); g.lineTo(x + tw, ty + h * 0.3); g.lineTo(x + tw - 2, ty + h * 0.3); g.lineTo(x, ty + 1);
+        g.closePath(); g.fill();
+      }
+    }
+  }
+  function getIntroMountains() {
+    return introLayer('mountains', 560, (g, W) => {
+      for (let x = 0; x < W; x++) {
+        const n = introFbm(x / 70, 0.5, 2.1, 5);
+        const top = Math.round(150 - n * 92 + Math.sin(x / 140) * 8);
+        g.fillStyle = '#26304e'; g.fillRect(x, top, 1, 240 - top);
+        // Moonlit snowy crest on left-facing slopes.
+        const prev = Math.round(150 - introFbm((x - 1) / 70, 0.5, 2.1, 5) * 92 + Math.sin((x - 1) / 140) * 8);
+        if (top < 108) {
+          g.fillStyle = prev > top ? 'rgba(170,190,230,.55)' : 'rgba(120,140,190,.35)';
+          g.fillRect(x, top, 1, Math.max(1, Math.round((108 - top) * 0.18)));
+        }
+      }
+      const haze = g.createLinearGradient(0, 100, 0, 170);
+      haze.addColorStop(0, 'rgba(60,80,130,0)'); haze.addColorStop(1, 'rgba(60,80,130,.55)');
+      g.fillStyle = haze; g.fillRect(0, 90, W, 150);
+    });
+  }
+  const INTRO_VILLAGE = [];
+  function getIntroHills() {
+    return introLayer('hills', 820, (g, W) => {
+      const top = x => 150 - Math.sin(x / 90) * 9 - Math.sin(x / 37 + 2) * 3 - Math.exp(-Math.pow((x - 170) / 120, 2)) * 8;
+      g.fillStyle = '#1c2a44';
+      for (let x = 0; x < W; x++) { const y = Math.round(top(x)); g.fillRect(x, y, 1, 240 - y); }
+      g.fillStyle = 'rgba(110,130,180,.35)';
+      for (let x = 0; x < W; x++) { const y = Math.round(top(x)); g.fillRect(x, y, 1, 1); }
+      // A distant village: cottages, a chapel and warm windows.
+      const houses = [[62, 9, 7], [80, 12, 8], [101, 8, 6], [118, 11, 9], [150, 9, 7], [196, 10, 8], [214, 8, 6], [236, 12, 9], [262, 9, 7], [300, 8, 6]];
+      houses.forEach(([x, w, h], i) => {
+        const base = Math.round(top(x + w / 2)) + 3;
+        g.fillStyle = '#151f33'; g.fillRect(x, base - h, w, h);
+        g.beginPath(); g.moveTo(x - 2, base - h); g.lineTo(x + w / 2, base - h - 5 - (i % 3)); g.lineTo(x + w + 2, base - h); g.closePath(); g.fill();
+        if (i % 2 === 0) g.fillRect(x + w - 3, base - h - 6, 2, 4);
+        const wins = w > 9 ? 2 : 1;
+        for (let k = 0; k < wins; k++) INTRO_VILLAGE.push({ x: x + 2 + k * (w - 5), y: base - h + 3, f: introHash(i * 3 + k) });
+      });
+      // Chapel with a steeple.
+      const cx = 172, cb = Math.round(top(cx)) + 3;
+      g.fillStyle = '#151f33'; g.fillRect(cx, cb - 12, 12, 12); g.fillRect(cx + 3, cb - 22, 6, 10);
+      g.beginPath(); g.moveTo(cx + 2, cb - 22); g.lineTo(cx + 6, cb - 31); g.lineTo(cx + 10, cb - 22); g.closePath(); g.fill();
+      INTRO_VILLAGE.push({ x: cx + 5, y: cb - 19, f: 0.4, big: true });
+      // Windmill on the far hill.
+      const mx = 360, mb = Math.round(top(mx)) + 2;
+      g.beginPath(); g.moveTo(mx - 4, mb); g.lineTo(mx - 2, mb - 16); g.lineTo(mx + 2, mb - 16); g.lineTo(mx + 4, mb); g.closePath(); g.fill();
+      INTRO_VILLAGE.push({ x: mx - 1, y: mb - 9, f: 0.7, mill: { x: mx, y: mb - 16 } });
+    });
+  }
+  function getIntroTreeline() {
+    return introLayer('treeline', 1180, (g, W) => {
+      for (let i = 0; i < 260; i++) {
+        const x = (i * 4.6 + introHash(i) * 6);
+        // Leave the area near the village open, thicken toward the wild forest.
+        const wild = Math.max(0, Math.min(1, (x - 300) / 220));
+        if (introHash(i + 0.5) > 0.25 + wild * 0.75) continue;
+        const h = 12 + introHash(i * 2.3) * 14 + wild * 10;
+        const base = 168 + Math.sin(x / 50) * 3;
+        paintPine(g, x, base, h, '#132036', 'rgba(90,115,165,.5)');
+      }
+      g.fillStyle = '#132036'; g.fillRect(0, 166, W, 74);
+    });
+  }
+  function getIntroGround() {
+    return introLayer('ground', 1720, (g, W) => {
+      // Back trees of the wild forest, standing on the main ground plane.
+      for (let i = 0; i < 70; i++) {
+        const x = 860 + i * 7.5 + introHash(i * 4.1) * 6;
+        if (x > INTRO_HOUSE_X - 70 && x < INTRO_HOUSE_X + 70) continue;
+        const h = 34 + introHash(i * 1.7) * 30;
+        paintPine(g, x, introGroundY(x) + 2, h, '#0f1b2c', 'rgba(120,150,205,.45)');
+      }
+      // Grass mass with a moonlit top edge and darker soil.
+      for (let x = 0; x < W; x++) {
+        const y = Math.round(introGroundY(x));
+        g.fillStyle = '#20382f'; g.fillRect(x, y, 1, 240 - y);
+        g.fillStyle = '#4a6b55'; g.fillRect(x, y, 1, 1);
+        g.fillStyle = '#2b4a3c'; g.fillRect(x, y + 1, 1, 2);
+        if (introHash(x * 1.37) > 0.55) { g.fillStyle = '#3c5c49'; g.fillRect(x, y - 1 - Math.floor(introHash(x * 0.71) * 3), 1, 2); }
+        const soil = 14 + Math.round(introHash(x * 0.21) * 3);
+        g.fillStyle = '#19281f'; g.fillRect(x, y + soil, 1, 240 - y - soil);
+      }
+      // Dirt road that leads to the home.
+      for (let x = 980; x < W; x++) {
+        const y = Math.round(introGroundY(x));
+        g.fillStyle = '#4b4033'; g.fillRect(x, y + 3, 1, 4);
+        g.fillStyle = '#5d5040'; g.fillRect(x, y + 3, 1, 1);
+        if (introHash(x * 2.1) > 0.8) { g.fillStyle = '#6c6150'; g.fillRect(x, y + 4 + (x % 3), 1, 1); }
+      }
+      // Rocks on the ridge where the wolves stop.
+      [[612, 7, 4], [716, 9, 5], [736, 5, 3], [578, 4, 3]].forEach(([x, w, h]) => {
+        const y = introGroundY(x) + 2;
+        g.fillStyle = '#3a4152'; g.beginPath(); g.ellipse(x, y - h / 2, w, h, 0, Math.PI, 0); g.fill();
+        g.fillStyle = 'rgba(170,185,220,.45)'; g.fillRect(x - w + 3, Math.round(y - h), w, 1);
+      });
+      // Fence along the road near the house.
+      for (let x = INTRO_HOUSE_X - 150; x < INTRO_HOUSE_X - 54; x += 12) {
+        const y = Math.round(introGroundY(x));
+        g.fillStyle = '#3e3328'; g.fillRect(x, y - 9, 2, 10);
+        g.fillStyle = '#4d4033'; g.fillRect(x, y - 7, 12, 1); g.fillRect(x, y - 4, 12, 1);
+      }
+      // Signpost on the way home.
+      const sx = 1180, sy = Math.round(introGroundY(sx));
+      g.fillStyle = '#3e3328'; g.fillRect(sx, sy - 16, 2, 17);
+      g.fillStyle = '#56473a'; g.beginPath(); g.moveTo(sx - 8, sy - 15); g.lineTo(sx + 10, sy - 15); g.lineTo(sx + 13, sy - 12.5); g.lineTo(sx + 10, sy - 10); g.lineTo(sx - 8, sy - 10); g.closePath(); g.fill();
+      paintIntroHouse(g);
+    });
+  }
+  function paintIntroHouse(g) {
+    const x = INTRO_HOUSE_X - 44, w = 88, base = Math.round(introGroundY(INTRO_HOUSE_X)) + 2;
+    const wallTop = base - 34;
+    // Big oak behind the house.
+    g.fillStyle = '#122030';
+    [[x + 92, wallTop - 22, 22], [x + 104, wallTop - 8, 18], [x + 80, wallTop - 4, 16]].forEach(([cx, cy, r]) => { g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill(); });
+    g.fillRect(x + 92, wallTop, 5, 34);
+    // Stone foundation.
+    g.fillStyle = '#3d4250'; g.fillRect(x - 2, base - 6, w + 4, 6);
+    g.fillStyle = '#4e5464';
+    for (let i = 0; i < 12; i++) g.fillRect(x + i * 8 + (i % 2) * 2, base - 5 + (i % 2) * 2, 5, 2);
+    // Timber walls with plank lines.
+    g.fillStyle = '#5a4433'; g.fillRect(x, wallTop, w, 28);
+    g.fillStyle = '#4b382a';
+    for (let yy = wallTop + 3; yy < base - 6; yy += 4) g.fillRect(x, yy, w, 1);
+    g.fillStyle = '#3a2b20'; g.fillRect(x, wallTop, 3, 28); g.fillRect(x + w - 3, wallTop, 3, 28); g.fillRect(x + 42, wallTop, 3, 28);
+    // Chimney.
+    g.fillStyle = '#5b4a45'; g.fillRect(x + 64, wallTop - 32, 9, 22);
+    g.fillStyle = '#6e5b55'; g.fillRect(x + 63, wallTop - 33, 11, 3);
+    // Gabled shingle roof.
+    const peakY = wallTop - 28;
+    g.fillStyle = '#3a2a2e';
+    g.beginPath(); g.moveTo(x - 9, wallTop + 1); g.lineTo(x + w / 2, peakY); g.lineTo(x + w + 9, wallTop + 1); g.closePath(); g.fill();
+    g.fillStyle = '#4b363a';
+    for (let row = 0; row < 7; row++) {
+      const yy = peakY + 4 + row * 4;
+      const half = (yy - peakY) * ((w / 2 + 9) / (wallTop + 1 - peakY));
+      for (let s = -half; s < half; s += 6) g.fillRect(Math.round(x + w / 2 + s + (row % 2) * 3), yy, 4, 2);
+    }
+    // Moonlit roof edge.
+    g.strokeStyle = 'rgba(175,190,230,.55)'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(x + w / 2, peakY); g.lineTo(x + w + 9, wallTop + 1); g.stroke();
+    // Attic window.
+    g.fillStyle = '#2a1f1c'; g.fillRect(x + w / 2 - 4, peakY + 10, 8, 8);
+    // Door and porch.
+    g.fillStyle = '#2f2219'; g.fillRect(x + 48, base - 26, 13, 20);
+    g.fillStyle = '#4a3526'; g.fillRect(x + 49, base - 25, 11, 19);
+    g.fillStyle = '#c9a25c'; g.fillRect(x + 57, base - 16, 1, 2);
+    g.fillStyle = '#3a2b20'; g.fillRect(x + 44, base - 30, 21, 3);
+    // Window frames (the warm glass is drawn later with additive light).
+    [[x + 10, base - 24], [x + 26, base - 24], [x + 72, base - 24]].forEach(([wx, wy]) => {
+      g.fillStyle = '#2a1f17'; g.fillRect(wx - 1, wy - 1, 12, 12);
+      g.fillStyle = '#e2a24f'; g.fillRect(wx, wy, 10, 10);
+      g.fillStyle = '#2a1f17'; g.fillRect(wx + 4, wy, 2, 10); g.fillRect(wx, wy + 4, 10, 2);
+      g.fillStyle = '#3a2b20'; g.fillRect(wx - 2, wy + 10, 14, 2);
+    });
+    g.fillStyle = '#e8b968'; g.fillRect(x + w / 2 - 3, peakY + 11, 6, 6);
+    g.fillStyle = '#2a1f1c'; g.fillRect(x + w / 2 - 0.5, peakY + 11, 1, 6);
+    // Mailbox by the road.
+    const mx = x + w + 18, my = Math.round(introGroundY(mx));
+    g.fillStyle = '#3e3328'; g.fillRect(mx, my - 11, 2, 12);
+    g.fillStyle = '#7a2e2e'; g.fillRect(mx - 4, my - 16, 10, 6);
+    g.fillStyle = '#c94c3c'; g.fillRect(mx + 6, my - 19, 1, 5); g.fillRect(mx + 6, my - 19, 3, 2);
+  }
+
+  function introTint(img, frameX, frameW, frameH, tint, rim) {
+    // Tint a sprite frame for moonlight and add a cool rim light on its moon side.
+    if (!introTint.c) { introTint.c = document.createElement('canvas'); introTint.g = introTint.c.getContext('2d'); }
+    const c = introTint.c, g = introTint.g;
+    c.width = frameW; c.height = frameH;
+    g.imageSmoothingEnabled = false;
+    g.globalCompositeOperation = 'source-over';
+    g.clearRect(0, 0, frameW, frameH);
+    if (rim) {
+      g.drawImage(img, frameX, 0, frameW, frameH, rim[0], rim[1], frameW, frameH);
+      g.globalCompositeOperation = 'source-in';
+      g.fillStyle = rim[2]; g.fillRect(0, 0, frameW, frameH);
+      g.globalCompositeOperation = 'source-over';
+    }
+    if (!introTint.b) { introTint.b = document.createElement('canvas'); introTint.bg = introTint.b.getContext('2d'); }
+    const b = introTint.b, bg = introTint.bg;
+    b.width = frameW; b.height = frameH;
+    bg.imageSmoothingEnabled = false;
+    bg.globalCompositeOperation = 'source-over';
+    bg.clearRect(0, 0, frameW, frameH);
+    bg.drawImage(img, frameX, 0, frameW, frameH, 0, 0, frameW, frameH);
+    bg.globalCompositeOperation = 'multiply';
+    bg.fillStyle = tint; bg.fillRect(0, 0, frameW, frameH);
+    bg.globalCompositeOperation = 'destination-in';
+    bg.drawImage(img, frameX, 0, frameW, frameH, 0, 0, frameW, frameH);
+    g.drawImage(b, 0, 0);
+    return c;
+  }
+
+  // Wolf choreography. Positions are analytic so frame-stepping and skipping are stable.
+  const INTRO_WOLVES = [
+    { red: false, startX: 318, stopX: 676, walkStart: 14.9, walkEnd: 20.6, flinch: 21.45, flee: 22.42 },
+    { red: true, startX: 280, stopX: 638, walkStart: 15.3, walkEnd: 21.0, flinch: 21.6, flee: 22.15 }
+  ];
+  const WOLF_WALK_STRIDE = 46;  // px travelled per full walk cycle at 0.5 scale
+  const WOLF_RUN_STRIDE = 104;  // px travelled per full gallop cycle
+  const WOLF_RUN_MAX = 215, WOLF_RUN_TAU = 0.38;
+  function introWolfState(w, t) {
+    if (t < w.walkStart) return { x: w.startX - 40 * (w.walkStart - t), dir: 1, anim: 'walk', dist: 0 };
+    if (t < w.walkEnd) {
+      // Trapezoidal speed profile: steady walk that slows naturally to a stop.
+      const T = w.walkEnd - w.walkStart, D = w.stopX - w.startX, dec = 1.4;
+      const v = D / (T - dec / 2);
+      const s = t - w.walkStart;
+      let d;
+      if (s < T - dec) d = v * s;
+      else { const q = s - (T - dec); d = v * (T - dec) + v * q - v * q * q / (2 * dec); }
+      return { x: w.startX + d, dir: 1, anim: 'walk', dist: d, speed: s < T - dec ? v : v * (1 - (s - (T - dec)) / dec) };
+    }
+    if (t < w.flee) {
+      const hurt = t >= w.flinch && t < w.flinch + 0.42;
+      return { x: w.stopX, dir: 1, anim: hurt ? 'hurt' : 'idle', since: t - w.walkEnd };
+    }
+    const s = t - w.flee;
+    const d = WOLF_RUN_MAX * (s - WOLF_RUN_TAU * (1 - Math.exp(-s / WOLF_RUN_TAU)));
+    return { x: w.stopX - d, dir: -1, anim: 'run', dist: d, speed: WOLF_RUN_MAX * (1 - Math.exp(-s / WOLF_RUN_TAU)), runTime: s };
+  }
+  const introDust = [];
+  let introDustLast = [0, 0], introDustTime = -1;
+  function drawIntroWolves(t, cam) {
+    if (t < introDustTime) { introDust.length = 0; introDustLast = [0, 0]; }
+    introDustTime = t;
+    INTRO_WOLVES.forEach((w, idx) => {
+      const st = introWolfState(w, t);
+      if (t < w.walkStart - 2) return;
+      const sx = st.x - cam;
+      if (sx < -80 || sx > 400) return;
+      const gy = introGroundY(st.x);
+      let sheet, frame, frames;
+      const pick = (black, red) => (w.red ? red : black);
+      if (st.anim === 'walk') sheet = pick(introBlackWalk, introRedWalk);
+      else if (st.anim === 'run') sheet = pick(introBlackRun, introRedRun);
+      else if (st.anim === 'hurt') sheet = pick(introBlackHurt, introRedHurt);
+      else sheet = pick(introBlackIdle, introRedIdle);
+      if (!sheet.complete || !sheet.naturalWidth) return;
+      frames = Math.max(1, Math.floor(sheet.naturalWidth / 128));
+      if (st.anim === 'walk') frame = Math.floor((st.dist / WOLF_WALK_STRIDE) * frames + idx * 4) % frames;
+      else if (st.anim === 'run') frame = Math.floor((st.dist / WOLF_RUN_STRIDE) * frames) % frames;
+      else if (st.anim === 'hurt') frame = Math.min(frames - 1, Math.floor((t - w.flinch) * 6));
+      else frame = Math.floor(st.since * 7 + idx * 3) % frames;
+      // Ground contact shadow.
+      ctx.fillStyle = 'rgba(4,8,18,.45)';
+      ctx.beginPath(); ctx.ellipse(Math.round(sx), Math.round(gy + 1), st.anim === 'run' ? 17 : 14, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+      // Body follows the slope of the hill.
+      const slope = Math.atan2(introGroundY(st.x + 6) - introGroundY(st.x - 6), 12) * 0.7;
+      const tinted = introTint(sheet, frame * 128, 128, 128, w.red ? '#9a8fb8' : '#8d97c6', [1, -1, 'rgba(190,205,255,.85)']);
+      ctx.save();
+      ctx.translate(Math.round(sx), Math.round(gy + 1));
+      ctx.rotate(slope);
+      if (st.dir < 0) ctx.scale(-1, 1);
       ctx.imageSmoothingEnabled = false;
-      ctx.translate(px, groundY);
-      if (vx < 0) ctx.scale(-1, 1);
-      const frameW = sheet.naturalHeight;
-      const frameCount = Math.max(1, Math.floor(sheet.naturalWidth / frameW));
-      const fps = running ? 14 : 9;
-      const phaseOffset = isRed ? 2 : 0;
-      // Start the run cycle on its first frame; freeze a walk frame during the howl.
-      const frame = moving
-        ? Math.floor(animationTime * fps + phaseOffset) % frameCount
-        : Math.min(frameCount - 1, Math.floor(frameCount * 0.45));
-      ctx.drawImage(sheet, frame * frameW, 0, frameW, sheet.naturalHeight, -24, -32, 48, 48);
+      ctx.drawImage(tinted, -32, -64, 64, 64);
+      ctx.restore();
+      // Kicked-up dust on each footfall while galloping.
+      if (st.anim === 'run') {
+        const step = Math.floor(st.dist / (WOLF_RUN_STRIDE / 2));
+        if (step > introDustLast[idx]) {
+          introDustLast[idx] = step;
+          introDust.push({ x: st.x + 10, y: gy, born: t, seed: step + idx * 31 });
+        }
+      }
+    });
+    for (let i = introDust.length - 1; i >= 0; i--) {
+      const p = introDust[i], age = t - p.born;
+      if (age > 0.9 || age < 0) { introDust.splice(i, 1); continue; }
+      for (let k = 0; k < 4; k++) {
+        const ox = (introHash(p.seed * 7 + k) - 0.2) * 14 * (0.4 + age);
+        const oy = -age * (6 + k * 3);
+        ctx.fillStyle = 'rgba(120,128,150,' + (0.35 * (1 - age / 0.9)) + ')';
+        const r = 1 + age * 4;
+        ctx.fillRect(Math.round(p.x - cam + ox - r / 2), Math.round(p.y + oy - r / 2), Math.ceil(r), Math.ceil(r));
+      }
+    }
+  }
+
+  function introSkyPalette(t) {
+    const n = smooth01((t - 8.5) / 7.5);
+    const mix = (a, b) => 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * n)).join(',') + ')';
+    return {
+      top: mix([28, 30, 74], [4, 7, 22]),
+      mid: mix([92, 64, 118], [14, 22, 52]),
+      low: mix([224, 132, 98], [38, 50, 92]),
+      night: n
+    };
+  }
+
+  function introCamera(t) {
+    // Returns ground-layer camera x and zoom.
+    let cam, zoom = 1, focusY = 150;
+    if (t < 14.5) {
+      const e = smooth01((t - 8.5) / 6);
+      cam = 0 + e * 330;
+    } else if (t < 25.5) {
+      const e = smooth01((t - 14.5) / 7.5);
+      cam = 330 + e * 190;
+      zoom = 1 + smooth01((t - 16.5) / 5) * 0.2;
+      focusY = 160;
+    } else if (t < 31) {
+      const e = smooth01((t - 25.5) / 5.5);
+      cam = 520 + e * 712;
+      zoom = 1.2 - e * 0.2;
+    } else {
+      const e = smooth01((t - 31) / 7.5);
+      cam = 1232 + e * 6;
+      zoom = 1 + e * 0.22;
+      focusY = 176;
+    }
+    return { cam, zoom, focusY };
+  }
+
+  function drawIntroNight(t) {
+    const { cam, zoom, focusY } = introCamera(t);
+    const howlAge = t - 21.4;
+    const shake = howlAge >= 0 && howlAge < 2.4 ? (1 - howlAge / 2.4) * (0.6 + 0.4 * Math.abs(Math.sin(howlAge * 8))) : 0;
+    const shx = shake * (Math.sin(t * 39) * 2.2 + Math.sin(t * 17) * 1.0);
+    const shy = shake * (Math.cos(t * 31) * 1.6 + Math.sin(t * 23) * 0.7);
+    const sky = introSkyPalette(t);
+    const grad = ctx.createLinearGradient(0, 0, 0, 190);
+    grad.addColorStop(0, sky.top); grad.addColorStop(0.55, sky.mid); grad.addColorStop(1, sky.low);
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, 320, 240);
+    // Stars come out as the dusk fades.
+    ctx.globalAlpha = 0.25 + sky.night * 0.75;
+    ctx.drawImage(getIntroStarfield(), -Math.round(cam * 0.02) - 10, -40);
+    ctx.globalAlpha = 1;
+    drawIntroBrightStars(cam * 0.03, 40, sky.night, t);
+
+    ctx.save();
+    ctx.translate(160 + shx, focusY + shy);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-160, -focusY);
+
+    // Rising full moon with a large soft halo.
+    const rise = smooth01((t - 8.5) / 9);
+    const moonX = 214 - cam * 0.03, moonY = 128 - rise * 82;
+    const halo = ctx.createRadialGradient(moonX, moonY, 10, moonX, moonY, 90);
+    halo.addColorStop(0, 'rgba(225,230,255,' + (0.28 * (0.4 + sky.night * 0.6)) + ')');
+    halo.addColorStop(0.3, 'rgba(160,180,240,' + (0.1 * (0.4 + sky.night * 0.6)) + ')');
+    halo.addColorStop(1, 'rgba(120,140,220,0)');
+    ctx.fillStyle = halo; ctx.fillRect(moonX - 95, moonY - 95, 190, 190);
+    const skyMoon = getIntroSkyMoon();
+    if (skyMoon) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(skyMoon, Math.round(moonX - skyMoon.width / 2), Math.round(moonY - skyMoon.height / 2));
+    }
+    // Thin drifting clouds crossing the moon.
+    for (let i = 0; i < 4; i++) {
+      const cx = ((i * 140 + t * (5 + i * 2) - cam * 0.05) % 460 + 460) % 460 - 70;
+      const cy = 40 + i * 17;
+      ctx.fillStyle = 'rgba(' + (sky.night > 0.5 ? '60,72,110' : '120,90,120') + ',' + (0.32 - i * 0.04) + ')';
+      ctx.fillRect(Math.round(cx), cy, 62 - i * 6, 2);
+      ctx.fillRect(Math.round(cx + 10), cy - 2, 34, 2);
+      ctx.fillStyle = 'rgba(200,210,245,' + (0.1 * sky.night) + ')';
+      ctx.fillRect(Math.round(cx + 10), cy - 2, 34, 1);
+    }
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(getIntroMountains(), -Math.round(cam * 0.12), -6);
+    const hillsX = -Math.round(cam * 0.32);
+    ctx.drawImage(getIntroHills(), hillsX, 0);
+    // Village windows flicker with candlelight; the windmill turns slowly.
+    ctx.globalCompositeOperation = 'lighter';
+    for (const w of INTRO_VILLAGE) {
+      const x = w.x + hillsX;
+      if (x < -6 || x > 326) continue;
+      const fl = 0.75 + 0.25 * Math.sin(t * (5 + w.f * 4) + w.f * 20);
+      ctx.fillStyle = 'rgba(255,190,90,' + (0.85 * fl) + ')';
+      ctx.fillRect(x, w.y, w.big ? 2 : 1, w.big ? 3 : 2);
+      ctx.fillStyle = 'rgba(255,160,70,' + (0.12 * fl) + ')';
+      ctx.fillRect(x - 2, w.y - 2, 5, 6);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    const mill = INTRO_VILLAGE.find(w => w.mill);
+    if (mill) {
+      const mx = mill.mill.x + hillsX, my = mill.mill.y;
+      ctx.strokeStyle = '#151f33'; ctx.lineWidth = 1;
+      for (let b = 0; b < 4; b++) {
+        const a = t * 0.8 + b * Math.PI / 2;
+        ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx + Math.cos(a) * 9, my + Math.sin(a) * 9); ctx.stroke();
+      }
+    }
+    // Low mist between the hills and the forest.
+    for (let i = 0; i < 3; i++) {
+      const fx = ((t * (4 + i * 3) - cam * (0.4 + i * 0.1)) % 360 + 360) % 360 - 40;
+      ctx.fillStyle = 'rgba(120,140,190,' + (0.06 + 0.02 * i) + ')';
+      ctx.fillRect(Math.round(fx), 150 + i * 6, 160, 3);
+      ctx.fillRect(Math.round(fx + 200), 153 + i * 5, 120, 2);
+    }
+    ctx.drawImage(getIntroTreeline(), -Math.round(cam * 0.55), 0);
+
+    // Main ground plane.
+    ctx.drawImage(getIntroGround(), -Math.round(cam), 0);
+    // Warm light from the home's windows and chimney smoke.
+    const hx = INTRO_HOUSE_X - cam;
+    if (hx > -120 && hx < 440) {
+      const base = Math.round(introGroundY(INTRO_HOUSE_X)) + 2;
+      ctx.globalCompositeOperation = 'lighter';
+      const flick = 0.9 + 0.1 * Math.sin(t * 7.3) * Math.sin(t * 3.1);
+      [[-34, base - 19], [-18, base - 19], [33, base - 19]].forEach(([ox, wy]) => {
+        const lx = hx + ox;
+        const g2 = ctx.createRadialGradient(lx, wy, 2, lx, wy, 26);
+        g2.addColorStop(0, 'rgba(255,170,80,' + (0.32 * flick) + ')');
+        g2.addColorStop(1, 'rgba(255,140,60,0)');
+        ctx.fillStyle = g2; ctx.fillRect(lx - 26, wy - 26, 52, 52);
+        // Light spilling onto the yard.
+        ctx.fillStyle = 'rgba(255,170,80,' + (0.07 * flick) + ')';
+        ctx.beginPath(); ctx.moveTo(lx - 6, base); ctx.lineTo(lx + 6, base); ctx.lineTo(lx + 13, base + 12); ctx.lineTo(lx - 13, base + 12); ctx.closePath(); ctx.fill();
+      });
+      // Porch lantern.
+      const lan = ctx.createRadialGradient(hx + 3, base - 31, 1, hx + 3, base - 31, 16);
+      lan.addColorStop(0, 'rgba(255,210,120,' + (0.55 * flick) + ')'); lan.addColorStop(1, 'rgba(255,170,80,0)');
+      ctx.fillStyle = lan; ctx.fillRect(hx - 13, base - 47, 32, 32);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#ffd890'; ctx.fillRect(Math.round(hx + 2), base - 32, 2, 3);
+      // Chimney smoke rising and leaning with the breeze.
+      const chX = INTRO_HOUSE_X - 44 + 68 - cam, chY = base - 34 - 34;
+      for (let k = 0; k < 9; k++) {
+        const life = ((t * 0.35 + k / 9) % 1);
+        const px = chX + life * 26 + Math.sin(life * 6 + k) * 2;
+        const py = chY - life * 44;
+        const r = 2 + life * 7;
+        ctx.fillStyle = 'rgba(150,160,190,' + (0.22 * (1 - life)) + ')';
+        ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    drawIntroWolves(t, cam);
+
+    // The distant answering howl: glitchy sound waves from beyond the right tree line.
+    if (t >= 21.4 && t < 24.6) drawDistantHowlGlitch(296, 126, (t - 21.4) / 3.2);
+    // Birds burst out of the treetops when the howl hits.
+    if (t >= 21.55 && t < 26) {
+      const a = t - 21.55;
+      ctx.fillStyle = '#0b1220';
+      for (let b = 0; b < 7; b++) {
+        const bx = 250 + b * 9 - a * (34 + b * 6) + Math.sin(b * 2) * 6;
+        const by = 120 - a * (22 + b * 3) - b * 3 + Math.sin(a * 6 + b) * 2;
+        const flap = Math.floor(a * 10 + b) % 2;
+        ctx.fillRect(Math.round(bx) - 2, Math.round(by) - flap, 2, 1);
+        ctx.fillRect(Math.round(bx) + 1, Math.round(by) - flap, 2, 1);
+        ctx.fillRect(Math.round(bx), Math.round(by), 1, 1);
+      }
+    }
+    // Fireflies in the meadow near home.
+    if (t > 24) {
+      ctx.globalCompositeOperation = 'lighter';
+      for (let f = 0; f < 18; f++) {
+        const fx = 1040 + introHash(f * 3.3) * 420 + Math.sin(t * 0.7 + f) * 8 - cam;
+        const fy = introGroundY(fx + cam) - 6 - introHash(f * 1.9) * 26 + Math.sin(t * 1.3 + f * 2) * 4;
+        const blink = Math.max(0, Math.sin(t * (1.5 + introHash(f) * 2) + f * 4));
+        if (fx < -4 || fx > 324 || blink < 0.05) continue;
+        ctx.fillStyle = 'rgba(200,255,140,' + (0.85 * blink) + ')'; ctx.fillRect(Math.round(fx), Math.round(fy), 1, 1);
+        ctx.fillStyle = 'rgba(170,255,120,' + (0.15 * blink) + ')'; ctx.fillRect(Math.round(fx) - 1, Math.round(fy) - 1, 3, 3);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    // Foreground grass silhouettes swaying in the wind (fastest parallax layer).
+    ctx.fillStyle = '#0a130f';
+    for (let i = 0; i < 90; i++) {
+      const wx = i * 23 + introHash(i) * 12;
+      const x = ((wx - cam * 1.35) % 2070 + 2070) % 2070 - 20;
+      if (x < -20 || x > 340) continue;
+      const h = 8 + introHash(i * 2.2) * 14;
+      const sway = Math.sin(t * 1.6 + i) * 2;
+      for (let b = -2; b <= 2; b++) {
+        ctx.beginPath();
+        ctx.moveTo(x + b * 2, 242); ctx.lineTo(x + b * 3 + sway + b, 242 - h + Math.abs(b) * 2); ctx.lineTo(x + b * 2 + 2, 242);
+        ctx.closePath(); ctx.fill();
+      }
     }
     ctx.restore();
+
+    // Cool moonlight grade, stronger at night, plus a vignette.
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(' + Math.round(255 - sky.night * 40) + ',' + Math.round(240 - sky.night * 20) + ',255,1)';
+    ctx.fillRect(0, 0, 320, 240);
+    ctx.globalCompositeOperation = 'source-over';
+    drawIntroVignette(0.75 + sky.night * 0.25);
   }
 
   function drawIntro() {
     const t = introTime;
-    ctx.fillStyle = '#070b19'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#03050d'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     if (t < 8.5) {
-      for (let i = 0; i < 52; i++) {
-        const x = (i * 73 + 19) % 320, y = (i * 47 + 11) % 178;
-        const twinkle = .45 + .45 * Math.sin(t * 2 + i);
-        ctx.fillStyle = 'rgba(218,231,255,' + twinkle + ')';
-        ctx.fillRect(x, y, i % 7 === 0 ? 2 : 1, i % 7 === 0 ? 2 : 1);
-      }
-      drawPixelEarth(t * .13);
-      ctx.textAlign = 'center'; ctx.font = 'bold 14px monospace';
-      ctx.fillStyle = '#f4e8c5'; ctx.fillText('EARTH', 160, 25);
-      ctx.fillStyle = '#8294b7'; ctx.fillRect(123, 32, 74, 1);
+      drawIntroSpace(t);
+      drawIntroLetterbox();
       if (t > 1.6) introTextBox(['EARTH. A familiar world of oceans, forests, and endless skies.'], (t - 1.6) * 17, 'earth');
-      if (t > 6.0) {
-        const a = Math.min(1, (t - 6.0) / 2.5);
-        ctx.fillStyle = 'rgba(0,0,0,' + a + ')'; ctx.fillRect(0, 0, 320, 240);
-      }
+      const fadeIn = 1 - Math.min(1, t / 1.2);
+      const fadeOut = Math.max(0, Math.min(1, (t - 6.6) / 1.9));
+      const a = Math.max(fadeIn, fadeOut);
+      if (a > 0) { ctx.fillStyle = 'rgba(0,0,0,' + a + ')'; ctx.fillRect(0, 0, 320, 240); }
     } else if (t < 38.5) {
-      let zoom, cx, cy;
-      if (t < 14.5) {
-        // Slow establishing pan across the fields.
-        const p = Math.max(0, (t - 8.5) / 6);
-        const e = p * p * (3 - 2 * p);
-        zoom = .48 + e * .12;
-        cx = 490 - e * 150;
-        cy = 252 - e * 12;
-      } else if (t < 25.5) {
-        // Hold a deliberate, closer shot on the wolves while their howls play.
-        const p = (t - 14.5) / 11;
-        const e = p * p * (3 - 2 * p);
-        zoom = .60 + e * .62;
-        cx = 340 + e * 84;
-        cy = 240 + e * 60;
-      } else if (t < 30.5) {
-        // Leave the wolves slowly and travel toward the house.
-        const p = (t - 25.5) / 5;
-        const e = p * p * (3 - 2 * p);
-        zoom = 1.22 + e * .20;
-        cx = 424 - e * 240;
-        cy = 300 - e * 132;
-      } else {
-        // Gentle final push toward the house before entering the bedroom.
-        const p = Math.min(1, (t - 30.5) / 8);
-        const e = p * p * (3 - 2 * p);
-        zoom = 1.42 + e * .18;
-        cx = 184;
-        cy = 168;
-      }
-      drawIntroWorld(zoom, cx, cy);
+      drawIntroNight(t);
+      drawIntroLetterbox();
       if (t > 9.0 && t < 14.3) {
         introTextBox(['Long ago, people built quiet homes and villages between the fields and forests.'], (t - 9.0) * 17, 'settled-world');
       } else if (t >= 14.8 && t < 20.0) {
@@ -580,16 +1058,18 @@ const Overworld = (() => {
       } else if (t >= 32.2 && t < 37.4) {
         introTextBox(['Still, people make a life here, one small home at the edge of a much bigger world.'], (t - 32.2) * 17, 'frontier');
       }
-      if (t > 36.8) {
-        const a = Math.min(1, (t - 36.8) / 1.7);
-        ctx.fillStyle = 'rgba(0,0,0,' + a + ')'; ctx.fillRect(0, 0, 320, 240);
-      }
+      const fadeIn = 1 - Math.min(1, (t - 8.5) / 1.4);
+      const fadeOut = Math.max(0, Math.min(1, (t - 36.8) / 1.7));
+      const a = Math.max(fadeIn, fadeOut);
+      if (a > 0) { ctx.fillStyle = 'rgba(0,0,0,' + a + ')'; ctx.fillRect(0, 0, 320, 240); }
     } else {
       const p = Math.min(1, (t - 38.5) / 1.4);
       ctx.save();
       ctx.translate(160, 120); ctx.scale(1.22 - p * .22, 1.22 - p * .22); ctx.translate(-160, -120);
       drawHouseInterior();
       ctx.restore();
+      const fadeIn = 1 - Math.min(1, (t - 38.5) / 0.9);
+      if (fadeIn > 0) { ctx.fillStyle = 'rgba(0,0,0,' + fadeIn + ')'; ctx.fillRect(0, 0, 320, 240); }
       if (t < 44.4) {
         introTextBox(['And here, at the edge of the wilderness, a new day begins...'], (t - 39.0) * 17, 'new-day');
       }
@@ -597,8 +1077,8 @@ const Overworld = (() => {
       if (fade > 0) { ctx.fillStyle = 'rgba(0,0,0,' + fade + ')'; ctx.fillRect(0, 0, 320, 240); }
     }
     if (t < INTRO_DURATION - 1) {
-      ctx.fillStyle = 'rgba(235,229,211,.68)'; ctx.font = '6px monospace'; ctx.textAlign = 'right';
-      ctx.fillText('PRESS ANY BUTTON TO SKIP', 306, 233);
+      ctx.fillStyle = 'rgba(235,229,211,.55)'; ctx.font = '6px monospace'; ctx.textAlign = 'right';
+      ctx.fillText('PRESS ANY BUTTON TO SKIP', 306, 236);
     }
   }
   let worldClock = 0.28, wolfSpawned = false, wolfNoticeCooldown = 0;
