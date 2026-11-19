@@ -69,7 +69,7 @@ for (const [key, type] of Object.entries(MOB_TYPES)) {
 for (const [files] of Object.values(SFX_BANK)) for (const file of files) ref(`assets/audio/sfx/${file}.mp3`);
 for (const file of Object.values(MUSIC_FILES)) ref(`assets/audio/music/${file}.mp3`);
 for (const content of [html, js]) {
-  for (const [, name] of content.matchAll(/['"]((?:\.\/)?assets\/[^'"\r\n]+\.(?:png|jpe?g|b64|mp3))['"]/gi)) ref(name);
+  for (const [, name] of content.matchAll(/['"]((?:\.\/)?assets\/[^'"\r\n]+\.(?:svg|png|jpe?g|b64|mp3))['"]/gi)) ref(name);
 }
 for (const name of refs) assert(fs.statSync(path.join(root, name)).size > 0, `Empty runtime asset: ${name}`);
 
