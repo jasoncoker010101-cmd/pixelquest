@@ -184,30 +184,32 @@ const Overworld = (() => {
     harborEntered: false, ferryOpened: false, courtEntered: false, ch4Done: false, trailCache: false };
   const story = Object.assign({}, STORY_DEFAULTS, { pages: [], fires: [], lastFire: null });
 
-  // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
+  // First-play cinematic: illustrated Moonfall book, countryside, then the bedroom.
   let introActive = false, introTime = 0, introAudio = null, introWolfHowlOne = false, introWolfHowlTwo = false, introWolfHowlEcho = false;
+  let introBookCue = -1;
   const INTRO_SPACE_END = 8.5;
   const INTRO_LORE = [
-    { id: 'long-winter', seconds: 11.0 },
-    { id: 'morwens-vow', seconds: 9.7 },
-    { id: 'moonfall', seconds: 8.4 },
-    { id: 'hollow-seal', seconds: 7.8 }
+    { id: 'long-winter', seconds: 11.0, heading: ['THE LONG', 'WINTER'] },
+    { id: 'morwens-vow', seconds: 9.7, heading: ["MORWEN'S", 'VOW'] },
+    { id: 'moonfall', seconds: 8.4, heading: ['THE', 'MOONFALL'] },
+    { id: 'hollow-seal', seconds: 7.8, heading: ['THE', 'HOLLOW'] }
   ];
   const INTRO_LORE_LENGTH = INTRO_LORE.reduce((n, scene) => n + scene.seconds, 0);
   const INTRO_DURATION = 46.5 + INTRO_LORE_LENGTH;
+  const INTRO_BOOK_END = INTRO_SPACE_END + INTRO_LORE_LENGTH;
   const INTRO_CAPTIONS = [
-    [1.1, 7.0, "Come a little closer. That's Earth down there. Looks peaceful enough, doesn't it?"],
-    [9.05, 13.9, 'Twenty winters ago, the moon went dark for nine nights. And on one of those nights…'],
-    [13.9, 19.3, 'Morwen lost her little girl. Lys never woke.'],
-    [20.05, 25.4, 'Come spring, Morwen reached up to pull the moon down herself.'],
-    [25.4, 29.0, 'She meant to make another. One that would never, ever wane.'],
-    [29.75, 37.5, 'The Silver Watch stopped her. But the moon? It broke. Burning pieces rained across the land.'],
-    [38.15, 45.3, 'The biggest fell in the Hollow. They buried it. Sealed it away. Or so the Watch told us.'],
-    [46.72, 52.27, "Oh, the years went by. Folks lit their hearths again. But the land didn't forget."],
-    [52.46, 57.9, 'Where those pieces fell, beasts changed. Even the dead stopped resting.'],
-    [61.0, 66.7, 'Hear that? Some nights, the wolves in those hills walk on two legs.'],
-    [66.7, 71.2, 'Still, people make a home here. They always have.'],
-    [75.58, 82.05, 'And here, right at the edge of it all… Rowan. Time to wake up.'],
+    [1.85, 7.9, "Come a little closer. That's Earth down there. Looks peaceful enough, doesn't it?"],
+    [9.18, 15.25, 'Twenty winters ago, the moon went dark for nine nights. And on one of those nights…'],
+    [15.25, 18.9, 'Morwen lost her little girl. Lys never woke.'],
+    [19.99, 25.6, 'Come spring, Morwen reached up to pull the moon down herself.'],
+    [25.6, 29.08, 'She meant to make another. One that would never, ever wane.'],
+    [29.75, 37.43, 'The Silver Watch stopped her. But the moon? It broke. Burning pieces rained across the land.'],
+    [38.13, 44.75, 'The biggest fell in the Hollow. They buried it. Sealed it away. Or so the Watch told us.'],
+    [46.10, 52.48, "Oh, the years went by. Folks lit their hearths again. But the land didn't forget."],
+    [52.58, 57.95, 'Where those pieces fell, beasts changed. Even the dead stopped resting.'],
+    [61.0, 66.46, 'Hear that? Some nights, the wolves in those hills walk on two legs.'],
+    [66.46, 70.16, 'Still, people make a home here. They always have.'],
+    [75.80, 80.85, 'And here, right at the edge of it all… Rowan. Time to wake up.'],
   ];
   // The MP3 includes silent gaps for the scene cuts and countryside sound effects.
   // Follow the visual clock after a slow frame, a seek, or a background-tab pause.
@@ -247,6 +249,9 @@ const Overworld = (() => {
       t -= scene.seconds;
     }
     return null;
+  }
+  function introBookPage(t, lore = introLoreAt(t)) {
+    return t < INTRO_SPACE_END ? 0 : lore ? INTRO_LORE.indexOf(lore.scene) + 1 : t < INTRO_BOOK_END + 1.6 ? 5 : 6;
   }
   let inputMode = 'keyboard';
   function setInputMode(mode) { inputMode = mode === 'pad' || mode === 'touch' ? mode : 'keyboard'; }
@@ -1317,7 +1322,7 @@ const Overworld = (() => {
       drawIntroBrightStars(0, 0, .6, motion);
       loreShape('#2a2b4c', [[0,127],[32,118],[51,102],[65,111],[90,83],[109,112],[129,117],[160,110],[185,124],[211,115],[233,88],[252,113],[270,102],[298,117],[320,108],[320,185],[0,185]]);
       loreShape('#191b32', [[0,146],[62,151],[105,133],[147,144],[186,132],[221,149],[260,138],[304,145],[320,135],[320,187],[0,187]]);
-      const moonBreakAt = 4.45; // Lands under “It broke” in the narrator track.
+      const moonBreakAt = 4.36; // Lands under “It broke” in the Orus track.
       const fractured = scene.id === 'moonfall' && t >= moonBreakAt;
       const y = scene.id === 'morwens-vow' ? 58 + Math.round(smooth01(t / 5) * 13) : 71;
       if (fractured) {
@@ -1347,31 +1352,114 @@ const Overworld = (() => {
       drawLoreMorwen(98, 173, scene.id === 'morwens-vow' || !fractured);
     }
     drawIntroVignette(.6);
-    drawIntroLetterbox();
-    const shade = Math.max(0, 1 - t / .55, 1 - (scene.seconds - t) / .45);
-    if (shade > 0) { ctx.fillStyle = `rgba(0,0,0,${shade})`; ctx.fillRect(0, 0, 320, 240); }
+  }
+
+  function bookEmblem(x, y, r, page) {
+    ctx.save(); ctx.translate(x, y);
+    ctx.strokeStyle = '#a88043'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(0, 0, r + 5, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#5a4852'; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ebcc8e'; ctx.beginPath(); ctx.arc(-2, -2, r - 4, .8, 5.75); ctx.lineTo(0, 3); ctx.closePath(); ctx.fill();
+    loreShape('#c7a1c4', [[5,-8],[11,-1],[6,9],[2,3]]);
+    if (page > 0) {
+      ctx.fillStyle = '#f1d6a0';
+      for (let i = 0; i < page; i++) ctx.fillRect(-r + 4 + i * 5, r + 11, 2, 2);
+    }
+    ctx.restore();
+  }
+
+  function drawBookCover(open) {
+    const thin = 1 - smooth01(open);
+    const x = Math.round(102 + open * 27);
+    ctx.save(); ctx.translate(x, 42); ctx.scale(Math.max(.02, thin), 1);
+    ctx.fillStyle = '#110d17'; ctx.fillRect(-3, 4, 121, 158);
+    ctx.fillStyle = '#342333'; ctx.fillRect(0, 0, 116, 156);
+    ctx.fillStyle = '#513747'; ctx.fillRect(5, 2, 108, 150);
+    ctx.fillStyle = '#2b202c'; ctx.fillRect(13, 6, 96, 139);
+    ctx.strokeStyle = '#ba9251'; ctx.strokeRect(16.5, 12.5, 85, 129);
+    for (const cx of [17, 98]) for (const cy of [13, 137]) ctx.fillRect(cx, cy, 4, 4);
+    ctx.fillStyle = '#916e51';
+    for (const y of [19, 42, 120, 135]) ctx.fillRect(0, y, 11, 3);
+    bookEmblem(59, 60, 21, 0);
+    if (!drawPaper('panel', 24, 94, 70, 26)) { ctx.fillStyle = '#dbc39a'; ctx.fillRect(24, 94, 70, 26); }
+    ctx.fillStyle = '#493241'; ctx.font = 'bold 10px Georgia, serif'; ctx.textAlign = 'center';
+    ctx.fillText('MOONFALL', 59, 110);
+    ctx.restore();
+  }
+
+  function drawStorybook(page, lore, t) {
+    const reduced = prefersReducedMotion();
+    const bg = ctx.createRadialGradient(157, 114, 26, 157, 114, 195);
+    bg.addColorStop(0, '#54363b'); bg.addColorStop(.65, '#241b28'); bg.addColorStop(1, '#0c0b15');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, 320, 240);
+    for (let i = 0; i < 13; i++) {
+      const y = 16 + i * 18;
+      ctx.fillStyle = i % 2 ? 'rgba(172,110,78,.10)' : 'rgba(8,6,14,.23)';
+      ctx.fillRect(0, y, 320, 1);
+    }
+    const open = smooth01((introTime - .48) / .95);
+    if (open > 0) {
+      ctx.save();
+      ctx.globalAlpha *= open;
+      ctx.fillStyle = '#100c16'; ctx.fillRect(13, 39, 294, 163);
+      loreShape('#5b3a48', [[16,38],[119,35],[136,42],[285,35],[306,45],[304,193],[139,205],[124,199],[16,194]]);
+      loreShape('#bc9467', [[21,40],[124,36],[136,42],[288,39],[300,48],[299,187],[137,199],[124,193],[22,188]]);
+      if (!drawPaper('panel', 22, 37, 278, 155)) { ctx.fillStyle = '#e6cea3'; ctx.fillRect(22, 37, 278, 155); }
+      loreShape('#dcc398', [[24,43],[110,40],[132,48],[131,190],[112,184],[24,184]]);
+      loreShape('#ead7ae', [[133,48],[287,42],[296,48],[296,185],[137,192]]);
+      const gutter = ctx.createLinearGradient(120, 0, 146, 0);
+      gutter.addColorStop(0, 'rgba(88,48,38,0)'); gutter.addColorStop(.5, 'rgba(88,48,38,.43)'); gutter.addColorStop(1, 'rgba(88,48,38,0)');
+      ctx.fillStyle = gutter; ctx.fillRect(120, 45, 26, 147);
+      loreShape('#833d49', [[128,46],[133,46],[133,204],[130,201],[127,204]]);
+      ctx.strokeStyle = '#987449'; ctx.strokeRect(34.5, 53.5, 78, 121);
+      ctx.strokeRect(144.5, 51.5, 141, 120);
+
+      ctx.save();
+      ctx.beginPath(); ctx.rect(147, 54, 136, 115); ctx.clip();
+      ctx.translate(128, 48); ctx.scale(.55, .63);
+      if (lore) drawIntroLore(lore);
+      else if (page === 5) drawIntroNight(t);
+      else drawIntroSpace(t);
+      ctx.restore();
+
+      const title = lore?.scene.heading || (page === 5 ? ['THE', 'FRONTIER'] : ['BEFORE THE', 'MOONFALL']);
+      bookEmblem(74, 89, 19, page);
+      ctx.fillStyle = '#574033'; ctx.textAlign = 'center'; ctx.font = 'bold 11px Georgia, serif';
+      title.forEach((line, i) => ctx.fillText(line, 74, 131 + i * 13));
+      ctx.fillStyle = '#a47e4f'; ctx.fillRect(55, 153, 38, 1);
+      ctx.fillStyle = '#6b5140'; ctx.font = '7px monospace';
+      ctx.fillText(['I', 'II', 'III', 'IV', 'V', 'VI'][page], 215, 181);
+
+      const age = lore?.t ?? (page === 5 ? introTime - INTRO_BOOK_END : 1);
+      if (age < .58 && !reduced) {
+        const p = smooth01(age / .58);
+        const x = 143 + Math.round(148 * p);
+        loreShape('#e9d8b3', [[x,46],[291,43],[291,181],[x + 7,188],[x - 7,168]]);
+        loreShape('#c1a47a', [[x,46],[x + 8,56],[x + 13,174],[x + 7,188],[x - 7,168]]);
+      }
+      ctx.restore();
+    }
+    if (open < 1 && (!reduced || introTime < .55)) drawBookCover(reduced ? 0 : open);
   }
 
   function drawIntro() {
     const lore = introLoreAt(introTime);
     const t = introTime < INTRO_SPACE_END ? introTime : introTime - INTRO_LORE_LENGTH;
+    const page = introBookPage(introTime, lore);
     ctx.fillStyle = '#03050d'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    if (lore) {
-      drawIntroLore(lore);
-    } else if (introTime < INTRO_SPACE_END) {
-      drawIntroSpace(t);
-      drawIntroLetterbox();
-      const fadeIn = 1 - Math.min(1, t / 1.2);
-      const fadeOut = Math.max(0, Math.min(1, (t - 6.6) / 1.9));
-      const a = Math.max(fadeIn, fadeOut);
-      if (a > 0) { ctx.fillStyle = 'rgba(0,0,0,' + a + ')'; ctx.fillRect(0, 0, 320, 240); }
+    if (page < 5) {
+      drawStorybook(page, lore, t);
     } else if (t < 38.5) {
       drawIntroNight(t);
       drawIntroLetterbox();
-      const fadeIn = 1 - Math.min(1, (t - 8.5) / 1.4);
       const fadeOut = Math.max(0, Math.min(1, (t - 36.8) / 1.7));
-      const a = Math.max(fadeIn, fadeOut);
-      if (a > 0) { ctx.fillStyle = 'rgba(0,0,0,' + a + ')'; ctx.fillRect(0, 0, 320, 240); }
+      if (page === 5) {
+        const p = smooth01((introTime - INTRO_BOOK_END - .56) / 1.04);
+        ctx.save(); ctx.globalAlpha = 1 - p;
+        drawStorybook(page, null, t);
+        ctx.restore();
+      }
+      if (fadeOut > 0) { ctx.fillStyle = 'rgba(0,0,0,' + fadeOut + ')'; ctx.fillRect(0, 0, 320, 240); }
     } else {
       const p = Math.min(1, (t - 38.5) / 1.4);
       ctx.save();
@@ -10504,6 +10592,13 @@ const Overworld = (() => {
       if (document.hidden) return;
       introTime += dt;
       syncIntroNarration();
+      if (introTime >= .48) {
+        const page = introBookPage(introTime);
+        if (page !== introBookCue) {
+          introBookCue = page;
+          if (page < 6) sfx(page === 0 ? 'bookOpen' : 'bookFlip', page === 0 ? .62 : .46);
+        }
+      }
       const countryTime = introTime - INTRO_LORE_LENGTH;
       if (countryTime >= 17.2 && !introWolfHowlOne) { introWolfHowlOne = true; introWolfHowlAudioOne.pause(); introWolfHowlAudioOne.currentTime = 0; }
       // This recording is an environmental howl from beyond the visible wolves, not from the wolf on the right.
@@ -12090,13 +12185,14 @@ const Overworld = (() => {
     sideCameraX = clamp(sidePlayer.x - canvas.width * 0.43, 0, Math.max(0, sideWorldWidth() - canvas.width));
     insideHouse = platformScene === 'house';
     introActive = !saveData || typeof saveData !== 'object';
-    introTime = 0;
+    introTime = 0; introBookCue = -1;
     stopIntroNarration(); introNarratorBlocked = false;
     introWolfFleePaths = null;
     introWolfHowlOne = false; introWolfHowlTwo = false; introWolfHowlEcho = false;
     if (introActive && (typeof settings === 'undefined' || settings.sound !== false)) {
       try { audioCtx(); } catch (_) {}
-      introNarrator = new Audio('./assets/audio/intro-storyteller.mp3');
+      loadSfxFile('book_open'); loadSfxFile('book_flip');
+      introNarrator = new Audio('./assets/audio/intro-orus.mp3');
       introNarrator.volume = .85;
       introNarrator.preload = 'auto';
       document.addEventListener('visibilitychange', syncIntroNarration);
@@ -12226,6 +12322,7 @@ const Overworld = (() => {
       phase: introActive ? 'intro' : paused ? 'paused' : nickScene ? 'nick-ambush' : panel || 'play',
       ambushTime: nickScene?.t ?? null, ambushBeat: nickScene ? nickScene.awake ? 'wake' : nickScene.struck ? 'impact' : nickScene.t >= NICK_CHARGE ? 'charge' : 'reveal' : null,
       introTime: introActive ? introTime : null,
+      introBookPage: introActive ? introBookPage(introTime) : null,
       introBeat: introActive ? introLoreAt(introTime)?.scene.id ||
         (introTime < INTRO_SPACE_END ? 'earth' : introTime < 38.5 + INTRO_LORE_LENGTH ? 'countryside' : 'bedroom') : null,
       player: { x: Math.round(insideHouse ? interiorPlayer.x : sidePlayer.x), y: Math.round(insideHouse ? interiorPlayer.y : sidePlayer.y),

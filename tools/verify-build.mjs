@@ -31,6 +31,7 @@ new vm.Script(js.replace(marker, `
   window.buildData = { REGIONS, SCENE_MOBS, MOB_TYPES, STORY_DEFAULTS, LORE, FIRES, SFX_BANK, MUSIC_FILES, BOSS_FORMS, BOSS_LINES, PHASE_SHOWS };
   window.bloodTest = { bloodDrops, spawnBlood, updateBlood, setBloodEffects };
   window.balanceTest = { xpForNext, gainXp, bossHitFloor, hurtByBoss, stats, equipment, skarnAttackFrame, SKARN_HEW, SKARN_SLAM };
+  window.introTest = { introBookPage, INTRO_CAPTIONS, INTRO_DURATION, INTRO_SPACE_END, INTRO_LORE, INTRO_BOOK_END };
 ${marker}`), { filename: 'world.js' }).runInNewContext(context);
 const { REGIONS, SCENE_MOBS, MOB_TYPES, STORY_DEFAULTS, LORE, FIRES, SFX_BANK, MUSIC_FILES, BOSS_FORMS, BOSS_LINES, PHASE_SHOWS } = context.window.buildData;
 const unique = (rows, name) => assert.equal(new Set(rows.map(row => row.id)).size, rows.length, `Duplicate ${name} IDs`);
@@ -110,5 +111,21 @@ hurtByBoss(6, 1, 'Test boss', true);
 assert.equal(120 - stats.health, bossHitFloor(120, true, false), 'Endgame armor cannot trivialize a direct hit');
 assert(bossHitFloor(120, true, false) > bossHitFloor(120, false, false), 'Phase two is more dangerous');
 assert(bossHitFloor(120, true, false) > bossHitFloor(120, true, true), 'Hazards are less damaging than direct hits');
+
+const { introBookPage, INTRO_CAPTIONS, INTRO_DURATION, INTRO_SPACE_END, INTRO_LORE, INTRO_BOOK_END } = context.window.introTest;
+assert.equal(introBookPage(0), 0, 'Start on the cover/Earth spread');
+let pageStart = INTRO_SPACE_END;
+INTRO_LORE.forEach(({ seconds }, i) => {
+  assert.equal(introBookPage(pageStart + 0.25), i + 1, 'Open each flashback on its own page');
+  assert.equal(introBookPage(pageStart + seconds - 0.1), i + 1, 'Hold each page for its narration');
+  pageStart += seconds;
+});
+assert.equal(introBookPage(INTRO_BOOK_END + 0.1), 5, 'The frontier begins as an illustration');
+assert.equal(introBookPage(INTRO_BOOK_END + 1.7), 6, 'The frontier opens into the world');
+let captionEnd = 0;
+for (const [start, end, line] of INTRO_CAPTIONS) {
+  assert(start >= captionEnd && end > start && end < INTRO_DURATION && line.length, 'Invalid or overlapping fallback caption');
+  captionEnd = end;
+}
 
 console.log(`Verified ${Object.keys(REGIONS).length} regions, ${LORE.length} lore entries, ${FIRES.length} campfires, ${Object.keys(MOB_TYPES).length} monster types, and ${refs.size} runtime asset references.`);
