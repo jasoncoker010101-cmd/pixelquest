@@ -20,6 +20,7 @@ const Overworld = (() => {
   let sideCameraX = 0;
   let sideJumpQueued = false;
   let sideAttackQueued = false;
+  let sideRollQueued = false, sideUpperQueued = false, flashUntil = 0;
   let dadNoteRead = false;
   let armorTutorialPending = false;
   let armorQuestActive = false;
@@ -62,7 +63,41 @@ const Overworld = (() => {
     { x: 1960, y: 130, w: 112, h: 10 },
     { x: 2280, y: 150, w: 144, h: 10 }
   ];
+  // Chapter 2: the Ashen Pass, a red-rock canyon beyond the Hollow.
+  const PASS_SIDE_WIDTH = 4300;
+  const PASS_SIDE_PLATFORMS = [
+    { x: 0, y: SIDE_GROUND_Y, w: PASS_SIDE_WIDTH, h: 44 },
+    { x: 420, y: 160, w: 96, h: 12 }, { x: 610, y: 132, w: 80, h: 12 },
+    { x: 1080, y: 156, w: 112, h: 12 }, { x: 1290, y: 126, w: 96, h: 12 }, { x: 1480, y: 150, w: 80, h: 12 },
+    { x: 2300, y: 158, w: 112, h: 12 }, { x: 2510, y: 128, w: 96, h: 12 }, { x: 2720, y: 104, w: 80, h: 12 },
+    { x: 2960, y: 150, w: 128, h: 12 }, { x: 3260, y: 132, w: 96, h: 12 }
+  ];
+  // Chapter 3: Gloamhold, the drowned city of the Silver Watch.
+  const GLOAM_SIDE_WIDTH = 4700;
+  const GLOAM_SIDE_PLATFORMS = [
+    { x: 0, y: SIDE_GROUND_Y, w: GLOAM_SIDE_WIDTH, h: 44 },
+    { x: 380, y: 160, w: 96, h: 12 }, { x: 600, y: 134, w: 64, h: 12 }, { x: 860, y: 156, w: 128, h: 12 },
+    { x: 1180, y: 128, w: 96, h: 12 }, { x: 1420, y: 154, w: 96, h: 12 }, { x: 1660, y: 120, w: 64, h: 12 },
+    { x: 2520, y: 158, w: 128, h: 12 }, { x: 2760, y: 130, w: 96, h: 12 }, { x: 3000, y: 106, w: 64, h: 12 },
+    { x: 3240, y: 150, w: 128, h: 12 }, { x: 3520, y: 126, w: 96, h: 12 }
+  ];
+  // Every outdoor region: size, boss arena, campfires and where you arrive.
+  const REGIONS = {
+    forest: { name: 'WOODLAND', width: FOREST_SIDE_WIDTH, entry: 72, color: '#ffe3a1' },
+    hollow: { name: 'THE HOLLOW', width: HOLLOW_SIDE_WIDTH, entry: 130, color: '#c9a8ff', arena: { left: 2640, right: 3200, trigger: 2700 }, boss: 'ogre', bossX: 3020, bossFlag: 'bossDefeated' },
+    pass:   { name: 'ASHEN PASS', width: PASS_SIDE_WIDTH, entry: 90, color: '#ffb48a', arena: { left: 3680, right: 4240, trigger: 3740 }, boss: 'mare', bossX: 4080, bossFlag: 'passBossDefeated' },
+    gloam:  { name: 'GLOAMHOLD', width: GLOAM_SIDE_WIDTH, entry: 90, color: '#8fd8ff', arena: { left: 4080, right: 4640, trigger: 4140 }, boss: 'demon', bossX: 4460, bossFlag: 'gloamBossDefeated' }
+  };
+  // Rest points (also fast-travel points on the world map).
+  const FIRES = [
+    { id: 'camp', scene: 'forest', x: 3700, name: "Bram's Camp" },
+    { id: 'lookout', scene: 'pass', x: 1900, name: "Wren's Lookout" },
+    { id: 'gate', scene: 'gloam', x: 2240, name: 'Gloamhold Gate' }
+  ];
+  function region() { return REGIONS[platformScene] || REGIONS.forest; }
+  // The live arena follows the current region (kept as one object so older code keeps working).
   const BOSS_ARENA = { left: 2640, right: 3200, trigger: 2700 };
+  function syncArena() { Object.assign(BOSS_ARENA, region().arena || { left: 1e9, right: 1e9, trigger: 1e9 }); }
   // Monster roster. Sheets are single-row strips; ax/ay is the feet anchor inside a cell.
   // LuizMelo's "Monsters Creatures Fantasy" creatures face right, Ansimuz's ghost and ogre face left.
   const MOB_TYPES = {
@@ -83,13 +118,42 @@ const Overworld = (() => {
                 atkTime: 0.8, hit: [0.45, 0.85], cd: [1.5, 2.1], xp: 18, coins: [2, 5], drops: [['wisp', 0.5]], voice: 'ghost' },
     ogre:     { name: 'Grukk, the Hollow King', boss: true, src: 'hollow/', anims: { idle: ['ogre-idle', 4, 6], move: ['ogre-walk', 6, 8], attack: ['ogre-attack', 7], hurt: null, death: null },
                 fw: 144, fh: 80, ax: 62, ay: 80, faceLeft: true, scale: 1.35, bodyH: 76, width: 36, hp: 70, speed: 40, chase: 700, reach: 70, dmg: 8,
-                atkTime: 1.25, hit: [0.57, 0.72], cd: [1.0, 1.6], xp: 150, coins: [25, 30], drops: [['crown', 1]], voice: 'ogre', armor: true }
+                atkTime: 1.25, hit: [0.57, 0.72], cd: [1.0, 1.6], xp: 150, coins: [25, 30], drops: [['crown', 1]], voice: 'ogre', armor: true, short: 'Grukk',
+                enrageText: 'Grukk roars and the Hollow answers...', summon: 'ghost' },
+    // ---- Chapter 2 and 3 creatures (Ansimuz Gothicvania, CC0; all face left) ----
+    hound:    { name: 'Ash Hound', src: 'beasts/', anims: { idle: ['hound-idle', 11, 10], move: ['hound-run', 5, 14], attack: ['hound-jump', 6], hurt: null, death: null },
+                fw: 64, fh: 48, ax: 34, ay: 48, faceLeft: true, scale: 1.15, bodyH: 26, width: 34, hp: 7, speed: 118, chase: 260, reach: 44, dmg: 5, pounce: 230,
+                atkTime: 0.6, hit: [0.3, 0.75], cd: [1.2, 1.8], xp: 18, coins: [2, 5], drops: [['ember', 0.55], ['bread', 0.1]], voice: 'hound' },
+    crow:     { name: 'Carrion Crow', src: 'beasts/', anims: { idle: ['crow-fly', 2, 8], move: ['crow-fly', 2, 10], attack: ['crow-fly', 2], hurt: null, death: null },
+                fw: 48, fh: 48, ax: 26, ay: 40, faceLeft: true, scale: 1, bodyH: 22, width: 18, fly: 62, dive: true, hp: 3, speed: 110, chase: 250, reach: 40, dmg: 3,
+                atkTime: 0.75, hit: [0.4, 0.75], cd: [1.2, 1.9], xp: 10, coins: [1, 3], drops: [['feather', 0.6]], voice: 'crow' },
+    skull:    { name: 'Fire Skull', src: 'beasts/', anims: { idle: ['skull-fire', 8, 12], move: ['skull-fire', 8, 14], attack: ['skull-fire', 8], hurt: null, death: null },
+                fw: 96, fh: 112, ax: 46, ay: 92, faceLeft: true, scale: 0.55, bodyH: 30, width: 22, fly: 46, ranged: true, hp: 5, speed: 52, chase: 230, reach: 150, dmg: 4,
+                atkTime: 0.8, hit: [0.5, 0.6], cd: [1.8, 2.6], xp: 16, coins: [2, 4], drops: [['ember', 0.5]], voice: 'skull', light: '255,140,60' },
+    lamp:     { name: 'Lamplighter', src: 'beasts/', anims: { idle: ['lamp-walk', 6, 6], move: ['lamp-walk', 6, 9], attack: ['lamp-walk', 6], hurt: null, death: ['lamp-rise', 11, 12, 'rev'], rise: ['lamp-rise', 11, 12] },
+                fw: 32, fh: 48, ax: 15, ay: 48, faceLeft: true, scale: 1.2, bodyH: 38, width: 18, hp: 9, speed: 40, chase: 220, reach: 40, dmg: 5,
+                atkTime: 0.8, hit: [0.55, 0.8], cd: [1.4, 2.0], xp: 22, coins: [3, 6], drops: [['lampglass', 0.55], ['tonic', 0.12]], voice: 'ghost', light: '255,200,110', riser: true },
+    toad:     { name: 'Bog Toad', src: 'beasts/', anims: { idle: ['toad-idle', 4, 6], move: ['toad-jump', 4, 8], attack: ['toad-attack', 3], hurt: null, death: null },
+                fw: 80, fh: 64, ax: 38, ay: 64, scale: 1.0, bodyH: 34, width: 40, hp: 16, speed: 34, chase: 200, reach: 62, dmg: 6,
+                atkTime: 0.9, hit: [0.6, 0.85], cd: [1.6, 2.4], xp: 26, coins: [3, 7], drops: [['toadskin', 0.6]], voice: 'squish' },
+    mare:     { name: 'Ashmane, the Pale Mare', boss: true, ai: 'mare', src: 'beasts/', anims: { idle: ['mare-idle', 4, 7], move: ['mare-run', 3, 12], attack: ['mare-run', 3], hurt: null, death: null },
+                fw: 160, fh: 96, ax: 82, ay: 95, faceLeft: true, scale: 1.0, bodyH: 62, width: 64, hp: 95, speed: 70, chase: 900, reach: 60, dmg: 8,
+                atkTime: 1, hit: [0, 1], cd: [1, 1.6], xp: 260, coins: [40, 50], drops: [['palemane', 1], ['emberedge', 1]], voice: 'ogre', armor: true, short: 'Ashmane',
+                enrageText: 'Ashmane screams. Hounds answer from the cliffs...', summon: 'hound' },
+    demon:    { name: 'Vael, the Moon-Eater', boss: true, ai: 'demon', src: 'beasts/', anims: { idle: ['demon-idle', 6, 8], move: ['demon-idle', 6, 10], attack: ['demon-breath', 18], hurt: null, death: null },
+                fw: 312, fh: 220, ax: 190, ay: 186, faceLeft: true, scale: 0.72, bodyH: 84, width: 70, fly: 30, hp: 150, speed: 60, chase: 900, reach: 90, dmg: 9,
+                atkTime: 1.5, hit: [0.42, 0.78], cd: [1, 1.6], xp: 420, coins: [60, 80], drops: [['sigil', 1], ['moonsilver', 1]], voice: 'ogre', armor: true, short: 'Vael',
+                enrageText: 'Vael swallows the moonlight. The skulls burn brighter...', summon: 'skull' }
   };
   const SCENE_MOBS = {
     forest: [['mushroom', 900, 70], ['goblin', 1370, 90], ['eye', 1750, 110], ['goblin', 2050, 90], ['mushroom', 2450, 80],
              ['goblin', 2620, 70], ['goblin', 2900, 100], ['eye', 3150, 110], ['goblin', 3350, 90]],
     hollow: [['skeleton', 520, 90], ['ghost', 820, 120], ['mushroom', 1080, 80], ['skeleton', 1380, 90], ['eye', 1620, 120],
-             ['ghost', 1900, 120], ['skeleton', 2160, 100], ['eye', 2400, 110], ['skeleton', 2500, 60]]
+             ['ghost', 1900, 120], ['skeleton', 2160, 100], ['eye', 2400, 110], ['skeleton', 2500, 60]],
+    pass:   [['hound', 520, 90], ['crow', 800, 120], ['hound', 1150, 100], ['skull', 1420, 90], ['crow', 1600, 110],
+             ['hound', 2360, 110], ['skull', 2620, 100], ['toad', 2860, 70], ['hound', 3100, 100], ['crow', 3300, 120], ['skull', 3480, 80]],
+    gloam:  [['lamp', 480, 70], ['crow', 720, 110], ['skeleton', 980, 90], ['lamp', 1260, 80], ['ghost', 1500, 120], ['toad', 1780, 70],
+             ['lamp', 2620, 80], ['skull', 2860, 100], ['skeleton', 3080, 90], ['ghost', 3300, 120], ['lamp', 3560, 80], ['skull', 3800, 100], ['skeleton', 3900, 60]]
   };
   let sideMobs = [];
   function makeMob(type, x, range, i) {
@@ -101,14 +165,19 @@ const Overworld = (() => {
   }
   function loadSceneMobs(scene) {
     sideMobs = (SCENE_MOBS[scene] || []).map(([type, x, range], i) => makeMob(type, x, range, i));
-    if (scene === 'hollow' && !story.bossDefeated) {
-      const boss = makeMob('ogre', 3020, 120, 0);
+    sideMobs.forEach(m => { if (m.T.riser) m.dormant = true; });
+    const R = REGIONS[scene];
+    if (R && R.boss && !story[R.bossFlag]) {
+      const boss = makeMob(R.boss, R.bossX, 120, 0);
       boss.dir = -1; boss.patrolDir = -1; boss.dormant = true;
       sideMobs.push(boss);
     }
   }
   // Story flags that persist in the save slot.
-  const story = { campReached: false, hollowEntered: false, bossStarted: false, bossDefeated: false, dadFound: false, chapterDone: false, pages: [] };
+  const STORY_DEFAULTS = { campReached: false, hollowEntered: false, hollowSeen: false, metBram: false, rested: false, bossStarted: false, bossDefeated: false, dadFound: false, chapterDone: false,
+    ch2Started: false, passEntered: false, metWren: false, passBossStarted: false, passBossDefeated: false, ch2Done: false,
+    gloamEntered: false, gloamGate: false, gloamBossStarted: false, gloamBossDefeated: false, ch3Done: false };
+  const story = Object.assign({}, STORY_DEFAULTS, { pages: [], fires: [], lastFire: null });
 
   // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
   let introActive = false, introTime = 0, introAudio = null, introSoundChar = 0, introTextSegment = '', introLastReveal = 0, introWolfHowlOne = false, introWolfHowlTwo = false, introWolfHowlEcho = false;
@@ -1183,7 +1252,7 @@ const Overworld = (() => {
 
   // Actual knight sprite sheets from the ZIP the player added to the repository.
   const knightSprites = {};
-  ['Idle','Run','Attacks','Hurt','Death','Jump'].forEach(name => {
+  ['Idle','Run','Attacks','Hurt','Death','Jump','Roll','Pray','Health'].forEach(name => {
     const image = new Image();
     image.src = pqAsset('./assets/knight/' + name + '.png');
     knightSprites[name.toLowerCase()] = image;
@@ -1208,6 +1277,7 @@ const Overworld = (() => {
     dadIdle: loadImg('hollow/dad-idle.png'), dadRun: loadImg('hollow/dad-run.png'), dadSlash: loadImg('hollow/dad-slash.png')
   };
   // Mini knight used in the top-down house once Dad's armor is on (2 cols x 4 rows of 90x45).
+  const beastArt = { wrenIdle: loadImg('beasts/wren-idle.png'), wrenRun: loadImg('beasts/wren-run.png') };
   const miniKnight = { idle: loadImg('knight/mini-idle.png'), run: loadImg('knight/mini-run.png') };
   function imgReady(i) { return i && i.complete && i.naturalWidth > 0; }
 
@@ -1232,7 +1302,8 @@ const Overworld = (() => {
   sideForestBackground.onerror = () => { sideForestBackgroundReady = false; };
   sideForestBackground.src = pqAsset('./assets/free_forest/Free Pixel Art Forest/Preview/Background.png');
 
-  const inventory = { berries: 3, wood: 0, fish: 0, fang: 0, tonic: 0, coins: 0, bread: 0, bone: 0, spore: 0, eye: 0, wisp: 0, boneblade: 0, crown: 0 };
+  const inventory = { berries: 3, wood: 0, fish: 0, fang: 0, tonic: 0, coins: 0, bread: 0, bone: 0, spore: 0, eye: 0, wisp: 0, boneblade: 0, crown: 0,
+    ember: 0, feather: 0, lampglass: 0, toadskin: 0, emberedge: 0, moonsilver: 0, palemane: 0, sigil: 0, locket: 0 };
   // Dad's armor is a cosmetic outfit set. It is saved with the player and shown in the world and inventory.
   const equipment = { armor: false, weapon: 'sword' };
   let quickSlot = 'berries';
@@ -2553,12 +2624,13 @@ const Overworld = (() => {
 
 
   function sidePlatforms() {
-    return platformScene === 'house' ? HOUSE_SIDE_PLATFORMS : platformScene === 'hollow' ? HOLLOW_SIDE_PLATFORMS : FOREST_SIDE_PLATFORMS;
+    return platformScene === 'house' ? HOUSE_SIDE_PLATFORMS : platformScene === 'hollow' ? HOLLOW_SIDE_PLATFORMS
+      : platformScene === 'pass' ? PASS_SIDE_PLATFORMS : platformScene === 'gloam' ? GLOAM_SIDE_PLATFORMS : FOREST_SIDE_PLATFORMS;
   }
-  function outdoorScene() { return platformScene === 'forest' || platformScene === 'hollow'; }
+  function outdoorScene() { return !!REGIONS[platformScene]; }
 
   function sideWorldWidth() {
-    return platformScene === 'house' ? HOUSE_SIDE_WIDTH : platformScene === 'hollow' ? HOLLOW_SIDE_WIDTH : FOREST_SIDE_WIDTH;
+    return platformScene === 'house' ? HOUSE_SIDE_WIDTH : region().width;
   }
 
   function updateSideCamera(dt) {
@@ -2578,8 +2650,16 @@ const Overworld = (() => {
     slash2:   { sheet: 'attacks', cols: 8, frames: [6, 7, 8, 9], fps: 18, active: [1, 2], reach: 50, dmg: 1, knock: 110, lunge: 60, next: 'finisher', stamina: 6 },
     finisher: { sheet: 'attacks', cols: 8, frames: [15, 16, 17, 18, 19, 20, 21, 22], fps: 17, active: [2, 3, 4], reach: 64, dmg: 2, knock: 230, lunge: 95, next: null, shake: 3, stop: 0.09, recover: 0.18, stamina: 10 },
     thrust:   { sheet: 'attacks', cols: 8, frames: [10, 11, 12, 13, 14], fps: 16, active: [1, 2, 3], reach: 56, dmg: 2, knock: 170, lunge: 190, next: 'slash2', shake: 1.5, stamina: 12 },
-    air:      { sheet: 'air', cols: 2, frames: [2, 3, 4, 5, 6], fps: 16, active: [1, 2, 3], reach: 52, dmg: 2, knock: 90, lunge: 0, next: null, air: true, stamina: 8 }
+    air:      { sheet: 'air', cols: 2, frames: [2, 3, 4, 5, 6], fps: 16, active: [1, 2, 3], reach: 52, dmg: 2, knock: 90, lunge: 0, next: null, air: true, stamina: 8 },
+    // Rising slash: an upward crescent that pops enemies into the air and
+    // reaches fliers overhead. Works on the ground (with a small hop) or in the air.
+    upper:    { sheet: 'attacks', cols: 8, frames: [9, 2, 3, 7, 7, 6], fps: 18, active: [2, 3, 4], reach: 46, dmg: 2, knock: 40, lunge: 30, next: null, upper: true, stamina: 10, recover: 0.12, fx: 'upper' },
+    // Moonblade: released after charging. Big crescent swing plus a blue wave.
+    power:    { sheet: 'attacks', cols: 8, frames: [14, 15, 16, 17, 18, 19, 20, 21], fps: 16, active: [2, 3], reach: 66, dmg: 4, knock: 260, lunge: 120, next: null, shake: 5, stop: 0.12, recover: 0.22, stamina: 0, fx: 'power' }
   };
+  const ROLL_TIME = 0.42, ROLL_IFRAMES = 0.32, ROLL_SPEED = 230, ROLL_STAMINA = 18, CHARGE_TIME = 0.5, POWER_STAMINA = 28;
+  let attackHeld = false, attackHeldAt = 0;
+  const playerWaves = [];   // blue Moonblade crescents
   // rarity: common / uncommon / rare / legend. value: what Old Bram pays per item.
   const ITEM_DEFS = {
     berries:   { name: 'Wild Berries', type: 'CONSUMABLE', rarity: 'common', value: 1, heal: 4, icon: 'berry',
@@ -2605,11 +2685,33 @@ const Overworld = (() => {
     boneblade: { name: 'Bone Blade', type: 'WEAPON', rarity: 'rare', value: 15, icon: 'boneblade', atk: 3,
                  desc: ['A sword of fused bone.', 'ATK +3. Equip in GEAR.'], lore: 'Carved by the dead for the dead. Heavier than steel, and it never dulls.' },
     crown:     { name: 'Hollow Crown', type: 'KEY ITEM', rarity: 'legend', value: 0, icon: 'crown',
-                 desc: ['Grukk\'s rusted crown.', 'The curse clings to it.'], lore: 'Iron, bone and moonstone. Dad says it was forged from the first Moonfall shard.' }
+                 desc: ['Grukk\'s rusted crown.', 'The curse clings to it.'], lore: 'Iron, bone and moonstone. Dad says it was forged from the first Moonfall shard.' },
+    ember:     { name: 'Living Ember', type: 'MATERIAL', rarity: 'common', value: 4, icon: 'ember',
+                 desc: ['Still warm. It never', 'quite goes out.'], lore: 'Shaken loose from an ash hound or a burning skull. Bram would pay well for these.' },
+    feather:   { name: 'Crow Feather', type: 'TROPHY', rarity: 'common', value: 2, icon: 'feather',
+                 desc: ['Black as a moonless', 'night.'], lore: 'The carrion crows of the pass follow the Pale Court, eating what the riders leave behind.' },
+    lampglass: { name: 'Lamp Glass', type: 'MATERIAL', rarity: 'uncommon', value: 6, icon: 'lampglass',
+                 desc: ['A cracked lamp pane', 'from Gloamhold.'], lore: 'Moonsilver once burned behind this glass. Hold it to your eye and the dark looks a little less dark.' },
+    toadskin:  { name: 'Bog Toad Hide', type: 'MATERIAL', rarity: 'uncommon', value: 5, icon: 'toadskin',
+                 desc: ['Thick, warty and', 'surprisingly tough.'], lore: 'Toads swelled to the size of carts after the Black Tide. Their hide turns a blade like old leather armor.' },
+    emberedge: { name: 'Ember Edge', type: 'WEAPON', rarity: 'rare', value: 30, icon: 'emberedge', atk: 4,
+                 desc: ['A blade that smoulders.', 'ATK +4. Equip in GEAR.'], lore: 'Forged from Ashmane\'s cooling heart-fire. The steel is always warm to the touch.' },
+    moonsilver:{ name: 'Moonsilver Blade', type: 'WEAPON', rarity: 'legend', value: 60, icon: 'moonsilver', atk: 6,
+                 desc: ['The lost sword of the', 'Watch. ATK +6.'], lore: 'Captain Ysolde\'s sword, swallowed by Vael. It sings faintly when the moon is out.' },
+    palemane:  { name: 'Pale Mane', type: 'KEY ITEM', rarity: 'legend', value: 0, icon: 'palemane',
+                 desc: ['A lock of cold blue', 'fire from Ashmane.'], lore: 'It burns without heat. Wren says the Pale Queen braids her own hair with the same fire.' },
+    sigil:     { name: 'Watch Sigil', type: 'KEY ITEM', rarity: 'legend', value: 0, icon: 'sigil',
+                 desc: ['The seal of Gloamhold', 'recovered from Vael.'], lore: 'The silver crescent of the Watch. With it, the gates of the old Watch fortresses will open again.' },
+    locket:    { name: "Seren's Locket", type: 'KEY ITEM', rarity: 'legend', value: 0, icon: 'locket',
+                 desc: ['Your mother\'s locket.', 'Still warm.'], lore: 'A baby\'s portrait and a note: I did not leave you. I am still singing.' }
   };
-  const ITEM_ORDER = ['berries', 'bread', 'fish', 'tonic', 'wood', 'fang', 'spore', 'eye', 'bone', 'wisp', 'boneblade', 'crown'];
+  const ITEM_ORDER = ['berries', 'bread', 'fish', 'tonic', 'wood', 'fang', 'spore', 'eye', 'bone', 'wisp', 'ember', 'feather', 'lampglass', 'toadskin', 'boneblade', 'emberedge', 'moonsilver', 'crown', 'palemane', 'sigil', 'locket'];
+  const WEAPONS = { sword: { name: 'Knight Sword', atk: 2, icon: 'sword', arc: '230,240,255' }, boneblade: { name: 'Bone Blade', atk: 3, icon: 'boneblade', arc: '240,230,200' },
+    emberedge: { name: 'Ember Edge', atk: 4, icon: 'emberedge', arc: '255,170,90' }, moonsilver: { name: 'Moonsilver Blade', atk: 6, icon: 'moonsilver', arc: '140,210,255' } };
+  function currentWeapon() { const w = equipment.weapon; return w !== 'sword' && WEAPONS[w] && inventory[w] > 0 ? w : 'sword'; }
+  function ownedWeapons() { return Object.keys(WEAPONS).filter(w => w === 'sword' || inventory[w] > 0); }
   const RARITY_COLOR = { common: '#8a7a68', uncommon: '#5fbf6a', rare: '#5fa8ff', legend: '#f2c14e' };
-  const INV_TABS = ['ITEMS', 'GEAR', 'STATS', 'QUEST', 'LORE'];
+  const INV_TABS = ['ITEMS', 'GEAR', 'STATS', 'QUEST', 'LORE', 'MAP'];
   const ARMOR_DEFENSE = 3, SWORD_ATTACK = 2;
   let invTab = 0, invSel = 0, gearSel = 0, invOpenTime = 0;
   let hitStop = 0, screenShake = 0, comboTimer = 0, lastMove = null, landTime = 0;
@@ -2618,7 +2720,7 @@ const Overworld = (() => {
 
   function xpForNext(level) { return 20 + level * 15; }
   function totalDefense() { return stats.defense + (stats.defUp || 0) + (equipment.armor ? ARMOR_DEFENSE : 0); }
-  function totalAttack() { return stats.strength + (stats.atkUp || 0) + (equipment.armor ? (equipment.weapon === 'boneblade' && inventory.boneblade > 0 ? 3 : SWORD_ATTACK) : 0); }
+  function totalAttack() { return stats.strength + (stats.atkUp || 0) + (equipment.armor ? WEAPONS[currentWeapon()].atk : 0); }
 
   // ---------- Audio: recorded CC0 sound effects + area music ----------
   const SFX_BANK = {
@@ -2657,7 +2759,11 @@ const Overworld = (() => {
     roar: [['roar'], 0.9],
     squish: [['squish'], 0.55],
     latch: [['latch'], 0.6], magic: [['magic'], 0.55], fire: [['fire'], 0.5], creak: [['creak'], 0.5],
-    victory: [['victory'], 0.7], gameover: [['gameover'], 0.6]
+    victory: [['victory'], 0.7], gameover: [['gameover'], 0.6],
+    roll: [['cloth'], 0.7, 1.25], dodge: [['swing2'], 0.6, 1.6], charge: [['magic'], 0.45, 0.6],
+    ready: [['gem'], 0.6, 0.8], wave: [['swing_heavy'], 0.9, 0.8], waveHum: [['magic'], 0.5, 1.4],
+    hound: [['monster2', 'monster3'], 0.5, 1.5], crow: [['monster14'], 0.35, 2], skull: [['fire'], 0.5, 1.3],
+    mare: [['roar'], 0.8, 1.3], demon: [['roar'], 1, 0.6], rest: [['fire'], 0.5, 0.9]
   };
   const sfxBuffers = {}, sfxLoading = {};
   let sfxPreloaded = false;
@@ -2693,7 +2799,7 @@ const Overworld = (() => {
       const buf = sfxBuffers[file];
       if (!buf) { loadSfxFile(file); synthSfx(name); return; }
       const src = ac.createBufferSource(); src.buffer = buf;
-      src.playbackRate.value = rate * (0.94 + Math.random() * 0.12);
+      src.playbackRate.value = rate * (entry[2] || 1) * (0.94 + Math.random() * 0.12);
       const g = ac.createGain(); g.gain.value = entry[1] * vol;
       src.connect(g); g.connect(ac.destination); src.start();
     } catch (_) {}
@@ -2705,12 +2811,15 @@ const Overworld = (() => {
     else if (v === 'ghost') sfx(kind === 'death' ? 'magic' : 'ghost', 0.8, 1.2);
     else if (v === 'squish') sfx(kind === 'death' ? 'squish' : 'squish', 0.8, kind === 'hurt' ? 1.2 : 1);
     else if (v === 'eye') sfx(kind === 'death' ? 'die' : 'monster', 0.6, 1.5);
+    else if (v === 'hound') sfx(kind === 'death' ? 'die' : 'hound', 0.8, kind === 'death' ? 1.4 : 1);
+    else if (v === 'crow') sfx(kind === 'death' ? 'die' : 'crow', 0.6, 1.6);
+    else if (v === 'skull') sfx(kind === 'death' ? 'fire' : 'skull', 0.7, 1.2);
     else sfx(kind === 'death' ? 'die' : 'monsterHurt', 0.7, 0.9);
   }
 
   // Music: looping tracks per area, cross-faded every frame.
-  const MUSIC_FILES = { house: 'house', forest: 'forest', ambience: 'forest_ambience', hollow: 'hollow', boss: 'boss', camp: 'camp' };
-  const MUSIC_VOL = { house: 0.32, forest: 0.34, ambience: 0.22, hollow: 0.38, boss: 0.42, camp: 0.34 };
+  const MUSIC_FILES = { house: 'house', forest: 'forest', ambience: 'forest_ambience', hollow: 'hollow', boss: 'boss', camp: 'camp', pass: 'pass', gloam: 'gloam' };
+  const MUSIC_VOL = { house: 0.32, forest: 0.34, ambience: 0.22, hollow: 0.38, boss: 0.42, camp: 0.34, pass: 0.36, gloam: 0.4 };
   const musicTracks = {};
   function musicTrack(key) {
     if (!musicTracks[key]) {
@@ -2725,8 +2834,10 @@ const Overworld = (() => {
     if (!platformMode && insideHouse) return { house: 1 };
     if (!platformMode) return { forest: 1, ambience: 1 };
     if (platformScene === 'house') return { house: 1 };
+    if (bossFight && bossFight.active) return { boss: 1 };
+    if (platformScene === 'pass') return Math.abs(sidePlayer.x - 1900) < 260 ? { camp: 0.8, pass: 0.4 } : { pass: 1 };
+    if (platformScene === 'gloam') return Math.abs(sidePlayer.x - 2240) < 220 ? { camp: 0.7, gloam: 0.5 } : { gloam: 1, ambience: 0.25 };
     if (platformScene === 'hollow') {
-      if (bossFight && bossFight.active) return { boss: 1 };
       if (story.chapterDone) return { camp: 1 };
       return { hollow: 1, ambience: 0.5 };
     }
@@ -2846,6 +2957,8 @@ const Overworld = (() => {
   function chooseOpeningMove() {
     // High enough off the ground: a plunging strike that drives the knight down
     // and hits on landing. Too close to the ground: just slash and land.
+    const upHeld = keys.has('arrowup') || keys.has('w');
+    if (upHeld) return 'upper';
     if (!sidePlayer.onGround) return groundBelowDistance() > 22 ? 'air' : 'slash1';
     if (comboTimer > 0 && lastMove && KNIGHT_MOVES[lastMove].next) return KNIGHT_MOVES[lastMove].next;
     if (Math.abs(sidePlayer.vx) > 132) return 'thrust';
@@ -2861,6 +2974,12 @@ const Overworld = (() => {
     sidePlayer.atk = { name, t: 0, hit: new Set(), queued: null, swooshed: false, phase: move.air ? 'hang' : null };
     if (sidePlayer.onGround && move.lunge) sidePlayer.vx = sidePlayer.facing * move.lunge;
     if (move.air) { sidePlayer.vy = Math.min(sidePlayer.vy, -40); sidePlayer.vx *= 0.3; }
+    if (move.upper) {
+      // A short hop on the ground, a little lift in the air (allows juggles).
+      sidePlayer.vy = sidePlayer.onGround ? -175 : Math.min(sidePlayer.vy, -130);
+      sidePlayer.onGround = false;
+      spawnDust(sidePlayer.x, sidePlayer.y, 5);
+    }
     stats.stamina = Math.max(0, stats.stamina - (move.stamina || 0));
     comboTimer = 0;
   }
@@ -2890,6 +3009,13 @@ const Overworld = (() => {
   }
 
   function updateKnightAttack(dt) {
+    if (sideUpperQueued) {
+      sideUpperQueued = false;
+      if (!sidePlayer.atk && !sidePlayer.charge && sidePlayer.attackCooldown <= 0 && !panel && sidePlayer.hurtTime <= 0) startKnightMove('upper');
+      else if (sidePlayer.atk && KNIGHT_MOVES[sidePlayer.atk.name].next) sidePlayer.atk.queued = 'upper';
+    }
+    updateCharge(dt);
+    if (sidePlayer.charge) { sideAttackQueued = false; sidePlayer.attackTime = 1; return; }
     if (sideAttackQueued) {
       sideAttackQueued = false;
       if (sidePlayer.atk) {
@@ -2907,7 +3033,9 @@ const Overworld = (() => {
     const idx = Math.floor(atk.t * move.fps);
     if (!atk.swooshed && idx >= move.active[0]) {
       atk.swooshed = true;
-      sfx(atk.name === 'finisher' || atk.name === 'thrust' ? 'swingBig' : 'swing');
+      sfx(atk.name === 'finisher' || atk.name === 'thrust' || atk.name === 'power' ? 'swingBig' : 'swing');
+      if (move.fx === 'upper') combatFx.push({ kind: 'arc', x: sidePlayer.x + sidePlayer.facing * 8, y: sidePlayer.y - 26, f: sidePlayer.facing, r: 34, up: true, color: WEAPONS[currentWeapon()].arc, life: 0.2, max: 0.2, vx: 0, vy: 0 });
+      if (move.fx === 'power') { releaseMoonblade(); sfx('waveHum'); }
     }
     if (idx >= move.frames.length) {
       const queued = atk.queued;
@@ -2916,14 +3044,157 @@ const Overworld = (() => {
       lastMove = atk.name;
       comboTimer = move.next ? 0.32 : 0;
       sidePlayer.attackCooldown = move.recover || 0.05;
+      // Still holding the attack button after a swing: start charging the Moonblade.
+      if (attackHeld && atk.name !== 'power' && atk.name !== 'upper' && sidePlayer.onGround) tryStartCharge();
       return;
     }
     sidePlayer.attackTime = 1;
     if (outdoorScene() && move.active.includes(idx)) knightHitCheck(atk, move);
   }
 
+  // ---------------------------------------------------------------------------
+  // Dodge roll, Moonblade charge and its blue crescent wave.
+  // ---------------------------------------------------------------------------
+  function attackPressed() { attackHeld = true; attackHeldAt = time; }
+  function attackReleased() {
+    attackHeld = false;
+    const c = sidePlayer.charge;
+    if (!c) return;
+    sidePlayer.charge = null;
+    if (c.ready) {
+      stats.stamina = Math.max(0, stats.stamina - POWER_STAMINA);
+      startKnightMove('power');
+      sidePlayer.vx = sidePlayer.facing * 120;
+    }
+  }
+  function tryStartCharge() {
+    if (sidePlayer.charge || sidePlayer.roll || !platformMode || !outdoorScene()) return;
+    if (stats.stamina < POWER_STAMINA) { notice = 'Not enough stamina to charge the Moonblade.'; noticeUntil = time + 1.2; return; }
+    sidePlayer.charge = { t: 0, ready: false };
+    sfx('charge');
+  }
+  function updateCharge(dt) {
+    // Holding attack while standing still also begins a charge.
+    if (!sidePlayer.charge && attackHeld && !sidePlayer.atk && sidePlayer.onGround && sidePlayer.hurtTime <= 0 && !sidePlayer.roll && time - attackHeldAt > 0.25 && sidePlayer.attackCooldown <= 0) tryStartCharge();
+    const c = sidePlayer.charge;
+    if (!c) return;
+    if (sidePlayer.hurtTime > 0 || sidePlayer.deadTime > 0 || panel || !sidePlayer.onGround) { sidePlayer.charge = null; return; }
+    if (!attackHeld) { attackReleased(); return; }
+    c.t += dt;
+    sidePlayer.vx *= Math.max(0, 1 - dt * 12);
+    // Blue motes rush in toward the blade.
+    if (Math.random() < dt * (c.ready ? 26 : 40)) {
+      const a = Math.random() * Math.PI * 2, r = 26 + Math.random() * 18;
+      const cx = sidePlayer.x, cy = sidePlayer.y - 22;
+      combatFx.push({ kind: 'mote', x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r, tx: cx, ty: cy, color: Math.random() < 0.5 ? '#8fd8ff' : '#e6f6ff', life: 0.34, max: 0.34, vx: 0, vy: 0 });
+    }
+    if (!c.ready && c.t >= CHARGE_TIME) {
+      c.ready = true;
+      combatFx.push({ kind: 'ring', x: sidePlayer.x, y: sidePlayer.y - 24, blue: true, life: 0.3, max: 0.3, vx: 0, vy: 0 });
+      sfx('ready'); padRumble(0.2, 0.5, 90);
+    }
+  }
+  function releaseMoonblade() {
+    const f = sidePlayer.facing;
+    playerWaves.push({ x: sidePlayer.x + f * 26, y: sidePlayer.y - 24, f, age: 0, life: 0.75, hit: new Set(), dist: 0 });
+    combatFx.push({ kind: 'arc', x: sidePlayer.x + f * 6, y: sidePlayer.y - 26, f, r: 46, color: '120,200,255', life: 0.24, max: 0.24, vx: 0, vy: 0 });
+    flashUntil = time + 0.08;
+    screenShake = Math.max(screenShake, 4);
+    sfx('wave'); padRumble(0.7, 1, 180);
+  }
+  function updatePlayerWaves(dt) {
+    for (let i = playerWaves.length - 1; i >= 0; i--) {
+      const w = playerWaves[i];
+      w.age += dt;
+      const step = (360 - w.age * 180) * dt;
+      w.x += w.f * step; w.dist += step;
+      if (Math.random() < dt * 60) combatFx.push({ kind: 'spark', x: w.x - w.f * 6, y: w.y + (Math.random() - 0.5) * 34, vx: -w.f * 40, vy: (Math.random() - 0.5) * 30, color: Math.random() < 0.5 ? '#8fd8ff' : '#ffffff', life: 0.3, max: 0.3 });
+      sideMobs.forEach((m, k) => {
+        if (m.dead || m.dormant || w.hit.has(k)) return;
+        if (Math.abs(m.x - w.x) > m.T.width / 2 + 10) return;
+        if (m.y < w.y - 30 || mobTop(m) > w.y + 30) return;
+        w.hit.add(k);
+        const bonus = Math.floor((totalAttack() - 5) / 4);
+        damageMob(m, 4 + bonus, w.f, 220, true, false);
+      });
+      if (w.age >= w.life || w.x < 0 || w.x > sideWorldWidth()) playerWaves.splice(i, 1);
+    }
+  }
+  function drawPlayerWaves() {
+    if (!playerWaves.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    playerWaves.forEach(w => {
+      const a = Math.max(0, 1 - w.age / w.life);
+      const s = 1 + w.age * 0.6;
+      for (let t = 3; t >= 0; t--) {
+        const x = w.x - w.f * t * 9;
+        ctx.globalAlpha = a * (t === 0 ? 1 : 0.28 - t * 0.05);
+        ctx.strokeStyle = t === 0 ? '#e8f8ff' : '#4fb6ff';
+        ctx.lineWidth = t === 0 ? 3 : 6;
+        ctx.beginPath();
+        ctx.ellipse(x - w.f * 10 * s, w.y, 14 * s, 24 * s, 0, w.f > 0 ? -1.25 : Math.PI - 1.25 + 0, w.f > 0 ? 1.25 : Math.PI + 1.25);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = a * 0.5;
+      ctx.strokeStyle = '#7fd0ff'; ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.ellipse(w.x - w.f * 12 * s, w.y, 14 * s, 24 * s, 0, w.f > 0 ? -1.1 : Math.PI - 1.1, w.f > 0 ? 1.1 : Math.PI + 1.1);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  function tryRoll() {
+    if (!platformMode || !outdoorScene() || panel || dialogue) return;
+    if (sidePlayer.roll || sidePlayer.deadTime > 0 || sidePlayer.hurtTime > 0 || !sidePlayer.onGround) return;
+    if ((sidePlayer.rollCooldown || 0) > 0) return;
+    if (sidePlayer.atk && KNIGHT_MOVES[sidePlayer.atk.name].air) return;
+    if (stats.stamina < ROLL_STAMINA) { notice = 'Too tired to roll.'; noticeUntil = time + 1; return; }
+    let dir = 0;
+    if (keys.has('arrowleft') || keys.has('a')) dir -= 1;
+    if (keys.has('arrowright') || keys.has('d')) dir += 1;
+    if (!dir) dir = sidePlayer.facing;
+    sidePlayer.facing = dir;
+    sidePlayer.atk = null; sidePlayer.charge = null; sidePlayer.attackTime = 0; comboTimer = 0;
+    sidePlayer.roll = { t: 0, dir, perfect: false, trail: [] };
+    stats.stamina = Math.max(0, stats.stamina - ROLL_STAMINA);
+    spawnDust(sidePlayer.x - dir * 6, sidePlayer.y, 6);
+    sfx('roll');
+  }
+  function updateRoll(dt) {
+    const r = sidePlayer.roll;
+    r.t += dt;
+    const k = Math.min(1, r.t / ROLL_TIME);
+    sidePlayer.vx = r.dir * ROLL_SPEED * (1 - k * k * 0.75);
+    if (Math.floor(r.t * 30) !== Math.floor((r.t - dt) * 30)) {
+      r.trail.push({ x: sidePlayer.x, y: sidePlayer.y, t: r.t, life: 0.16 });
+      if (Math.random() < 0.5) spawnDust(sidePlayer.x - r.dir * 8, sidePlayer.y, 1);
+    }
+    r.trail.forEach(g => g.life -= dt);
+    r.trail = r.trail.filter(g => g.life > 0);
+    if (r.t >= ROLL_TIME) { sidePlayer.roll = null; sidePlayer.rollCooldown = 0.12; sidePlayer.vx *= 0.4; }
+  }
+  // Called by every enemy hit test. During the roll's invincible window a
+  // would-be hit becomes a "perfect dodge": stamina back and a blue flash.
+  function canHitPlayer() {
+    const r = sidePlayer.roll;
+    if (r && r.t < ROLL_IFRAMES) {
+      if (!r.perfect) {
+        r.perfect = true;
+        stats.stamina = Math.min(stats.maxStamina, stats.stamina + 14);
+        addDamageNumber(sidePlayer.x, sidePlayer.y - 56, 'DODGE', '#8fd8ff');
+        combatFx.push({ kind: 'ring', x: sidePlayer.x, y: sidePlayer.y - 22, blue: true, life: 0.3, max: 0.3, vx: 0, vy: 0 });
+        hitStop = Math.max(hitStop, 0.06);
+        sfx('dodge');
+      }
+      return false;
+    }
+    return sidePlayer.invulnTime <= 0;
+  }
+
   function mobTop(m) { return m.y - m.T.bodyH; }
-  function weaponAttack() { return equipment.weapon === 'boneblade' ? 3 : 2; }
+  function weaponAttack() { return WEAPONS[currentWeapon()].atk; }
 
   function damageMob(m, dmg, f, knock, big, crit) {
     // Skeletons sometimes raise their shield against hits from the front.
@@ -2957,7 +3228,7 @@ const Overworld = (() => {
     const near = sidePlayer.x + f * 4, far = sidePlayer.x + f * move.reach;
     const lo = Math.min(near, far) - 12, hi = Math.max(near, far) + 12;
     // The sword sweeps roughly the knight's own height: feet to helmet plus a little.
-    const swingTop = sidePlayer.y - 46, swingBottom = sidePlayer.y + 4;
+    const swingTop = sidePlayer.y - (move.upper ? 88 : move.fx === 'power' ? 58 : 46), swingBottom = sidePlayer.y + 4;
     sideMobs.forEach((m, i) => {
       if (m.dead || m.dormant || atk.hit.has(i)) return;
       if (m.x + m.T.width / 2 < lo || m.x - m.T.width / 2 > hi) return;
@@ -2965,8 +3236,10 @@ const Overworld = (() => {
       atk.hit.add(i);
       const bonus = Math.floor((totalAttack() - 5) / 4);
       const crit = Math.random() < 0.12;
-      const big = atk.name === 'finisher' || atk.name === 'thrust' || crit;
+      const big = atk.name === 'finisher' || atk.name === 'thrust' || atk.name === 'power' || crit;
       damageMob(m, move.dmg + bonus + (crit ? 1 : 0), f, move.knock, big, crit);
+      // The rising slash pops light enemies into the air for a follow-up.
+      if (move.upper && !m.dead && !m.T.armor && !m.T.fly && !m.T.boss && m.blockTime <= 0) { m.liftV = -250; m.lift = Math.max(m.lift || 0, 1); }
     });
   }
 
@@ -2990,6 +3263,7 @@ const Overworld = (() => {
     stats.kills = (stats.kills || 0) + 1;
     if (m.type === 'goblin') stats.goblinKills = (stats.goblinKills || 0) + 1;
     mobVoice(m, 'death');
+    if (!T.anims.death && !T.boss) spawnSparks(m.x, m.y - T.bodyH * 0.5, f, 10, ['#5a5060', '#8a8090', '#2a2430', T.light ? '#ffb347' : '#c8324a']);
     const dropY = m.y - T.bodyH * 0.6;
     const coins = T.coins[0] + Math.floor(Math.random() * (T.coins[1] - T.coins[0] + 1));
     for (let i = 0; i < coins; i++) pickups.push({ type: 'coin', amount: 1, x: m.x, y: dropY, vx: (Math.random() - 0.5) * 140, vy: -150 - Math.random() * 90, age: 0 });
@@ -3019,7 +3293,7 @@ const Overworld = (() => {
   function hurtSidePlayer(amount, fromDir, who) {
     stats.health = Math.max(0, stats.health - amount);
     sidePlayer.hurtTime = 0.36; sidePlayer.invulnTime = 1.1;
-    sidePlayer.atk = null; sidePlayer.attackTime = 0; comboTimer = 0;
+    sidePlayer.atk = null; sidePlayer.attackTime = 0; comboTimer = 0; sidePlayer.charge = null; sidePlayer.roll = null; sidePlayer.drink = null;
     sidePlayer.vx = fromDir * 150; sidePlayer.vy = -120; sidePlayer.onGround = false;
     hitStop = 0.06; screenShake = Math.max(screenShake, 2.5);
     addDamageNumber(sidePlayer.x, sidePlayer.y - 58, amount, '#ff6b6b');
@@ -3039,7 +3313,8 @@ const Overworld = (() => {
     for (let i = combatFx.length - 1; i >= 0; i--) {
       const p = combatFx[i];
       p.life -= dt;
-      if (p.kind !== 'ring' && p.kind !== 'shock') { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += (p.kind === 'dust' ? 30 : 420) * dt; }
+      if (p.kind === 'mote') { const k = Math.min(1, dt * 9); p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; }
+      else if (p.kind !== 'ring' && p.kind !== 'shock' && p.kind !== 'arc') { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += (p.kind === 'dust' ? 30 : 420) * dt; }
       if (p.life <= 0) combatFx.splice(i, 1);
     }
     for (let i = damageNumbers.length - 1; i >= 0; i--) {
@@ -3084,8 +3359,26 @@ const Overworld = (() => {
         ctx.beginPath(); ctx.ellipse(p.x, p.y, r, r * 0.22, 0, 0, Math.PI * 2); ctx.stroke();
         ctx.strokeStyle = 'rgba(160,220,255,' + a * 0.6 + ')'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.ellipse(p.x, p.y, r * 0.7, r * 0.16, 0, 0, Math.PI * 2); ctx.stroke();
+      } else if (p.kind === 'arc') {
+        // Sword crescent: a thick bright arc that sweeps then fades.
+        const k = 1 - a, f = p.f;
+        let a0, a1;
+        if (p.up) { a0 = f > 0 ? 0.9 : Math.PI - 0.9; a1 = f > 0 ? -2.2 : Math.PI + 2.2; }
+        else { a0 = f > 0 ? -1.5 : Math.PI + 1.5; a1 = f > 0 ? 1.2 : Math.PI - 1.2; }
+        const sweep = a0 + (a1 - a0) * Math.min(1, k * 2.4);
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        for (let w = 3; w >= 1; w--) {
+          ctx.strokeStyle = 'rgba(' + p.color + ',' + (a * (w === 1 ? 0.95 : 0.25)) + ')';
+          ctx.lineWidth = w === 1 ? 2 : w * 3;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.r, Math.min(a0, sweep), Math.max(a0, sweep)); ctx.stroke();
+        }
+        ctx.strokeStyle = 'rgba(255,255,255,' + a + ')'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r - 3, Math.min(a0, sweep), Math.max(a0, sweep)); ctx.stroke();
+        ctx.restore();
+      } else if (p.kind === 'mote') {
+        ctx.globalAlpha = a; ctx.fillStyle = p.color; ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 2); ctx.globalAlpha = 1;
       } else if (p.kind === 'ring') {
-        ctx.strokeStyle = 'rgba(255,240,200,' + a + ')'; ctx.lineWidth = 2;
+        ctx.strokeStyle = p.blue ? 'rgba(140,215,255,' + a + ')' : 'rgba(255,240,200,' + a + ')'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(p.x, p.y, 4 + (1 - a) * 14, 0, Math.PI * 2); ctx.stroke();
       } else {
         ctx.globalAlpha = p.kind === 'dust' ? a * 0.6 : a;
@@ -3130,6 +3423,123 @@ const Overworld = (() => {
     e: '#7a4cc0', E: '#c9a8ff', q: '#2fbfa0', Q: '#b8fff0', f: '#d8cfb4', F: '#a0947a', x: '#e8542e'
   };
   const ICONS = {
+    ember: [
+      '............',
+      '.....x......',
+      '....xx......',
+      '....xYx.....',
+      '...xYYx.x...',
+      '..xxYYYxx...',
+      '..xYYWYYx...',
+      '..xYWWWYx...',
+      '..xxYWYxx...',
+      '...xxYxx....',
+      '....xxx.....',
+      '............'],
+    feather: [
+      '..........k.',
+      '.........kk.',
+      '........kek.',
+      '.......kekk.',
+      '......kekk..',
+      '.....kekk...',
+      '....kekk....',
+      '...kekk.....',
+      '..kkkk......',
+      '..kk........',
+      '.k..........',
+      '............'],
+    lampglass: [
+      '....kkkk....',
+      '...kyyyyk...',
+      '...kkkkkk...',
+      '...kCvvCk...',
+      '...kvWCvk...',
+      '...kCvCvk...',
+      '...kvCWvk...',
+      '...kCvvCk...',
+      '...kkkkkk...',
+      '....kyyk....',
+      '.....kk.....',
+      '............'],
+    toadskin: [
+      '............',
+      '..kkkkkkkk..',
+      '.kgGggGggGk.',
+      '.kggqggqggk.',
+      '.kGggGggggk.',
+      '.kggggGgqgk.',
+      '.kgqgggggGk.',
+      '.kggGgqgggk.',
+      '.kGgggggGgk.',
+      '..kkkkkkkk..',
+      '............',
+      '............'],
+    emberedge: [
+      '..........kk',
+      '.........kxk',
+      '........kxYk',
+      '.......kxYk.',
+      '......kxYk..',
+      '.....kxYk...',
+      '..k.kxYk....',
+      '..kkxYk.....',
+      '...kYk......',
+      '..kdkkk.....',
+      '.kdk........',
+      '.kk.........'],
+    moonsilver: [
+      '..........kk',
+      '.........kCk',
+      '........kCWk',
+      '.......kCWk.',
+      '......kCWk..',
+      '.....kCWk...',
+      '..y.kCWk....',
+      '..yyCWk.....',
+      '...yWk......',
+      '..kcyyy.....',
+      '.kck........',
+      '.kk.........'],
+    palemane: [
+      '......C.....',
+      '.....CvC....',
+      '....CvWvC...',
+      '...CvWWv....',
+      '...vWWvC....',
+      '..CvWvC.....',
+      '..vWvC......',
+      '..CvC.......',
+      '...vC.......',
+      '....C.......',
+      '............',
+      '............'],
+    sigil: [
+      '....kkkk....',
+      '..kkMMMMkk..',
+      '.kMMWkkkMMk.',
+      '.kMWk...kMk.',
+      'kMWk.....kk.',
+      'kMWk........',
+      'kMWk.....kk.',
+      '.kMWk...kMk.',
+      '.kMMWkkkMMk.',
+      '..kkMMMMkk..',
+      '....kkkk....',
+      '............'],
+    locket: [
+      '.....yy.....',
+      '....y..y....',
+      '.....yy.....',
+      '....kkkk....',
+      '...kyYYyk...',
+      '..kyYEEYyk..',
+      '..kyEWEEyk..',
+      '..kyYEEYyk..',
+      '...kyYYyk...',
+      '....kkkk....',
+      '............',
+      '............'],
     bread: [
       '............',
       '............',
@@ -3406,6 +3816,7 @@ const Overworld = (() => {
   }
 
   function updatePlatformer(dt) {
+    syncArena();
     if (hitStop > 0) { hitStop -= dt; sideMobs.forEach(g => { g.flash = Math.max(0, (g.flash || 0) - dt); }); updateSideCamera(dt); return; }
     time += dt;
     saveTimer += dt;
@@ -3418,7 +3829,10 @@ const Overworld = (() => {
     sidePlayer.attackTime = Math.max(0, sidePlayer.attackTime - dt);
     sidePlayer.hurtTime = Math.max(0, sidePlayer.hurtTime - dt);
     sidePlayer.invulnTime = Math.max(0, sidePlayer.invulnTime - dt);
+    sidePlayer.rollCooldown = Math.max(0, (sidePlayer.rollCooldown || 0) - dt);
     updateCombatFx(dt);
+    updatePlayerWaves(dt);
+    updateAmbient(dt);
     if (sidePlayer.deadTime > 0) {
       sidePlayer.deadTime -= dt; sidePlayer.deathAge = (sidePlayer.deathAge || 0) + dt;
       sidePlayer.vx *= Math.max(0, 1 - dt * 8);
@@ -3426,16 +3840,17 @@ const Overworld = (() => {
       if (sidePlayer.y < SIDE_GROUND_Y) { sidePlayer.vy += 820 * dt; sidePlayer.y = Math.min(SIDE_GROUND_Y, sidePlayer.y + sidePlayer.vy * dt); } else sidePlayer.vy = 0;
       if (sidePlayer.deadTime <= 0) {
         if (bossFight) endBossFight(false);
-        sidePlayer.x = platformScene === 'hollow' ? 130 : 72; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0;
+        const lf = FIRES.find(f => f.id === story.lastFire && f.scene === platformScene);
+        sidePlayer.x = lf ? lf.x - 30 : region().entry; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.roll = null; sidePlayer.charge = null;
         sidePlayer.onGround = true; sidePlayer.invulnTime = 1.6; sidePlayer.atk = null; sidePlayer.hurtTime = 0; sidePlayer.facing = 1;
         pickups.length = 0;
         stats.health = Math.max(1, Math.ceil(stats.maxHealth * 0.65));
-        notice = platformScene === 'hollow' ? 'You wake at the edge of the Hollow.' : 'You made it back to the forest entrance.'; noticeUntil = time + 2.5;
+        notice = lf ? 'You wake by the embers at ' + lf.name + '.' : platformScene === 'forest' ? 'You made it back to the forest entrance.' : 'You wake at the edge of ' + region().name.toLowerCase().replace(/^the /, 'the ') + '.'; noticeUntil = time + 2.5;
       }
       sideAttackQueued = false; sideJumpQueued = false; updateSideCamera(dt); return;
     }
     if (dialogue || (bossFight && bossFight.intro)) {
-      sidePlayer.vx = 0; sidePlayer.moving = false; sidePlayer.atk = null;
+      sidePlayer.vx = 0; sidePlayer.moving = false; sidePlayer.atk = null; sidePlayer.roll = null; sidePlayer.charge = null;
       sideJumpQueued = false; sideAttackQueued = false;
       if (dialogue) updateDialogue(dt);
       if (bossFight) updateBossIntro(dt);
@@ -3458,7 +3873,20 @@ const Overworld = (() => {
       return;
     }
 
-    if (!panel && (sidePlayer.atk || sidePlayer.hurtTime > 0)) {
+    if (sideRollQueued) { sideRollQueued = false; tryRoll(); }
+    if (sidePlayer.pray) {
+      sidePlayer.pray.t += dt; sidePlayer.vx = 0; sidePlayer.moving = false;
+      if (sidePlayer.pray.t >= 2.1) sidePlayer.pray = null;
+      sideAttackQueued = false; sideJumpQueued = false;
+    } else if (sidePlayer.drink) {
+      sidePlayer.drink.t += dt; sidePlayer.vx *= Math.max(0, 1 - dt * 12); sidePlayer.moving = false;
+      if (sidePlayer.drink.t >= 0.55) sidePlayer.drink = null;
+      sideAttackQueued = false;
+    } else if (sidePlayer.roll) {
+      updateRoll(dt);
+      sidePlayer.moving = false;
+      sideAttackQueued = false; sideJumpQueued = false;
+    } else if (!panel && (sidePlayer.atk || sidePlayer.hurtTime > 0)) {
       // Committed: attacks carry their own lunge and hits knock the knight back.
       const friction = sidePlayer.onGround ? 10 : 2;
       sidePlayer.vx *= Math.max(0, 1 - dt * friction);
@@ -3614,26 +4042,34 @@ const Overworld = (() => {
         m.kvx *= Math.max(0, 1 - dt * 9);
         if (Math.abs(m.kvx) < 4) m.kvx = 0;
       }
-      m.x = clamp(m.x, 30, platformScene === 'forest' ? 3540 : platformScene === 'hollow' && !T.boss && !m.summoned ? BOSS_ARENA.left - 40 : sideWorldWidth() - 30);
+      m.x = clamp(m.x, 30, platformScene === 'forest' ? 3540 : region().arena && !T.boss && !m.summoned ? BOSS_ARENA.left - 40 : sideWorldWidth() - 30);
       if (!T.boss && m.summoned) m.x = clamp(m.x, BOSS_ARENA.left + 20, BOSS_ARENA.right - 20);
       if (T.boss && bossFight && bossFight.active) m.x = clamp(m.x, BOSS_ARENA.left + 30, BOSS_ARENA.right - 30);
       if (m.dead) {
         m.deadTime += dt; m.respawn -= dt;
+        if (T.fly && !T.anims.death) m.y = Math.min(SIDE_GROUND_Y, m.y + dt * (40 + m.deadTime * 300));
         if (m.respawn <= 0 && Math.abs(sidePlayer.x - m.home) > 240) {
           Object.assign(m, makeMob(m.type, m.home, (m.max - m.min) / 2, 1), { patrolDir: m.patrolDir });
         }
         continue;
       }
-      if (m.dormant) { m.walk += dt * 6; continue; }
+      if (m.dormant) {
+        m.walk += dt * 6;
+        // Lamplighters lie as a guttering lamp until you come close, then rise.
+        if (T.riser && !m.rising && Math.abs(sidePlayer.x - m.x) < 130 && playerAlive) { m.rising = 0.001; sfx('ghost', 0.6, 0.8); }
+        if (m.rising) { m.rising += dt; if (m.rising > 11 / 12) { m.rising = 0; m.dormant = false; m.attackCooldown = 0.6; } }
+        continue;
+      }
       const enraged = T.boss && m.hp <= m.maxHp / 2;
       if (enraged && !m.enraged) {
         m.enraged = true; m.attackTime = 0; m.attackCooldown = 1.2;
         sfx('roar', 1, 0.8); screenShake = 6; padRumble(1, 1, 500);
-        notice = 'Grukk roars and the Hollow answers...'; noticeUntil = time + 2.4;
+        notice = T.enrageText || 'It grows furious!'; noticeUntil = time + 2.4;
         [BOSS_ARENA.left + 60, BOSS_ARENA.right - 60].forEach((x, k) => {
-          const g = makeMob('ghost', x, 60, k); g.respawn = Infinity; g.summoned = true; g.flash = 0.3; sideMobs.push(g);
+          const g = makeMob(T.summon || 'ghost', x, 60, k); g.respawn = Infinity; g.summoned = true; g.flash = 0.3; g.dormant = false; sideMobs.push(g);
         });
       }
+      if (T.ai) { updateBossAI(m, dt, enraged, playerAlive); continue; }
       m.attackCooldown = Math.max(0, m.attackCooldown - dt);
       m.attackTime = Math.max(0, m.attackTime - dt);
       m.hurtTime = Math.max(0, m.hurtTime - dt);
@@ -3644,7 +4080,8 @@ const Overworld = (() => {
       if (m.hurtTime > 0 || m.kvx || m.blockTime > 0) {
         // Staggered.
       } else if (m.attackTime > 0) {
-        if (T.fly && m.type === 'eye') m.x += m.dir * 60 * dt;   // the eye lunges through its bite
+        if (T.fly && (m.type === 'eye' || T.dive)) m.x += m.dir * 60 * dt;   // the eye lunges through its bite
+        if (T.pounce) { const p = 1 - m.attackTime / m.atkLen; if (p > 0.2 && p < 0.7) m.x += m.dir * T.pounce * dt; }
       } else if (playerAlive && !safeZone() && distance < T.chase && Math.abs(sidePlayer.y - SIDE_GROUND_Y) < 120) {
         m.dir = dx < 0 ? -1 : 1;
         m.runUntil = Math.max(m.runUntil, time + 0.25);
@@ -3670,12 +4107,22 @@ const Overworld = (() => {
       // Height: walkers stand on the ground, fliers hover and dive while biting.
       if (T.fly) {
         let hover = SIDE_GROUND_Y - T.fly + Math.sin(m.bob * 3) * 4;
-        if (m.attackTime > 0 && m.type === 'eye') {
+        if (m.attackTime > 0 && (m.type === 'eye' || T.dive)) {
           const p = 1 - m.attackTime / m.atkLen;
           hover += Math.sin(Math.min(1, p) * Math.PI) * (T.fly - 18);
         }
         m.y += (hover - m.y) * Math.min(1, dt * 10);
-      } else m.y = SIDE_GROUND_Y;
+      } else {
+        // Ground walkers; a rising slash can pop them into the air.
+        if (m.liftV || m.lift > 0) {
+          m.liftV += 900 * dt;
+          m.lift = Math.max(0, (m.lift || 0) - m.liftV * dt);
+          m.hurtTime = Math.max(m.hurtTime, 0.08);
+          if (m.lift <= 0) { if (m.liftV > 150) { spawnDust(m.x, SIDE_GROUND_Y, 5); sfx('land', 0.5); } m.lift = 0; m.liftV = 0; }
+        }
+        m.y = SIDE_GROUND_Y - (m.lift || 0);
+        if (T.pounce && m.attackTime > 0) { const p = 1 - m.attackTime / m.atkLen; m.y -= Math.max(0, Math.sin(Math.min(1, Math.max(0, (p - 0.15) / 0.6)) * Math.PI)) * 22; }
+      }
       // Damage window, measured as a share of the swing so animation and hit agree.
       if (m.attackTime > 0 && !m.attackHit) {
         const p = 1 - m.attackTime / m.atkLen;
@@ -3688,16 +4135,24 @@ const Overworld = (() => {
             if (enraged) bossWaves.push({ x: m.x - m.dir * 30, dir: -m.dir, life: 1.6, hit: false });
           }
           const facing = Math.sign(dx) === m.dir || distance < 12;
-          if (distance < T.reach + 4 && facing && playerBodyOverlaps(m.y - T.bodyH - 6, m.y + 4) && sidePlayer.invulnTime <= 0 && playerAlive) {
+          if (T.ranged) {
+            if (!m.waveDone) {
+              m.waveDone = true; m.attackHit = true;
+              const sx = m.x + m.dir * 10, sy = m.y - T.bodyH * 0.5;
+              const tx = sidePlayer.x, ty = sidePlayer.y - 20, d = Math.max(1, Math.hypot(tx - sx, ty - sy));
+              mobShots.push({ x: sx, y: sy, vx: (tx - sx) / d * 120, vy: (ty - sy) / d * 120, life: 2.6, dmg: T.dmg, who: 'A fireball', kind: 'fire' });
+              sfx('skull');
+            }
+          } else if (distance < T.reach + 4 && facing && playerBodyOverlaps(m.y - T.bodyH - 6, m.y + 4) && playerAlive && canHitPlayer()) {
             m.attackHit = true;
-            hurtSidePlayer(Math.max(1, T.dmg - Math.floor(totalDefense() / 2)), m.dir, T.boss ? 'Grukk' : 'The ' + T.name.toLowerCase());
+            hurtSidePlayer(Math.max(1, T.dmg - Math.floor(totalDefense() / 2)), m.dir, T.boss ? T.short : 'The ' + T.name.toLowerCase());
           }
         } else if (p > T.hit[1]) m.attackHit = true;
       }
       // Ground walkers block the knight's path; fliers and ghosts drift through.
       if (!T.fly) {
         const gap = sidePlayer.x - m.x, half = T.width / 2 + 9;
-        if (Math.abs(gap) < half && Math.abs(sidePlayer.y - SIDE_GROUND_Y) < 8 && !sidePlayer.atk) {
+        if (Math.abs(gap) < half && Math.abs(sidePlayer.y - SIDE_GROUND_Y) < 8 && !sidePlayer.atk && !sidePlayer.roll && !(m.lift > 0)) {
           sidePlayer.x = m.x + (gap < 0 ? -half : half);
           sidePlayer.vx = 0;
         }
@@ -3708,10 +4163,191 @@ const Overworld = (() => {
       const w = bossWaves[i];
       w.x += w.dir * 175 * dt; w.life -= dt;
       if (Math.random() < 0.5) spawnDust(w.x, SIDE_GROUND_Y, 1);
-      if (!w.hit && Math.abs(w.x - sidePlayer.x) < 12 && sidePlayer.y > SIDE_GROUND_Y - 12 && sidePlayer.invulnTime <= 0 && playerAlive) {
+      if (!w.hit && Math.abs(w.x - sidePlayer.x) < 12 && sidePlayer.y > SIDE_GROUND_Y - 12 && playerAlive && canHitPlayer()) {
         w.hit = true; hurtSidePlayer(Math.max(1, 5 - Math.floor(totalDefense() / 2)), w.dir, 'The shockwave');
       }
       if (w.life <= 0 || w.x < BOSS_ARENA.left || w.x > BOSS_ARENA.right) bossWaves.splice(i, 1);
+    }
+    updateHazards(dt, playerAlive);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Hazards shared by Chapter 2-3 enemies: fireballs and burning ground.
+  // ---------------------------------------------------------------------------
+  const mobShots = [], groundFires = [];
+  const fireballImg = loadImg('beasts/fireball.png');
+  function updateHazards(dt, playerAlive) {
+    const pf = sidePlayer.facing;
+    for (let i = mobShots.length - 1; i >= 0; i--) {
+      const s = mobShots[i];
+      s.life -= dt; s.x += s.vx * dt; s.y += s.vy * dt;
+      if (Math.random() < dt * 30) combatFx.push({ kind: 'spark', x: s.x, y: s.y, vx: -s.vx * 0.1 + (Math.random() - 0.5) * 20, vy: -20, color: Math.random() < 0.5 ? '#ffb347' : '#ff6a2a', life: 0.25, max: 0.25 });
+      // A sword swing knocks fireballs out of the air.
+      const ahead = (s.x - sidePlayer.x) * pf;
+      if (sidePlayer.atk && sidePlayer.attackTime > 0 && ahead > -6 && ahead < 52 && Math.abs(s.y - (sidePlayer.y - 24)) < 34) {
+        spawnSparks(s.x, s.y, pf, 8, ['#ffd27a', '#ff8a3a', '#ffffff']); sfx('clash', 0.6, 1.3); mobShots.splice(i, 1); continue;
+      }
+      if (playerAlive && Math.abs(s.x - sidePlayer.x) < 10 && s.y > sidePlayer.y - 42 && s.y < sidePlayer.y + 2 && canHitPlayer()) {
+        hurtSidePlayer(Math.max(1, s.dmg - Math.floor(totalDefense() / 2)), Math.sign(s.vx) || 1, s.who);
+        spawnSparks(s.x, s.y, Math.sign(s.vx) || 1, 8, ['#ffd27a', '#ff8a3a']);
+        mobShots.splice(i, 1); continue;
+      }
+      if (s.life <= 0 || s.y > SIDE_GROUND_Y + 4) { if (s.y > SIDE_GROUND_Y) spawnSparks(s.x, SIDE_GROUND_Y - 2, 1, 5, ['#ffb347', '#ff6a2a']); mobShots.splice(i, 1); }
+    }
+    for (let i = groundFires.length - 1; i >= 0; i--) {
+      const f = groundFires[i];
+      f.life -= dt;
+      if (playerAlive && sidePlayer.onGround && Math.abs(f.x - sidePlayer.x) < 8 && f.life > 0.3 && canHitPlayer()) hurtSidePlayer(Math.max(1, 4 - Math.floor(totalDefense() / 3)), sidePlayer.x < f.x ? -1 : 1, 'Pale fire');
+      if (f.life <= 0) groundFires.splice(i, 1);
+    }
+  }
+  function drawHazards() {
+    groundFires.forEach(f => {
+      const a = Math.min(1, f.life / 0.6), gy = SIDE_GROUND_Y + 1, fx = Math.round(f.x);
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(fx, gy - 4, 1, fx, gy - 4, 14);
+      g.addColorStop(0, 'rgba(80,170,255,' + 0.35 * a + ')'); g.addColorStop(1, 'rgba(80,170,255,0)');
+      ctx.fillStyle = g; ctx.fillRect(fx - 14, gy - 18, 28, 20);
+      [[-3, 0.8, 0], [0, 1.25, 1.7], [3, 0.9, 3.1]].forEach(([ox, k, ph]) => {
+        const h = (8 + Math.sin(time * 17 + f.x * 0.3 + ph) * 3) * k * a, sway = Math.sin(time * 11 + ph + f.x) * 1.5;
+        ctx.fillStyle = 'rgba(60,140,255,' + 0.7 * a + ')';
+        ctx.beginPath(); ctx.moveTo(fx + ox - 3, gy); ctx.quadraticCurveTo(fx + ox - 3, gy - h * 0.5, fx + ox + sway, gy - h); ctx.quadraticCurveTo(fx + ox + 3, gy - h * 0.5, fx + ox + 3, gy); ctx.fill();
+        ctx.fillStyle = 'rgba(210,240,255,' + 0.8 * a + ')';
+        ctx.beginPath(); ctx.moveTo(fx + ox - 1.5, gy); ctx.quadraticCurveTo(fx + ox - 1, gy - h * 0.35, fx + ox + sway * 0.5, gy - h * 0.6); ctx.quadraticCurveTo(fx + ox + 1, gy - h * 0.35, fx + ox + 1.5, gy); ctx.fill();
+      });
+      ctx.restore();
+    });
+    mobShots.forEach(s => {
+      ctx.save();
+      ctx.translate(Math.round(s.x), Math.round(s.y));
+      ctx.rotate(Math.atan2(s.vy, s.vx) + Math.PI);
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(0, 0, 1, 0, 0, 14);
+      g.addColorStop(0, s.kind === 'moon' ? 'rgba(150,210,255,.6)' : 'rgba(255,150,60,.6)'); g.addColorStop(1, 'rgba(255,80,20,0)');
+      ctx.fillStyle = g; ctx.fillRect(-14, -14, 28, 28);
+      ctx.globalCompositeOperation = 'source-over';
+      if (imgReady(fireballImg)) ctx.drawImage(fireballImg, (Math.floor(time * 14) % 3) * 19, 0, 19, 16, -6, -8, 19, 16);
+      else { ctx.fillStyle = '#ffb347'; ctx.fillRect(-3, -3, 6, 6); }
+      ctx.restore();
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Boss behaviours for Ashmane (charging mare) and Vael (flying demon).
+  // ---------------------------------------------------------------------------
+  function bossTouch(m, rangeX, top, dmg) {
+    if (Math.abs(sidePlayer.x - m.x) < rangeX && sidePlayer.y > top && canHitPlayer()) {
+      hurtSidePlayer(Math.max(1, dmg - Math.floor(totalDefense() / 2)), m.dir, m.T.short);
+      return true;
+    }
+    return false;
+  }
+  function updateBossAI(m, dt, enraged, playerAlive) {
+    const T = m.T;
+    m.st = m.st || 'stalk'; m.stT = (m.stT || 0) + dt;
+    m.attackTime = 0; m.moving = false;
+    const dx = sidePlayer.x - m.x, face = dx < 0 ? -1 : 1;
+    const L = BOSS_ARENA.left + 46, R = BOSS_ARENA.right - 46;
+    const go = (st) => { m.st = st; m.stT = 0; };
+    if (T.ai === 'mare') {
+      m.y = SIDE_GROUND_Y;
+      if (m.st === 'stalk') {
+        m.dir = face;
+        if (Math.abs(dx) > 110) { m.x += face * T.speed * dt; m.moving = true; m.walk += dt * 9; }
+        if (playerAlive && Math.abs(dx) < 64 && m.stT > 0.5 && Math.random() < dt * 2) go('stomp');
+        else if (m.stT > (enraged ? 0.75 : 1.25)) {
+          // Too close to a wall to build speed: gallop away to the far side first.
+          const room = face > 0 ? R - m.x : m.x - L;
+          if (room < 150 || Math.abs(dx) < 70) { m.retreatX = face > 0 ? L + 10 : R - 10; if (Math.abs(m.retreatX - m.x) < 150) m.retreatX = m.x < (L + R) / 2 ? R - 10 : L + 10; go('retreat'); }
+          else go('windup');
+        }
+      } else if (m.st === 'retreat') {
+        const d = m.retreatX - m.x; m.dir = d < 0 ? -1 : 1;
+        m.x += m.dir * Math.min(Math.abs(d), T.speed * 2.6 * dt); m.moving = true; m.walk += dt * 13;
+        if (Math.random() < dt * 14) spawnDust(m.x - m.dir * 26, SIDE_GROUND_Y, 1);
+        if (Math.abs(d) < 3 || m.stT > 2.2) go('windup');
+      } else if (m.st === 'windup') {
+        if (m.stT < dt * 1.5) { sfx('mare'); m.dir = face; }
+        if (Math.random() < dt * 20) spawnDust(m.x - m.dir * 26, SIDE_GROUND_Y, 1);
+        m.tele = true;
+        if (m.stT > (enraged ? 0.42 : 0.6)) { m.tele = false; m.chargeDir = m.dir; m.trailX = m.x; go('charge'); screenShake = Math.max(screenShake, 2); }
+      } else if (m.st === 'charge') {
+        const sp = enraged ? 410 : 340;
+        m.dir = m.chargeDir; m.x += m.dir * sp * dt; m.moving = true; m.walk += dt * 15;
+        if (Math.abs(m.x - m.trailX) > 16) { m.trailX = m.x; groundFires.push({ x: m.x - m.dir * 20, life: enraged ? 3.2 : 2.4 }); }
+        if (Math.random() < dt * 30) spawnDust(m.x - m.dir * 30, SIDE_GROUND_Y, 1);
+        if (playerAlive && bossTouch(m, 34, SIDE_GROUND_Y - 44, T.dmg)) padRumble(1, 1, 220);
+        if ((m.dir > 0 && m.x >= R) || (m.dir < 0 && m.x <= L)) { m.x = clamp(m.x, L, R); screenShake = Math.max(screenShake, 4); sfx('slam', 0.8, 0.9); spawnDust(m.x + m.dir * 30, SIDE_GROUND_Y, 8); go('stun'); }
+      } else if (m.st === 'stun') {
+        if (m.stT > (enraged ? 0.7 : 1.15)) go(enraged && !m.second && Math.random() < 0.55 ? (m.second = true, 'windup') : (m.second = false, 'stalk'));
+      } else if (m.st === 'stomp') {
+        m.tele = m.stT < 0.45;
+        if (m.stT > 0.45 && !m.stomped) {
+          m.stomped = true; screenShake = Math.max(screenShake, 5); sfx('slam', 1, 0.8); padRumble(0.9, 0.9, 200);
+          bossWaves.push({ x: m.x + 30, dir: 1, life: 1.6, hit: false }, { x: m.x - 30, dir: -1, life: 1.6, hit: false });
+          spawnDust(m.x, SIDE_GROUND_Y, 10);
+        }
+        if (m.stT > 0.95) { m.stomped = false; m.tele = false; go('stalk'); }
+      }
+      m.x = clamp(m.x, L, R);
+    } else if (T.ai === 'demon') {
+      m.dir = face;
+      const hoverY = SIDE_GROUND_Y - 74 + Math.sin(time * 2.2) * 5;
+      const lowY = SIDE_GROUND_Y - 22;
+      m.walk += dt * 10;
+      if (m.st === 'stalk') {
+        const tx = clamp(sidePlayer.x - face * 110, L, R);
+        m.x += (tx - m.x) * Math.min(1, dt * 1.6);
+        m.y += (hoverY - m.y) * Math.min(1, dt * 3);
+        if (m.stT > (enraged ? 1.0 : 1.6)) {
+          const r = Math.random();
+          go(r < 0.4 ? 'descend' : r < 0.75 ? 'orbs' : 'swoop');
+          m.target = { x: clamp(sidePlayer.x - face * 96, L, R) };
+        }
+      } else if (m.st === 'descend') {
+        m.x += (m.target.x - m.x) * Math.min(1, dt * 4);
+        m.y += (lowY - m.y) * Math.min(1, dt * 4);
+        if (m.stT > 0.7) { m.dir = face; m.breathDir = face; go('breath'); m.atkLen = T.atkTime; sfx('demon'); }
+      } else if (m.st === 'breath') {
+        m.dir = m.breathDir; m.y = lowY;
+        m.attackTime = Math.max(0.0001, T.atkTime - m.stT); m.atkLen = T.atkTime;
+        const p = m.stT / T.atkTime;
+        if (p >= T.hit[0] && p <= T.hit[1]) {
+          const x0 = m.x + m.dir * 20, x1 = m.x + m.dir * 175;
+          const lo = Math.min(x0, x1), hi = Math.max(x0, x1);
+          for (let k = 0; k < 3; k++) { const fx = x0 + (x1 - x0) * Math.random(); combatFx.push({ kind: 'spark', x: fx, y: SIDE_GROUND_Y - 4 - Math.random() * 30, vx: m.dir * 60, vy: -40 - Math.random() * 40, color: ['#8fd8ff', '#ffffff', '#5fa8ff'][k], life: 0.4, max: 0.4 }); }
+          if (playerAlive && sidePlayer.x > lo && sidePlayer.x < hi && sidePlayer.y > SIDE_GROUND_Y - 46 && !m.breathHit && canHitPlayer()) {
+            m.breathHit = true; hurtSidePlayer(Math.max(1, T.dmg - Math.floor(totalDefense() / 2)), m.dir, 'Moonfire');
+          }
+          if (Math.random() < dt * 8) screenShake = Math.max(screenShake, 1.5);
+        }
+        if (m.stT >= T.atkTime) { m.breathHit = false; m.attackTime = 0; go('stalk'); }
+      } else if (m.st === 'orbs') {
+        m.y += (SIDE_GROUND_Y - 100 - m.y) * Math.min(1, dt * 3);
+        m.tele = m.stT < 0.5;
+        if (m.stT > 0.5 && !m.fired) {
+          m.fired = true; sfx('skull', 1, 0.7);
+          const n = enraged ? 5 : 3;
+          for (let k = 0; k < n; k++) {
+            const sx = m.x + m.dir * 16, sy = m.y - 50;
+            const tx = sidePlayer.x + (k - (n - 1) / 2) * 34, ty = SIDE_GROUND_Y - 14, d = Math.max(1, Math.hypot(tx - sx, ty - sy));
+            mobShots.push({ x: sx, y: sy, vx: (tx - sx) / d * 135, vy: (ty - sy) / d * 135, life: 3, dmg: 6, who: 'Moonfire', kind: 'moon' });
+          }
+        }
+        if (m.stT > 1.2) { m.fired = false; m.tele = false; go('stalk'); }
+      } else if (m.st === 'swoop') {
+        if (!m.swoop) m.swoop = { x0: m.x, y0: m.y, tx: sidePlayer.x, t: 0 };
+        const s = m.swoop; s.t += dt;
+        m.tele = s.t < 0.35;
+        if (s.t > 0.35) {
+          const k = Math.min(1, (s.t - 0.35) / 0.7);
+          m.x = s.x0 + (s.tx + face * 60 - s.x0) * k;
+          m.y = s.y0 + Math.sin(k * Math.PI) * (lowY - s.y0 + 4);
+          if (k > 0.3 && k < 0.75 && !s.hit && playerAlive && Math.abs(sidePlayer.x - m.x) < 40 && bossTouch(m, 40, m.y - 80, T.dmg)) s.hit = true;
+          if (k >= 1) { m.swoop = null; m.tele = false; go('stalk'); }
+        }
+      }
+      m.x = clamp(m.x, L, R);
     }
   }
 
@@ -3722,9 +4358,15 @@ const Overworld = (() => {
   function mobFrame(m) {
     const T = m.T, A = T.anims;
     if (m.dead) {
-      if (A.death) { const n = A.death[1]; return [A.death, Math.min(n - 1, Math.floor(m.deadTime * 9))]; }
+      if (A.death) { const n = A.death[1], f = Math.min(n - 1, Math.floor(m.deadTime * (A.death[2] || 9))); return [A.death, A.death[3] === 'rev' ? n - 1 - f : f]; }
       return [A.idle, 0];
     }
+    if (A.rise && m.dormant) return [A.rise, m.rising ? Math.min(A.rise[1] - 1, Math.floor(m.rising * A.rise[2])) : 0];
+    if (T.ai === 'mare') {
+      if (m.st === 'charge' || m.st === 'stalk' && m.moving) return [A.move, Math.floor(m.walk) % A.move[1]];
+      return [A.idle, Math.floor(time * (m.st === 'windup' || m.st === 'stomp' ? 14 : m.st === 'stun' ? 4 : 7)) % A.idle[1]];
+    }
+    if (T.ai === 'demon' && m.st !== 'breath') return [A.idle, Math.floor(m.walk) % A.idle[1]];
     if (m.blockTime > 0 && A.block) return [A.block, Math.min(A.block[1] - 1, Math.floor((0.4 - m.blockTime) * 10))];
     if (m.hurtTime > 0 && A.hurt) return [A.hurt, Math.min(A.hurt[1] - 1, Math.floor((0.3 - m.hurtTime) / 0.3 * A.hurt[1]))];
     if (m.attackTime > 0) { const n = A.attack[1]; return [A.attack, Math.min(n - 1, Math.floor((1 - m.attackTime / m.atkLen) * n))]; }
@@ -3738,27 +4380,29 @@ const Overworld = (() => {
     if (!imgReady(img)) return;
     let alpha = T.alpha || 1;
     if (m.dead) {
-      const fadeStart = T.boss ? 1.6 : (anim[1] / 9 + 0.5);
-      alpha *= Math.max(0, 1 - Math.max(0, m.deadTime - fadeStart) / 0.6);
+      const fadeStart = T.boss ? 1.6 : T.anims.death ? (anim[1] / (T.anims.death[2] || 9) + 0.5) : 0.12;
+      alpha *= Math.max(0, 1 - Math.max(0, m.deadTime - fadeStart) / (T.anims.death || T.boss ? 0.6 : 0.4));
       if (T.boss) alpha *= m.deadTime < 1.6 ? (Math.floor(m.deadTime * 14) % 2 ? 0.5 : 1) : 1;
       if (alpha <= 0) return;
     }
     const sc = T.scale, w = T.fw * sc, h = T.fh * sc;
     const flip = T.faceLeft ? m.dir > 0 : m.dir < 0;
-    const sink = T.boss && m.dead ? Math.min(14, m.deadTime * 6) : 0;
+    const sink = T.boss && m.dead && !T.fly ? Math.min(14, m.deadTime * 6) : 0;
+    const squash = m.dead && !T.anims.death && !T.boss ? Math.max(0.2, 1 - m.deadTime * 1.6) : 1;
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.translate(Math.round(m.x), Math.round(m.y + sink));
     if (flip) ctx.scale(-1, 1);
+    if (squash !== 1) ctx.scale(1 + (1 - squash) * 0.4, squash);
     ctx.drawImage(img, frame * T.fw, 0, T.fw, T.fh, -T.ax * sc, -T.ay * sc, w, h);
-    if (m.flash > 0) {
+    if (m.flash > 0 || (m.tele && Math.floor(time * 14) % 2)) {
       mobFlashCanvas.width = T.fw; mobFlashCanvas.height = T.fh;
       mobFlashCtx.clearRect(0, 0, T.fw, T.fh);
       mobFlashCtx.drawImage(img, frame * T.fw, 0, T.fw, T.fh, 0, 0, T.fw, T.fh);
       mobFlashCtx.globalCompositeOperation = 'source-in';
-      mobFlashCtx.fillStyle = '#ffffff'; mobFlashCtx.fillRect(0, 0, T.fw, T.fh);
+      mobFlashCtx.fillStyle = m.flash > 0 ? '#ffffff' : '#ff4a3a'; mobFlashCtx.fillRect(0, 0, T.fw, T.fh);
       mobFlashCtx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = alpha * 0.85;
+      ctx.globalAlpha = alpha * (m.flash > 0 ? 0.85 : 0.35);
       ctx.drawImage(mobFlashCanvas, -T.ax * sc, -T.ay * sc, w, h);
     }
     ctx.restore();
@@ -3770,6 +4414,13 @@ const Overworld = (() => {
       const dist = SIDE_GROUND_Y - m.y;
       ctx.fillStyle = 'rgba(0,0,0,' + Math.max(0.08, 0.3 - dist / 300) + ')';
       ctx.beginPath(); ctx.ellipse(Math.round(m.x), SIDE_GROUND_Y + 1, m.T.width * (m.T.boss ? 1.1 : 0.8), 3, 0, 0, Math.PI * 2); ctx.fill();
+      if (m.T.light && !m.dead) {
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        const ly = m.y - m.T.bodyH * 0.55, fl = 34 + Math.sin(time * 9 + m.x) * 3;
+        const g = ctx.createRadialGradient(m.x, ly, 2, m.x, ly, fl);
+        g.addColorStop(0, 'rgba(' + m.T.light + ',.32)'); g.addColorStop(1, 'rgba(' + m.T.light + ',0)');
+        ctx.fillStyle = g; ctx.fillRect(m.x - fl, ly - fl, fl * 2, fl * 2); ctx.restore();
+      }
       drawMob(m);
       // Telegraph: a red glint before a heavy swing.
       if (!m.dead && m.attackTime > 0 && (1 - m.attackTime / m.atkLen) < m.T.hit[0] && Math.floor(time * 16) % 2) {
@@ -3792,6 +4443,7 @@ const Overworld = (() => {
       ctx.fillStyle = 'rgba(120,70,40,' + a * 0.8 + ')';
       ctx.fillRect(Math.round(w.x) - w.dir * 10, SIDE_GROUND_Y - 4, 6, 4);
     });
+    drawHazards();
   }
 
   // Draws one full 128 x 64 knight cell. The knight's body sits at x ~62 in
@@ -3818,6 +4470,13 @@ const Overworld = (() => {
     if (sidePlayer.hurtTime > 0) {
       return { sheet: ks.hurt, cols: 2, frame: Math.min(2, Math.floor((0.36 - sidePlayer.hurtTime) / 0.36 * 3)) };
     }
+    if (sidePlayer.roll) return { sheet: ks.roll, cols: 2, frame: Math.min(3, Math.floor(sidePlayer.roll.t / ROLL_TIME * 4)) };
+    if (sidePlayer.pray) {
+      const t = sidePlayer.pray.t, f = t < 0.6 ? Math.floor(t / 0.6 * 6) : t < 1.5 ? 6 + Math.floor(t * 4) % 2 : Math.min(11, 8 + Math.floor((t - 1.5) / 0.6 * 4));
+      return { sheet: ks.pray, cols: 4, frame: f };
+    }
+    if (sidePlayer.drink) return { sheet: ks.health, cols: 2, frame: Math.min(7, Math.floor(sidePlayer.drink.t / 0.55 * 8)) };
+    if (sidePlayer.charge) return { sheet: ks.attacks, cols: KNIGHT_MOVES.power.cols, frame: 14 };
     if (sidePlayer.atk) {
       const atk = sidePlayer.atk, move = KNIGHT_MOVES[atk.name];
       if (move.air) {
@@ -3852,11 +4511,32 @@ const Overworld = (() => {
     ctx.fillStyle = 'rgba(0,0,0,.28)';
     ctx.fillRect(Math.round(x - shadowW / 2), groundBelow - 1, Math.round(shadowW), 2);
     if (useKnight) {
-      // Blink while invulnerable after being hit.
-      if (sidePlayer.invulnTime > 0 && sidePlayer.deadTime <= 0 && sidePlayer.hurtTime <= 0 && Math.floor(time * 18) % 2 === 0) return;
+      const r = sidePlayer.roll, c = sidePlayer.charge;
+      // Blink while invulnerable after being hit (not during a dodge roll).
+      if (!r && sidePlayer.invulnTime > 0 && sidePlayer.deadTime <= 0 && sidePlayer.hurtTime <= 0 && Math.floor(time * 18) % 2 === 0) return;
       const pose = knightPose();
       if (!pose.sheet || !pose.sheet.complete || !pose.sheet.naturalWidth) pose.sheet = knightSprites.idle;
-      drawKnightCell(pose.sheet, pose.frame, pose.cols, x, y + 1, sidePlayer.facing);
+      // Afterimages while rolling.
+      if (r && r.trail) r.trail.forEach((g, i) => {
+        ctx.save(); ctx.globalAlpha = 0.12 + i * 0.05;
+        ctx.filter = 'brightness(1.6) hue-rotate(160deg)';
+        drawKnightCell(pose.sheet, Math.min(3, Math.floor(g.t / ROLL_TIME * 4)), pose.cols, g.x, g.y + 1, sidePlayer.facing);
+        ctx.restore();
+      });
+      // Moonblade charge: a pulsing blue aura behind the knight.
+      if (c) {
+        const k = Math.min(1, c.t / CHARGE_TIME), pul = c.ready ? 0.55 + Math.sin(time * 16) * 0.2 : 0.25 * k;
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        const g = ctx.createRadialGradient(x, y - 22, 2, x, y - 22, 20 + k * 14);
+        g.addColorStop(0, 'rgba(140,215,255,' + pul + ')'); g.addColorStop(1, 'rgba(60,120,255,0)');
+        ctx.fillStyle = g; ctx.fillRect(x - 40, y - 62, 80, 80); ctx.restore();
+      }
+      const atkName = sidePlayer.atk && sidePlayer.atk.name;
+      if (c || atkName === 'power') {
+        ctx.save(); ctx.filter = 'drop-shadow(0 0 2px rgba(120,200,255,' + (c && !c.ready ? 0.5 : 0.95) + '))';
+        drawKnightCell(pose.sheet, pose.frame, pose.cols, x, y + 1, sidePlayer.facing);
+        ctx.restore();
+      } else drawKnightCell(pose.sheet, pose.frame, pose.cols, x, y + 1, sidePlayer.facing);
       return;
     }
     if (!playerSheetReady) {
@@ -4066,7 +4746,9 @@ const Overworld = (() => {
     drawCamp();
     drawLoreSpots();
     drawSidePlayer();
+    drawPlayerWaves();
     drawCombatFx();
+    drawAmbient();
     ctx.restore();
     drawSideOverlays(sidePlayer.x > CAMP.start ? "BRAM'S CAMP" : 'WOODLAND');
   }
@@ -4086,7 +4768,35 @@ const Overworld = (() => {
     { id: 'page3', kind: 'page', scene: 'hollow', x: 1800, title: 'Journal: Day 5', where: "Dad's journal, the Hollow", hint: 'Deep inside the Hollow.',
       text: "Day 5. I found the one behind it all. A goblin chief grown huge on the shard's light. He calls himself Grukk, the Hollow King, and wears the shard in his crown. I can't beat him alone. I'll hide past his throne and wait.", sign: '- A.' },
     { id: 'aldric', kind: 'page', scene: null, x: 0, title: "Aldric's Story", where: 'Told by Dad, after the battle', hint: 'Find Dad.',
-      text: "The Silver Watch didn't fall to monsters. We fell to the shard. It whispers. Half my brothers took it up and became the skeletons you fought. I buried it under a seal and never told you. Grukk dug it up. His crown is broken now, but the shard itself is gone. Deeper." }
+      text: "The Silver Watch didn't fall to monsters. We fell to the shard. It whispers. Half my brothers took it up and became the skeletons you fought. I buried it under a seal and never told you. Grukk dug it up. His crown is broken now, but the shard itself is gone. Deeper." },
+    { id: 'oath', kind: 'page', scene: null, x: 0, title: 'The Broken Moon', where: 'Told by Dad, in the Hollow', hint: 'Talk to Dad after Chapter 1.',
+      text: "Forty winters ago the moon-mage Morwen tried to drink the moon's light. The Watch stopped her, but the moon cracked and bled shards across the land. Morwen fled east with the knights who loved her. They are the Pale Court now, and she calls herself their Queen. If she gathers the shards, she can remake the moon in her own image." },
+    // ---- Chapter 2: the Ashen Pass ----
+    { id: 'riders', kind: 'stone', scene: 'pass', x: 700, title: 'Warning Stone', where: 'Rune stone, Ashen Pass', hint: 'Near the mouth of the pass.',
+      text: 'TURN BACK. THE PALE COURT RIDES THIS ROAD. THEIR HORSES BURN AND LEAVE NO TRACKS BUT FIRE. THEY TAKE THE LIGHT FROM LAMPS, AND THE SONG FROM THOSE WHO CAN HEAR THE MOON.' },
+    { id: 'wrenlog', kind: 'page', scene: 'pass', x: 1400, title: "Wren's Scout Log", where: 'Scout log, Ashen Pass', hint: 'Halfway to the lookout fire.',
+      text: "Day 31. Seven riders, pale armor, eyes like candle flames. They carried a glowing thing wrapped in black cloth. They left the mare behind to guard the road. She paces the far end of the pass and screams at night. Mother would know what to do. Mother is not here." , sign: '- W.' },
+    { id: 'ashroad', kind: 'stone', scene: 'pass', x: 2450, title: 'The Ember Road', where: 'Mile stone, Ashen Pass', hint: 'Past the lookout fire.',
+      text: 'GLOAMHOLD 9 LEAGUES. In the age of lamps, Silver Watch caravans carried moonsilver along this road. The red rock still holds the heat of the night the Pale Court burned it, when the caravans stopped and the city beyond went dark.' },
+    { id: 'letter', kind: 'page', scene: 'pass', x: 3150, title: 'Unsent Letter', where: 'A dead soldier\'s letter', hint: 'Near the end of the pass.',
+      text: "My love. They say the Queen does not kill the moon-readers. She keeps them. She makes them sing to the shards until the shards remember being the moon. I would rather die on this road than hear that song. Kiss the little one for me. Tell her the lamps will come back." },
+    { id: 'ashmane', kind: 'page', scene: null, x: 0, title: 'Ashmane', where: 'Told by Wren, after the battle', hint: 'Defeat the guardian of the pass.',
+      text: "Ashmane was a Watch warhorse once, the finest in Gloamhold. Morwen fed her a sliver of the moon and she never stopped burning. The Queen rode her through the city gates on the night of the Black Tide. Now Gloamhold waits beyond the pass, and the riders went there with the Hollow shard." },
+    // ---- Chapter 3: Gloamhold ----
+    { id: 'founding', kind: 'stone', scene: 'gloam', x: 640, title: 'Founding Stone', where: 'Rune stone, Gloamhold', hint: 'At the edge of the drowned town.',
+      text: 'GLOAMHOLD, CITY OF THE SILVER WATCH. Raised where the first moonbeam touched the earth. Here the Watch kept the moonwell, and the lamps of the city were lit with moonsilver so that no night would ever be truly dark.' },
+    { id: 'tide', kind: 'page', scene: 'gloam', x: 1340, title: 'The Black Tide', where: 'A waterlogged diary', hint: 'In the old town.',
+      text: "It came up out of the moonwell like ink. It did not drown us with water. It drowned the light. Every lamp went black at once, and the people who were standing under them simply... stopped. Then the Pale Court rode in, and their Queen laughed." },
+    { id: 'lamps', kind: 'stone', scene: 'gloam', x: 1960, title: 'The Lamplighters', where: 'Rune stone, old town', hint: 'Before the city gate.',
+      text: 'WE WERE THE LAMPLIGHTERS. WE STILL ARE. When the Tide took our light we kept walking the streets, lamps in hand. We do not remember why. If you meet us, knight, forgive us. And put us to rest.' },
+    { id: 'captain', kind: 'page', scene: 'gloam', x: 2330, title: "Captain Ysolde's Log", where: 'Log at the city gate', hint: 'At the gate fire.',
+      text: "Last entry. The Queen has the moon-readers. She has Seren of the Hollow, Aldric's wife, the finest moon-reader the Watch ever trained. I sent my daughter Wren away with the scouts. If anyone finds this: the Court's fortress lies beyond the eastern sea. The Pale Court. Do not go alone." , sign: '- Captain Ysolde' },
+    { id: 'moonwell', kind: 'stone', scene: 'gloam', x: 3240, title: 'The Moonwell', where: 'Rune stone, castle quarter', hint: 'Inside the castle quarter.',
+      text: 'BENEATH THIS HALL LIES THE MOONWELL, WHERE THE MOON\'S REFLECTION NEVER FADES. Something sleeps in it now, fat on stolen light. The skulls that burn in these halls are the faces of those it has eaten.' },
+    { id: 'queen', kind: 'page', scene: 'gloam', x: 3760, title: 'Of the Pale Queen', where: 'A torn scholar\'s page', hint: 'Deep in the castle quarter.',
+      text: "Morwen was not born cruel. She lost a child in the long winter and could not bear the dark. She swore she would make a moon that never wanes, so no mother would ever lose a child to the night again. That is the terrible thing about her. She believes she is saving us." },
+    { id: 'seren', kind: 'page', scene: null, x: 0, title: "Seren's Locket", where: 'Found where Vael fell', hint: 'Defeat the Moon-Eater.',
+      text: "Inside the locket is a tiny painting of a baby and a folded note in your mother's hand: \"Rowan, if this ever finds you, I did not leave you. They came for my voice. Listen to the moon at night. I am still singing. I am still here.\"" }
   ];
   function addLore(id) {
     if (story.pages.includes(id)) return false;
@@ -4100,6 +4810,9 @@ const Overworld = (() => {
     aldric: { name: 'ALDRIC', color: '#ffd27a' },
     grukk: { name: 'GRUKK', color: '#ff7a6a' },
     bram: { name: 'OLD BRAM', color: '#c9e39a' },
+    wren: { name: 'WREN', color: '#ffb48a' },
+    ashmane: { name: 'ASHMANE', color: '#8fd8ff' },
+    vael: { name: 'VAEL', color: '#b98cff' },
     stone: { name: 'RUNE STONE', color: '#b8d8ff' },
     page: { name: "DAD'S JOURNAL", color: '#e8d2a0' }
   };
@@ -4139,6 +4852,14 @@ const Overworld = (() => {
     } else if (who === 'grukk') {
       const img = mobSheet(MOB_TYPES.ogre, MOB_TYPES.ogre.anims.idle);
       if (imgReady(img)) { ctx.translate(x + 40, y); ctx.scale(-1, 1); ctx.drawImage(img, 30, 0, 64, 64, -14, -6, 70, 70); }
+    } else if (who === 'wren' && imgReady(beastArt.wrenIdle)) {
+      ctx.drawImage(beastArt.wrenIdle, 52, 20, 24, 24, x - 4, y - 4, 48, 48);
+    } else if (who === 'ashmane') {
+      const img = mobSheet(MOB_TYPES.mare, MOB_TYPES.mare.anims.idle);
+      if (imgReady(img)) ctx.drawImage(img, 24, 12, 48, 48, x - 4, y - 4, 48, 48);
+    } else if (who === 'vael') {
+      const img = mobSheet(MOB_TYPES.demon, MOB_TYPES.demon.anims.idle);
+      if (imgReady(img)) ctx.drawImage(img, 136, 88, 52, 52, x - 4, y - 4, 48, 48);
     } else if (who === 'bram') {
       ctx.fillStyle = '#3d2c22'; ctx.fillRect(x + 6, y + 6, 28, 34);
       ctx.fillStyle = '#5a4030'; ctx.fillRect(x + 9, y + 8, 22, 30);
@@ -4191,7 +4912,7 @@ const Overworld = (() => {
     { name: 'Leave', icon: null, info: '', leave: true }
   ];
   let shopSel = 0, shopLine = '', shopFlash = -10;
-  const SELLABLE = ['fang', 'spore', 'eye', 'bone', 'wisp', 'wood'];
+  const SELLABLE = ['fang', 'spore', 'eye', 'bone', 'wisp', 'wood', 'ember', 'feather', 'lampglass', 'toadskin'];
   function sellValue() { return SELLABLE.reduce((sum, k) => sum + (inventory[k] || 0) * ITEM_DEFS[k].value, 0); }
   function openShop() {
     shopSel = 0;
@@ -4250,6 +4971,13 @@ const Overworld = (() => {
     ctx.restore();
   }
 
+  const CHAPTERS = {
+    1: { title: 'THE HOLLOW KING', color: '#ffe3a1', tease: 'The shard is still out there...', next: 'NEXT: TALK TO DAD IN THE HOLLOW' },
+    2: { title: 'THE ASHEN PASS', color: '#ffb48a', tease: 'The riders went to the drowned city...', next: 'NEXT: CHAPTER 3 - GLOAMHOLD' },
+    3: { title: 'THE MOON-EATER', color: '#8fd8ff', tease: 'Mother is alive. The Pale Court has her.', next: 'CHAPTER 4: THE PALE COURT - COMING SOON' }
+  };
+  let chapterShown = 1;
+  function openChapterPanel(n) { chapterShown = n; openPanel('chapter'); sfx('victory', 0.6); }
   function drawChapterPanel() {
     const W = canvas.width, H = canvas.height;
     const t = time - invOpenTime;
@@ -4257,9 +4985,10 @@ const Overworld = (() => {
     ctx.fillStyle = 'rgba(0,0,0,' + Math.min(0.9, t * 1.5) + ')'; ctx.fillRect(0, 0, W, H);
     ctx.globalAlpha = Math.min(1, Math.max(0, (t - 0.3) * 2));
     ctx.textAlign = 'center';
-    ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#d6b477'; ctx.fillText('CHAPTER 1', 160, 54);
-    ctx.font = 'bold 16px monospace'; ctx.fillStyle = '#2a1a12'; ctx.fillText('THE HOLLOW KING', 161, 77);
-    ctx.fillStyle = '#ffe3a1'; ctx.fillText('THE HOLLOW KING', 160, 76);
+    const C = CHAPTERS[chapterShown] || CHAPTERS[1];
+    ctx.font = 'bold 8px monospace'; ctx.fillStyle = '#d6b477'; ctx.fillText('CHAPTER ' + chapterShown, 160, 54);
+    ctx.font = 'bold 16px monospace'; ctx.fillStyle = '#2a1a12'; ctx.fillText(C.title, 161, 77);
+    ctx.fillStyle = C.color; ctx.fillText(C.title, 160, 76);
     ctx.fillStyle = '#d6b477'; ctx.fillRect(80, 86, 160, 1);
     ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#9be37a'; ctx.fillText('COMPLETE', 160, 100);
     const rows = [
@@ -4274,8 +5003,8 @@ const Overworld = (() => {
       invText(b, 228, 120 + i * 12, '#ffe3a1', 'bold 7px monospace', 'right');
     });
     ctx.globalAlpha = Math.min(1, Math.max(0, (t - 1.2) * 2));
-    invText('The shard is still out there...', 160, 192, '#c9a8ff', '7px monospace', 'center');
-    invText('CHAPTER 2 COMING SOON', 160, 204, '#8f8478', 'bold 6px monospace', 'center');
+    invText(C.tease, 160, 192, '#c9a8ff', '7px monospace', 'center');
+    invText(C.next, 160, 204, '#8f8478', 'bold 6px monospace', 'center');
     if (t > 1.5 && Math.floor(time * 2) % 2) invText(inputMode === 'pad' ? 'PRESS ✕ TO CONTINUE' : 'PRESS E TO CONTINUE', 160, 222, '#f3e7c9', '6px monospace', 'center');
     ctx.restore();
   }
@@ -4315,69 +5044,115 @@ const Overworld = (() => {
     ctx.restore();
   }
   function talkToDad() {
+    if (story.chapterDone && !story.ch2Started) {
+      startDialogue([
+        { who: 'aldric', text: "Sit. You've earned the truth. Forty winters ago the moon cracked. Not by chance. Someone broke it." },
+        { who: 'aldric', text: "Her name was Morwen. A moon-mage of the Silver Watch. She wanted to drink the moon's light and live forever." },
+        { who: 'aldric', text: "The Watch stopped her, but the moon bled. Shards fell across the land. The biggest one fell here. The Moonfall." },
+        { who: 'aldric', text: "Morwen didn't die. She fled east with the knights who loved her. They call themselves the Pale Court now. She calls herself a queen." },
+        { who: 'aldric', text: "The riders that took the shard from Grukk's crown... those were hers. If she gathers enough shards, she can remake the moon. Her moon." },
+        { who: 'rowan', text: 'Then someone has to stop her riders. Where did they go?' },
+        { who: 'aldric', text: "East. Past my throne-room hiding spot is the Ashen Pass. A Watch scout still keeps a lookout fire there. Find her." },
+        { who: 'aldric', text: "I'll hold the Hollow seal so nothing else crawls out. Go, Rowan. And... your mother would have gone too." }
+      ], () => {
+        story.ch2Started = true; addLore('oath');
+        notice = 'New path: the Ashen Pass lies east, past the throne.'; noticeUntil = time + 3;
+        sfx('magic');
+        if (onSave) onSave(getSaveData());
+      });
+      return;
+    }
     const lines = [
       [{ who: 'aldric', text: "Your mother would have been proud of you today. Furious, but proud." }],
-      [{ who: 'aldric', text: "The shard went deeper into the Hollow. We'll need the whole village ready." }, { who: 'rowan', text: 'Then we get ready. Together this time.' }],
-      [{ who: 'aldric', text: "Bram's still selling that bread? Don't eat the burnt ones. He does it on purpose." }]
+      [{ who: 'aldric', text: "The Ashen Pass is east, past the throne. Find the Watch scout at the lookout fire." }, { who: 'rowan', text: "I'll find her." }],
+      [{ who: 'aldric', text: "Bram's still selling that bread? Don't eat the burnt ones. He does it on purpose." }],
+      [{ who: 'aldric', text: "Hold your strike and let the moon gather in the blade. The Watch called it a Moonblade. I taught your mother that one." }]
     ];
     startDialogue(lines[dadTalk++ % lines.length]);
   }
 
   // ---- Boss fight ----
   function theBoss() { return sideMobs.find(m => m.T.boss); }
+  const BOSS_LINES = {
+    ogre: {
+      first: [
+        { who: 'grukk', text: 'Another Silver Watch whelp crawls into MY Hollow.' },
+        { who: 'grukk', text: 'Your father hides like a rat behind my throne. I will crack your bones and use them to call him out.' },
+        { who: 'rowan', text: "So he's alive. Then I just have to go through you." },
+        { who: 'grukk', text: 'HAH! Kneel before the Hollow King!' }],
+      retry: [{ who: 'grukk', text: 'Back again, little knight? My Hollow loves the taste of you.' }],
+      tip: 'Jump over his shockwaves!', flag: 'bossStarted'
+    },
+    mare: {
+      first: [
+        { who: 'rowan', text: 'The ground is still burning... hoofprints. Huge ones.' },
+        { who: 'ashmane', text: '(A voice like cinders, inside your head.) Little moth. You smell of the Hollow shard.' },
+        { who: 'ashmane', text: 'My Queen rode on and left me the road. No one walks the Ashen Pass while I still burn.' },
+        { who: 'rowan', text: "Then I'll put you out." }],
+      retry: [{ who: 'ashmane', text: 'The moth returns to the flame. How sweet.' }],
+      tip: 'Roll through her charge, strike while she is dazed!', flag: 'passBossStarted'
+    },
+    demon: {
+      first: [
+        { who: 'vael', text: 'Ahh... a Silver Watch knight. I have not tasted one since the night this city drowned.' },
+        { who: 'vael', text: 'I am Vael. I eat the moon a sliver at a time, and the Pale Queen feeds me what is left of it.' },
+        { who: 'rowan', text: 'Where did the riders take the shard?' },
+        { who: 'vael', text: 'Kneel and I will show you. From the inside.' }],
+      retry: [{ who: 'vael', text: 'Back so soon? The well is hungry, and so am I.' }],
+      tip: 'Upper slash reaches him in the air. Roll through the moonfire!', flag: 'gloamBossStarted'
+    }
+  };
   function startBossIntro() {
     const boss = theBoss(); if (!boss) return;
     bossFight = { intro: true, active: false, t: 0, talked: false };
+    // Regular monsters clear out of the arena so the duel is one on one.
+    sideMobs.forEach(o => { if (o !== boss && !o.dead && o.x > BOSS_ARENA.left - 220) { o.dead = true; o.deadTime = 99; o.hp = 0; o.respawn = Infinity; spawnDust(o.x, SIDE_GROUND_Y, 4); } });
+    mobShots.length = 0;
     sidePlayer.x = Math.max(sidePlayer.x, BOSS_ARENA.left + 40);
     boss.dir = -1;
-    sfx('roar', 1, 0.75); screenShake = 6; padRumble(1, 0.8, 600);
+    sfx(boss.type === 'demon' ? 'demon' : boss.type === 'mare' ? 'mare' : 'roar', 1, 0.75); screenShake = 6; padRumble(1, 0.8, 600);
   }
   function updateBossIntro(dt) {
     if (!bossFight || !bossFight.intro) return;
     bossFight.t += dt;
     if (bossFight.t > 1.1 && !bossFight.talked) {
       bossFight.talked = true;
-      const retry = story.bossStarted;
-      story.bossStarted = true;
-      const lines = retry
-        ? [{ who: 'grukk', text: 'Back again, little knight? My Hollow loves the taste of you.' }]
-        : [
-          { who: 'grukk', text: 'Another Silver Watch whelp crawls into MY Hollow.' },
-          { who: 'grukk', text: 'Your father hides like a rat behind my throne. I will crack your bones and use them to call him out.' },
-          { who: 'rowan', text: "So he's alive. Then I just have to go through you." },
-          { who: 'grukk', text: 'HAH! Kneel before the Hollow King!' }
-        ];
-      startDialogue(lines, () => {
-        const boss = theBoss();
+      const boss = theBoss();
+      const B = BOSS_LINES[boss ? boss.type : 'ogre'] || BOSS_LINES.ogre;
+      const retry = story[B.flag];
+      story[B.flag] = true;
+      startDialogue(retry ? B.retry : B.first, () => {
+        const b = theBoss();
         bossFight.intro = false; bossFight.active = true;
-        if (boss) { boss.dormant = false; boss.attackCooldown = 0.8; }
-        sfx('roar', 0.9, 0.9);
-        notice = 'Jump over his shockwaves!'; noticeUntil = time + 2.6;
+        if (b) { b.dormant = false; b.attackCooldown = 0.8; b.st = 'stalk'; b.stT = 0; }
+        sfx(b && b.type === 'demon' ? 'demon' : 'roar', 0.9, 0.9);
+        notice = B.tip; noticeUntil = time + 2.8;
       });
     }
   }
   function endBossFight(won) {
     bossFight = null;
-    bossWaves.length = 0;
+    bossWaves.length = 0; mobShots.length = 0; groundFires.length = 0;
     for (let i = sideMobs.length - 1; i >= 0; i--) if (sideMobs[i].summoned) sideMobs.splice(i, 1);
     if (!won) {
       const boss = theBoss();
-      if (boss) Object.assign(boss, { hp: boss.maxHp, dormant: true, x: 3020, dir: -1, enraged: false, attackTime: 0, hurtTime: 0, kvx: 0, dead: false });
+      if (boss) Object.assign(boss, { hp: boss.maxHp, dormant: true, x: region().bossX, y: SIDE_GROUND_Y - (boss.T.fly || 0), dir: -1, enraged: false, attackTime: 0, hurtTime: 0, kvx: 0, dead: false, st: 'stalk', stT: 0, tele: false, swoop: null });
     }
   }
   function onBossDefeated(m) {
     endBossFight(true);
-    sideMobs.forEach(o => { if (o !== m && !o.dead && platformScene === 'hollow' && o.x > BOSS_ARENA.left - 100) { o.hp = 0; defeatMob(o, 1); } });
-    story.bossDefeated = true;
-    bossOutro = { t: 0, x: m.x, jingle: false };
-    notice = 'The Hollow King has fallen.'; noticeUntil = time + 3;
+    sideMobs.forEach(o => { if (o !== m && !o.dead && o.x > BOSS_ARENA.left - 100) { o.hp = 0; defeatMob(o, 1); } });
+    story[region().bossFlag] = true;
+    bossOutro = { t: 0, x: m.x, jingle: false, scene: platformScene };
+    notice = m.T.short + ' has fallen.'; noticeUntil = time + 3;
     if (onSave) onSave(getSaveData());
   }
+  let wren = null;   // the Watch scout (same shape as dad)
   function updateBossOutro(dt) {
     if (!bossOutro) return;
     bossOutro.t += dt;
     if (bossOutro.t > 0.9 && !bossOutro.jingle) { bossOutro.jingle = true; sfx('victory'); }
-    if (bossOutro.t > 2.6 && !dad) {
+    if (bossOutro.scene === 'hollow' && bossOutro.t > 2.6 && !dad) {
       const side = sidePlayer.x > 3150 ? -1 : 1;
       dad = { x: Math.min(HOLLOW_SIDE_WIDTH - 10, sideCameraX + canvas.width + 30), dir: -1, state: 'run', t: 0, target: sidePlayer.x + side * 34, slashOnArrive: false };
       dad.onArrive = () => {
@@ -4387,33 +5162,79 @@ const Overworld = (() => {
           { who: 'rowan', text: 'You left me a note and a suit of armor. What did you think I would do?' },
           { who: 'aldric', text: "Ha. Your mother's stubbornness. I was hiding behind that throne for two days, waiting for an opening." },
           { who: 'aldric', text: "Grukk was only the start. The moon shard in his crown... it's gone. Something took it deeper into the Hollow." },
-          { who: 'aldric', text: "There's a lot I never told you about the Silver Watch. Tonight, we go home. Tomorrow, I'll tell you everything." }
+          { who: 'aldric', text: "There's a lot I never told you about the Silver Watch. Catch your breath, then talk to me. I'll tell you everything." }
         ], () => {
           story.dadFound = true; story.chapterDone = true;
           addLore('aldric');
           bossOutro = null;
           if (onSave) onSave(getSaveData());
-          openPanel('chapter');
+          openChapterPanel(1);
         });
       };
+    }
+    if (bossOutro.scene === 'pass' && bossOutro.t > 2.4 && !bossOutro.npc) {
+      bossOutro.npc = true;
+      wren = { x: sideCameraX - 30, dir: 1, state: 'run', t: 0, target: sidePlayer.x - 40 };
+      wren.onArrive = () => {
+        sidePlayer.facing = -1;
+        startDialogue([
+          { who: 'wren', text: "You actually killed her. Ashmane. The Pale Queen's own mare. I've been hiding from that thing for a month." },
+          { who: 'rowan', text: 'She said her Queen rode on. Where?' },
+          { who: 'wren', text: "East, through the pass. To Gloamhold. The old Watch city, the one that drowned in the Black Tide." },
+          { who: 'wren', text: "The riders carried the Hollow shard there. Whatever the Pale Court is building, it's under that city." },
+          { who: 'wren', text: "My mother was the last captain of Gloamhold. I'm going in. You can follow, if you're as stubborn as your father says." }
+        ], () => {
+          story.ch2Done = true; addLore('ashmane');
+          bossOutro = null; wren.state = 'idle';
+          if (onSave) onSave(getSaveData());
+          openChapterPanel(2);
+        });
+      };
+    }
+    if (bossOutro.scene === 'gloam' && bossOutro.t > 2.6 && !bossOutro.talked) {
+      bossOutro.talked = true;
+      startDialogue([
+        { who: 'vael', text: '(Vael\'s voice, fading.) Little knight... you are too late. The Queen already has her singer...' },
+        { who: 'rowan', text: 'Singer? What singer?' },
+        { who: 'vael', text: 'The moon-reader... the one with your eyes... Seren...' },
+        { who: 'rowan', text: "...Mother? No. She died. Dad said she died in the fever winter." },
+        { who: 'rowan', text: '(Something glints where the demon fell. A silver locket, still warm. Your mother\'s.)' },
+        { who: 'rowan', text: "She's alive. The Pale Court has her. And I'm going to bring her home." }
+      ], () => {
+        story.ch3Done = true; addLore('seren');
+        inventory.locket = Math.max(1, inventory.locket || 0); newItems.add('locket');
+        bossOutro = null;
+        if (onSave) onSave(getSaveData());
+        openChapterPanel(3);
+      });
     }
   }
 
   // ---- Places you can use [E] on ----
+  function fireHere() { return FIRES.find(f => f.scene === platformScene && Math.abs(sidePlayer.x - f.x) < 26); }
   function nearbyInteraction() {
     const x = sidePlayer.x;
-    if (!sidePlayer.onGround || sidePlayer.deadTime > 0) return null;
+    if (!sidePlayer.onGround || sidePlayer.deadTime > 0 || sidePlayer.roll) return null;
     for (const l of LORE) {
       if (l.scene === platformScene && Math.abs(x - l.x) < 24) return { label: story.pages.includes(l.id) ? 'READ AGAIN' : 'READ', act: () => readLore(l) };
     }
+    const fire = fireHere();
+    if (fire) return { label: 'REST BY THE FIRE', act: () => restAtFire(fire) };
     if (platformScene === 'forest') {
       if (x < 100) return { label: 'RETURN HOME', act: 'home' };
-      if (Math.abs(x - CAMP.fire) < 26) return { label: 'REST BY THE FIRE', act: restAtFire };
       if (Math.abs(x - CAMP.bram) < 28) return { label: 'TRADE WITH BRAM', act: openShop };
-      if (x > CAMP.sign - 20) return { label: 'ENTER THE HOLLOW', act: enterHollow };
+      if (x > CAMP.sign - 20) return { label: 'ENTER THE HOLLOW', act: () => enterRegion('hollow', 130, 1) };
     } else if (platformScene === 'hollow') {
-      if (x < 100) return { label: 'BACK TO THE FOREST', act: leaveHollow };
+      if (x < 100) return { label: 'BACK TO THE FOREST', act: () => enterRegion('forest', CAMP.sign - 30, -1) };
       if (dad && dad.state === 'idle' && Math.abs(x - dad.x) < 32 && story.dadFound) return { label: 'TALK TO DAD', act: talkToDad };
+      if (x > HOLLOW_SIDE_WIDTH - 70 && story.chapterDone) return story.ch2Started ? { label: 'TRAVEL TO THE ASHEN PASS', act: () => enterRegion('pass', REGIONS.pass.entry, 1) } : { label: 'TALK TO DAD FIRST', act: () => { notice = 'Dad has something to tell you first.'; noticeUntil = time + 2; sfx('uiError'); } };
+    } else if (platformScene === 'pass') {
+      if (x < 70) return { label: 'BACK TO THE HOLLOW', act: () => enterRegion('hollow', HOLLOW_SIDE_WIDTH - 90, -1) };
+      if (wren && wren.state === 'idle' && Math.abs(x - wren.x) < 30) return { label: 'TALK TO WREN', act: talkToWren };
+      if (x > PASS_SIDE_WIDTH - 70 && story.passBossDefeated) return { label: 'ENTER GLOAMHOLD', act: () => enterRegion('gloam', REGIONS.gloam.entry, 1) };
+    } else if (platformScene === 'gloam') {
+      if (x < 70) return { label: 'BACK TO THE ASHEN PASS', act: () => enterRegion('pass', PASS_SIDE_WIDTH - 90, -1) };
+      if (wren && wren.state === 'idle' && Math.abs(x - wren.x) < 30) return { label: 'TALK TO WREN', act: talkToWren };
     }
     return null;
   }
@@ -4429,25 +5250,37 @@ const Overworld = (() => {
     startDialogue(lines, () => { if (onSave) onSave(getSaveData()); });
   }
   const CAMP = { start: 3590, tent: 3625, fire: 3700, log: 3738, bram: 3800, cart: 3842, sign: 3912 };
-  function restAtFire() {
+  function restAtFire(fire) {
     stats.health = stats.maxHealth; stats.stamina = stats.maxStamina;
     story.rested = true;
-    sfx('fire'); padRumble(0.1, 0.2, 200);
-    notice = 'You rest by the fire. Health restored and game saved.'; noticeUntil = time + 2.6;
+    if (fire) {
+      story.lastFire = fire.id;
+      if (!story.fires.includes(fire.id)) { story.fires.push(fire.id); notice = 'Campfire lit: ' + fire.name + '. Fast travel from the MAP tab.'; }
+      else notice = 'You rest by the fire. Health restored and game saved.';
+    }
+    noticeUntil = time + 2.8;
+    sidePlayer.pray = { t: 0 }; sidePlayer.vx = 0;
+    sfx('rest'); padRumble(0.1, 0.2, 200);
     restFlash = time;
     if (onSave) onSave(getSaveData());
   }
   let restFlash = -10;
-  function enterHollow() {
-    platformScene = 'hollow';
-    story.hollowEntered = true;
-    sidePlayer.x = 130; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true; sidePlayer.facing = 1;
-    sideCameraX = 0; pickups.length = 0; bossWaves.length = 0;
-    loadSceneMobs('hollow');
-    dad = story.dadFound ? { x: 3060, dir: -1, state: 'idle', t: 0 } : null;
-    sfx('creak'); keys.clear();
-    sceneTitle = { text: 'THE HOLLOW', sub: 'Where the moon fell', t: time };
-    if (!story.hollowSeen) {
+  const REGION_SUBS = { forest: 'Edge of the woodland', hollow: 'Where the moon fell', pass: 'Chapter 2 - The road of embers', gloam: 'Chapter 3 - The drowned city' };
+  // Moves the knight to another outdoor region (or a different spot in one).
+  function enterRegion(scene, x, facing) {
+    if (bossFight) endBossFight(false);
+    const from = platformScene;
+    platformScene = scene; syncArena();
+    sidePlayer.x = x; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true; sidePlayer.facing = facing || 1;
+    sidePlayer.roll = null; sidePlayer.charge = null; sidePlayer.atk = null; sidePlayer.pray = null;
+    sideCameraX = clamp(sidePlayer.x - canvas.width * 0.43, 0, Math.max(0, sideWorldWidth() - canvas.width));
+    pickups.length = 0; bossWaves.length = 0; mobShots.length = 0; groundFires.length = 0; playerWaves.length = 0; ambient.length = 0;
+    loadSceneMobs(scene);
+    placeNpcs();
+    if (from !== scene) { sfx('creak'); sceneTitle = { text: scene === 'forest' && x > CAMP.start ? "BRAM'S CAMP" : region().name, sub: REGION_SUBS[scene], t: time }; }
+    keys.clear();
+    if (scene === 'hollow') story.hollowEntered = true;
+    if (scene === 'hollow' && !story.hollowSeen) {
       story.hollowSeen = true;
       setTimeout(() => {
         if (platformScene !== 'hollow' || dialogue) return;
@@ -4457,23 +5290,60 @@ const Overworld = (() => {
         ]);
       }, 1600);
     }
+    if (scene === 'pass' && !story.passEntered) {
+      story.passEntered = true;
+      setTimeout(() => {
+        if (platformScene !== 'pass' || dialogue) return;
+        startDialogue([
+          { who: 'rowan', text: 'The Ashen Pass. Dad said the Watch caravans used to come through here before the Black Tide.' },
+          { who: 'rowan', text: "Everything is scorched... and those hoofprints are still smoking. Riders came this way. Not long ago." }
+        ]);
+      }, 1500);
+    }
+    if (scene === 'gloam' && !story.gloamEntered) {
+      story.gloamEntered = true;
+      setTimeout(() => {
+        if (platformScene !== 'gloam' || dialogue) return;
+        startDialogue([
+          { who: 'wren', text: "Gloamhold. My mother's city. It used to shine all night, they say. Silver lamps on every street." },
+          { who: 'rowan', text: "Somebody's still lighting the lamps." },
+          { who: 'wren', text: "That's what worries me. Stay close. Meet me at the gate fire past the old town." }
+        ]);
+      }, 1400);
+    }
     if (onSave) onSave(getSaveData());
   }
-  function leaveHollow() {
-    if (bossFight) endBossFight(false);
-    platformScene = 'forest';
-    sidePlayer.x = CAMP.sign - 30; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true; sidePlayer.facing = -1;
-    sideCameraX = clamp(sidePlayer.x - canvas.width * 0.43, 0, FOREST_SIDE_WIDTH - canvas.width);
-    pickups.length = 0; dad = null;
-    loadSceneMobs('forest');
-    sfx('creak'); keys.clear();
-    sceneTitle = { text: "BRAM'S CAMP", sub: 'Edge of the woodland', t: time };
-    if (onSave) onSave(getSaveData());
+  function placeNpcs() {
+    dad = platformScene === 'hollow' && story.dadFound ? { x: 3060, dir: -1, state: 'idle', t: 0 } : null;
+    wren = null;
+    if (platformScene === 'pass') wren = story.passBossDefeated ? { x: 4150, dir: -1, state: 'idle', t: 0 } : { x: 1940, dir: -1, state: 'idle', t: 0 };
+    if (platformScene === 'gloam') wren = story.gloamBossDefeated ? { x: 4300, dir: -1, state: 'idle', t: 0 } : { x: 2280, dir: -1, state: 'idle', t: 0 };
   }
+  function fastTravel(fire) {
+    closeCurrentPanel();
+    fadeIn = time;
+    enterRegion(fire.scene, fire.x - 30, 1);
+    notice = 'You travel to ' + fire.name + '.'; noticeUntil = time + 2;
+  }
+  let fadeIn = -10;
   function safeZone() {
-    return (platformScene === 'forest' && sidePlayer.x > CAMP.start - 10) || (platformScene === 'hollow' && sidePlayer.x < 200);
+    if (fireHere() || (FIRES.some(f => f.scene === platformScene && Math.abs(sidePlayer.x - f.x) < 90))) return true;
+    return (platformScene === 'forest' && sidePlayer.x > CAMP.start - 10) || (platformScene !== 'forest' && sidePlayer.x < 160);
   }
   let sceneTitle = null;
+  function updateNpc(n, dt) {
+    if (!n) return;
+    n.t += dt;
+    if (n.state === 'run') {
+      const d = n.target - n.x;
+      n.dir = d < 0 ? -1 : 1;
+      n.x += n.dir * Math.min(Math.abs(d), 150 * dt);
+      if (Math.abs(d) < 2) { n.state = 'idle'; n.t = 0; }
+    } else if (n.state === 'idle') {
+      n.dir = sidePlayer.x < n.x ? -1 : 1;
+      if (n.onArrive) { const f = n.onArrive; n.onArrive = null; f(); }
+    }
+  }
   function updateStory(dt) {
     if (platformScene === 'forest') {
       if (!story.campReached && sidePlayer.x > CAMP.start) {
@@ -4490,12 +5360,48 @@ const Overworld = (() => {
           { who: 'bram', text: "Thought you'd say that. Rest by the fire, and bring me anything you loot. I'll trade fair. The Hollow is just past my sign." }
         ]);
       }
-    } else if (platformScene === 'hollow') {
-      if (!story.bossDefeated && !bossFight && sidePlayer.x > BOSS_ARENA.trigger && sidePlayer.deadTime <= 0) startBossIntro();
+    } else if (outdoorScene()) {
+      const R = region();
+      if (R.boss && !story[R.bossFlag] && !bossFight && sidePlayer.x > BOSS_ARENA.trigger && sidePlayer.deadTime <= 0) startBossIntro();
       updateBossOutro(dt);
       updateDad(dt);
+      updateNpc(wren, dt);
+      if (platformScene === 'pass' && !story.metWren && sidePlayer.x > 1780 && sidePlayer.onGround && !dialogue) {
+        story.metWren = true;
+        startDialogue([
+          { who: 'wren', text: "Stop right there. One more step and I put an arrow through that pretty helmet." },
+          { who: 'rowan', text: "Easy. I'm Rowan. Aldric's son. Silver Watch... sort of." },
+          { who: 'wren', text: "Aldric? The Captain of the Hollow seal? ...Huh. You have his jaw. I'm Wren. Scout for what's left of the Watch." },
+          { who: 'wren', text: "Riders of the Pale Court came through here a week ago carrying something that glowed like a piece of the moon." },
+          { who: 'wren', text: "They left their Queen's mare to guard the road east. A burning nightmare named Ashmane. Nothing gets past her." },
+          { who: 'wren', text: "Rest at my fire if you want. The lookout fire never goes out. If you're going on, roll when she charges. Don't block. Roll." }
+        ], () => { if (onSave) onSave(getSaveData()); });
+      }
+      if (platformScene === 'gloam' && !story.gloamGate && sidePlayer.x > 2180 && sidePlayer.onGround && !dialogue) {
+        story.gloamGate = true;
+        startDialogue([
+          { who: 'wren', text: "This is the old gate. Past it is the castle quarter and the Moonwell. That's where they took the shard." },
+          { who: 'wren', text: "Something lives down there. The lamplighters whisper its name. Vael. The Moon-Eater." },
+          { who: 'rowan', text: "Then we end this here. Rest up. I'll go first." }
+        ], () => { if (onSave) onSave(getSaveData()); });
+      }
     }
   }
+  function talkToWren() {
+    const lines = platformScene === 'gloam'
+      ? (story.gloamBossDefeated
+        ? [[{ who: 'wren', text: "Your mother... alive. Then the Court has been taking moon-readers for years. Mine too, maybe." }, { who: 'wren', text: "Whatever you decide, Rowan, I'm coming with you." }]]
+        : [[{ who: 'wren', text: 'The Moonwell is past the castle hall. Upper slash if he takes to the air. Hit him hard when he lands to breathe.' }],
+           [{ who: 'wren', text: "My mother used to say the lamps of Gloamhold could be seen from the moon. Now look at them." }]])
+      : (story.passBossDefeated
+        ? [[{ who: 'wren', text: "Gloamhold is just past the ridge. I'll meet you inside." }]]
+        : [[{ who: 'wren', text: "Ashmane waits at the end of the pass. Roll through her charge. When she slams into the rocks, punish her." }],
+           [{ who: 'wren', text: "Hold your attack to gather the moon in your blade. Your father used to do that. A Moonblade, he called it." }],
+           [{ who: 'wren', text: "Those fire skulls spit embers. Swing at the fireballs. You can knock them right out of the air." }]]);
+    wrenTalk = (wrenTalk || 0) + 1;
+    startDialogue(lines[wrenTalk % lines.length]);
+  }
+  let wrenTalk = 0;
 
   // ---- Drawing: camp props ----
   function drawCampfire(x) {
@@ -4651,6 +5557,214 @@ const Overworld = (() => {
     const start = -((offsetX % w) + w) % w;
     for (let x = start; x < canvas.width; x += w) ctx.drawImage(img, Math.round(x), y, w, h);
   }
+  // ---- Chapter 2 and 3 region art ----
+  const passArt = { sky: loadImg('pass/sky.png'), far: loadImg('pass/far-mountains.png'), mid: loadImg('pass/middle-mountains.png'),
+    back: loadImg('pass/back.png'), middle: loadImg('pass/middle.png'), near: loadImg('pass/near.png'), ground: loadImg('pass/ground.png') };
+  const gloamArt = { sky: loadImg('gloam/sky.png'), mountains: loadImg('gloam/mountains.png'), lights: loadImg('gloam/mountains-lights.png'),
+    clouds: loadImg('gloam/clouds.png'), far: loadImg('gloam/far-buildings.png'), town: loadImg('gloam/town.png'), forest: loadImg('gloam/forest.png'),
+    castle: loadImg('gloam/castle.png'), brick: loadImg('gloam/brick.png'), crate: loadImg('gloam/crate.png') };
+  // Crop rectangles inside the Gloamhold atlases.
+  const TOWN_PARTS = { row: [191, 5, 270, 92], tall: [98, 8, 66, 89], small: [14, 34, 60, 43], lamp: [168, 49, 20, 39] };
+  const CASTLE_PARTS = [[16, 0, 160, 160], [192, 0, 80, 160], [288, 0, 80, 160], [384, 0, 80, 160], [160, 176, 64, 128], [16, 176, 128, 128], [368, 176, 48, 128]];
+  const CASTLE_START = 2420;
+  function drawWren() {
+    if (!wren) return;
+    const run = wren.state === 'run', sheet = run ? beastArt.wrenRun : beastArt.wrenIdle;
+    if (!imgReady(sheet)) return;
+    const n = run ? 7 : 4, f = Math.floor(wren.t * (run ? 14 : 6)) % n;
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(Math.round(wren.x) - 9, SIDE_GROUND_Y - 1, 18, 2);
+    ctx.save();
+    ctx.translate(Math.round(wren.x), SIDE_GROUND_Y + 1);
+    if (wren.dir < 0) ctx.scale(-1, 1);
+    ctx.drawImage(sheet, f * 128, 0, 128, 64, -64, -64, 128, 64);
+    ctx.restore();
+  }
+  function drawLayer(img, par, y, w, h) { if (imgReady(img)) tileImage(img, sideCameraX * par, y, w || img.width, h || img.height); }
+  function worldShake() {
+    const sx = screenShake > 0 ? Math.round((Math.random() - 0.5) * screenShake * 2) : 0;
+    const sy = screenShake > 0 ? Math.round((Math.random() - 0.5) * screenShake * 1.4) : 0;
+    ctx.translate(-Math.round(sideCameraX) + sx, sy);
+  }
+  function drawRockLedge(pl) {
+    ctx.fillStyle = '#3b1d1d'; ctx.fillRect(pl.x, pl.y + 3, pl.w, pl.h + 3);
+    ctx.fillStyle = '#8a4433'; ctx.fillRect(pl.x, pl.y, pl.w, 4);
+    ctx.fillStyle = '#c56a46'; ctx.fillRect(pl.x + 2, pl.y, pl.w - 4, 1);
+    ctx.fillStyle = '#5a2a24';
+    for (let x = pl.x + 6; x < pl.x + pl.w - 6; x += 13) ctx.fillRect(x, pl.y + 6 + ((x / 13) % 2) * 3, 5, 2);
+    ctx.beginPath(); ctx.moveTo(pl.x + 6, pl.y + pl.h + 6); ctx.lineTo(pl.x + pl.w / 2, pl.y + pl.h + 20); ctx.lineTo(pl.x + pl.w - 6, pl.y + pl.h + 6); ctx.fillStyle = '#2e1517'; ctx.fill();
+  }
+  function drawSidePass() {
+    const W = canvas.width, H = canvas.height;
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#f08a78'; ctx.fillRect(0, 0, W, H);
+    drawLayer(passArt.sky, 0.02, 0, 320, 240);
+    drawLayer(passArt.back, 0.06, -30, 512, 240);
+    drawLayer(passArt.far, 0.12, 10, 320, 240);
+    drawLayer(passArt.mid, 0.2, 22, 320, 240);
+    drawLayer(passArt.middle, 0.35, 34, 512, 240);
+    drawLayer(passArt.near, 0.55, 40, 512, 240);
+    // heat haze toward the horizon
+    const hz = ctx.createLinearGradient(0, 120, 0, 200);
+    hz.addColorStop(0, 'rgba(255,140,90,0)'); hz.addColorStop(1, 'rgba(120,40,40,.35)');
+    ctx.fillStyle = hz; ctx.fillRect(0, 120, W, 80);
+    ctx.restore();
+
+    ctx.save(); worldShake(); ctx.imageSmoothingEnabled = false;
+    if (imgReady(passArt.ground)) {
+      const x0 = Math.floor(sideCameraX / 32) * 32;
+      for (let x = x0 - 32; x < sideCameraX + W + 32; x += 32) ctx.drawImage(passArt.ground, x, SIDE_GROUND_Y - 4, 32, 56);
+    } else { ctx.fillStyle = '#5a2a24'; ctx.fillRect(sideCameraX, SIDE_GROUND_Y, W, 44); }
+    PASS_SIDE_PLATFORMS.slice(1).forEach(pl => { if (pl.x < sideCameraX + W && pl.x + pl.w > sideCameraX) drawRockLedge(pl); });
+    // charred wagons and bones from the burned caravans
+    [880, 2150, 3420].forEach((x, i) => {
+      if (x < sideCameraX - 60 || x > sideCameraX + W + 60) return;
+      const g = SIDE_GROUND_Y;
+      ctx.fillStyle = '#2a1414'; ctx.fillRect(x - 24, g - 18, 48, 12);
+      ctx.fillStyle = '#3d1c18'; ctx.fillRect(x - 22, g - 30, 3, 14); ctx.fillRect(x + 6, g - 34, 3, 18);
+      ctx.strokeStyle = '#1a0c0c'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x - 14, g - 5, 6, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.arc(x + 14, g - 5, 6, Math.PI * 0.2, Math.PI * 1.7); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,120,60,' + (0.35 + Math.sin(time * 4 + i) * 0.2) + ')'; ctx.fillRect(x - 4, g - 20, 3, 2); ctx.fillRect(x + 10, g - 19, 2, 2);
+    });
+    drawSignpost(70, 'HOLLOW', -1);
+    if (story.passBossDefeated) drawSignpost(PASS_SIDE_WIDTH - 70, 'GLOAMHOLD', 1);
+    FIRES.filter(f => f.scene === 'pass').forEach(f => drawCampfire(f.x));
+    drawLoreSpots();
+    drawWren();
+    drawSideMobs();
+    drawSidePlayer();
+    drawPlayerWaves();
+    drawCombatFx();
+    drawAmbient();
+    ctx.restore();
+    const vg = ctx.createRadialGradient(160, 120, 110, 160, 120, 230);
+    vg.addColorStop(0, 'rgba(40,10,10,0)'); vg.addColorStop(1, 'rgba(40,10,10,.45)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+    drawSideOverlays('ASHEN PASS');
+  }
+  function drawTownPart(name, x, flip) {
+    const r = TOWN_PARTS[name]; if (!imgReady(gloamArt.town)) return;
+    ctx.save(); ctx.translate(Math.round(x), SIDE_GROUND_Y - r[3] + 2);
+    if (flip) { ctx.scale(-1, 1); ctx.translate(-r[2], 0); }
+    ctx.drawImage(gloamArt.town, r[0], r[1], r[2], r[3], 0, 0, r[2], r[3]); ctx.restore();
+  }
+  function drawSideGloam() {
+    const W = canvas.width, H = canvas.height;
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#0b1a1c'; ctx.fillRect(0, 0, W, H);
+    drawLayer(gloamArt.sky, 0, 0, 96, 240);
+    // the cracked moon behind the clouds, lower now and bruised
+    const mx = 70 - sideCameraX * 0.015, my = 46;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const mg = ctx.createRadialGradient(mx, my, 6, mx, my, 60); mg.addColorStop(0, 'rgba(160,220,230,.3)'); mg.addColorStop(1, 'rgba(160,220,230,0)');
+    ctx.fillStyle = mg; ctx.fillRect(mx - 60, my - 60, 120, 120); ctx.restore();
+    ctx.fillStyle = '#cfe6e2'; ctx.beginPath(); ctx.arc(mx, my, 15, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0b1a1c'; ctx.beginPath(); ctx.moveTo(mx + 6, my - 15); ctx.lineTo(mx + 2, my - 2); ctx.lineTo(mx + 9, my + 4); ctx.lineTo(mx + 15, my - 3); ctx.fill();
+    drawLayer(gloamArt.mountains, 0.05, 16, 96, 224);
+    drawLayer(gloamArt.lights, 0.1, 30, 96, 224);
+    if (imgReady(gloamArt.clouds)) tileImage(gloamArt.clouds, sideCameraX * 0.15 + time * 4, -40, 288, 224);
+    if (sideCameraX < CASTLE_START + 200) {
+      // far poles and the old watchtower
+      if (imgReady(gloamArt.far)) {
+        const off = sideCameraX * 0.25;
+        for (let i = -1; i < 4; i++) {
+          const x = i * 160 - (off % 160);
+          ctx.drawImage(gloamArt.far, 12, 12, 69, 66, Math.round(x), 120, 69, 66);
+          if (i % 2 === 0) ctx.drawImage(gloamArt.far, 289, 14, 21, 64, Math.round(x + 110), 116, 21, 64);
+        }
+      }
+      drawLayer(gloamArt.forest, 0.4, 108, 64, 96);
+    }
+    ctx.fillStyle = 'rgba(10,30,34,.3)'; ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+
+    ctx.save(); worldShake(); ctx.imageSmoothingEnabled = false;
+    // Castle quarter: stone hall panels standing behind the walkway.
+    if (imgReady(gloamArt.castle) && sideCameraX + W > CASTLE_START) {
+      let x = CASTLE_START, i = 0;
+      while (x < GLOAM_SIDE_WIDTH + 40) {
+        const r = CASTLE_PARTS[i % CASTLE_PARTS.length];
+        if (x + r[2] > sideCameraX && x < sideCameraX + W) ctx.drawImage(gloamArt.castle, r[0], r[1], r[2], r[3], x, SIDE_GROUND_Y - r[3], r[2], r[3]);
+        x += r[2]; i++;
+      }
+      ctx.fillStyle = '#0a1214';
+      if (CASTLE_START + 0 > sideCameraX - 20) { ctx.fillRect(CASTLE_START - 12, SIDE_GROUND_Y - 176, 16, 176); ctx.fillStyle = '#26383a'; ctx.fillRect(CASTLE_START - 10, SIDE_GROUND_Y - 176, 2, 176); }
+    }
+    // Town houses on the near side of the city.
+    if (sideCameraX < CASTLE_START) {
+      const plan = [[220, 'small'], [420, 'tall'], [560, 'lamp'], [700, 'row'], [1060, 'lamp'], [1180, 'tall', 1], [1380, 'small', 1], [1560, 'row'], [1900, 'lamp'], [2000, 'tall'], [2140, 'small']];
+      plan.forEach(([x, n, f]) => { if (x < sideCameraX + W + 20 && x + 280 > sideCameraX) drawTownPart(n, x, f); });
+      // lamp glows over the posts
+      plan.filter(p => p[1] === 'lamp').forEach(([x]) => {
+        const g = ctx.createRadialGradient(x + 10, SIDE_GROUND_Y - 32, 1, x + 10, SIDE_GROUND_Y - 32, 30);
+        g.addColorStop(0, 'rgba(160,230,200,' + (0.25 + Math.sin(time * 3 + x) * 0.06) + ')'); g.addColorStop(1, 'rgba(160,230,200,0)');
+        ctx.fillStyle = g; ctx.fillRect(x - 20, SIDE_GROUND_Y - 62, 60, 60);
+      });
+    }
+    // Brick street
+    if (imgReady(gloamArt.brick)) {
+      const x0 = Math.floor(sideCameraX / 32) * 32;
+      for (let x = x0 - 32; x < sideCameraX + W + 32; x += 32) { ctx.drawImage(gloamArt.brick, x, SIDE_GROUND_Y, 32, 32); ctx.drawImage(gloamArt.brick, 0, 8, 32, 24, x, SIDE_GROUND_Y + 32, 32, 24); }
+      ctx.fillStyle = 'rgba(8,24,28,.55)'; ctx.fillRect(sideCameraX - 40, SIDE_GROUND_Y, W + 80, 44);
+    } else { ctx.fillStyle = '#1d2a2c'; ctx.fillRect(sideCameraX, SIDE_GROUND_Y, W, 44); }
+    // shallow black water from the Tide pooling on the street
+    for (let x = Math.floor(sideCameraX / 180) * 180; x < sideCameraX + W + 180; x += 180) {
+      if ((x / 180) % 3 === 1) { ctx.fillStyle = 'rgba(10,18,30,.8)'; ctx.fillRect(x + 20, SIDE_GROUND_Y, 70, 2); ctx.fillStyle = 'rgba(140,210,220,' + (0.2 + Math.sin(time * 2 + x) * 0.1) + ')'; ctx.fillRect(x + 30 + Math.round(Math.sin(time + x) * 10), SIDE_GROUND_Y, 14, 1); }
+    }
+    GLOAM_SIDE_PLATFORMS.slice(1).forEach(pl => {
+      if (pl.x > sideCameraX + W || pl.x + pl.w < sideCameraX) return;
+      if (imgReady(gloamArt.crate)) for (let x = pl.x; x < pl.x + pl.w; x += 32) ctx.drawImage(gloamArt.crate, 0, 0, Math.min(32, pl.x + pl.w - x), 14, x, pl.y, Math.min(32, pl.x + pl.w - x), 14);
+      ctx.fillStyle = 'rgba(8,24,28,.35)'; ctx.fillRect(pl.x, pl.y, pl.w, 14);
+      ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(pl.x + 4, pl.y + 14, pl.w - 8, 3);
+    });
+    drawSignpost(70, 'ASHEN PASS', -1);
+    FIRES.filter(f => f.scene === 'gloam').forEach(f => drawCampfire(f.x));
+    drawLoreSpots();
+    drawWren();
+    drawSideMobs();
+    drawSidePlayer();
+    drawPlayerWaves();
+    drawCombatFx();
+    drawAmbient();
+    ctx.restore();
+    const px = sidePlayer.x - sideCameraX, py = sidePlayer.y - 24;
+    const dk = ctx.createRadialGradient(px, py, 40, px, py, 230);
+    dk.addColorStop(0, 'rgba(2,8,10,0)'); dk.addColorStop(1, 'rgba(2,8,10,.4)');
+    ctx.fillStyle = dk; ctx.fillRect(0, 0, W, H);
+    drawSideOverlays('GLOAMHOLD');
+  }
+
+  // ---- Ambient particles (world space) ----
+  const ambient = [];
+  function updateAmbient(dt) {
+    const W = canvas.width, s = platformScene;
+    const want = s === 'gloam' ? 70 : s === 'pass' ? 36 : 26;
+    while (ambient.length < want) {
+      const x = sideCameraX + Math.random() * (W + 80) - 40;
+      if (s === 'gloam') ambient.push({ k: 'rain', x, y: Math.random() * 200 - 40, vx: -30, vy: 260 + Math.random() * 80, life: 9 });
+      else if (s === 'pass') ambient.push({ k: 'ember', x, y: 200 + Math.random() * 40, vx: 8 + Math.random() * 14, vy: -14 - Math.random() * 20, life: 4 + Math.random() * 4, ph: Math.random() * 6 });
+      else if (s === 'hollow') ambient.push({ k: 'mote', x, y: 60 + Math.random() * 130, vx: (Math.random() - 0.5) * 6, vy: -4 - Math.random() * 4, life: 3 + Math.random() * 4, ph: Math.random() * 6 });
+      else ambient.push({ k: Math.random() < 0.55 ? 'fly' : 'leaf', x, y: Math.random() < 0.5 ? 120 + Math.random() * 70 : -10, vx: 6 + Math.random() * 8, vy: 10 + Math.random() * 8, life: 6 + Math.random() * 5, ph: Math.random() * 6 });
+      ambient[ambient.length - 1].s = s;
+    }
+    for (let i = ambient.length - 1; i >= 0; i--) {
+      const p = ambient[i];
+      p.life -= dt;
+      if (p.k === 'fly') { p.x += Math.sin(time * 1.3 + p.ph) * 12 * dt; p.y += Math.cos(time * 1.1 + p.ph) * 8 * dt; }
+      else if (p.k === 'leaf') { p.x += (p.vx + Math.sin(time * 2 + p.ph) * 14) * dt; p.y += p.vy * dt; }
+      else { p.x += p.vx * dt + (p.k === 'ember' ? Math.sin(time * 3 + p.ph) * 10 * dt : 0); p.y += p.vy * dt; }
+      if (p.k === 'rain' && p.y > SIDE_GROUND_Y) { if (Math.random() < 0.3) combatFx.push({ kind: 'spark', x: p.x, y: SIDE_GROUND_Y - 1, vx: (Math.random() - 0.5) * 30, vy: -30, life: 0.15, color: '#9fd6e0' }); p.life = 0; }
+      if (p.life <= 0 || p.s !== s || p.x < sideCameraX - 100 || p.x > sideCameraX + W + 100 || p.y > SIDE_GROUND_Y + 10) ambient.splice(i, 1);
+    }
+  }
+  function drawAmbient() {
+    ambient.forEach(p => {
+      const x = Math.round(p.x), y = Math.round(p.y);
+      if (p.k === 'rain') { ctx.fillStyle = 'rgba(150,200,215,.35)'; ctx.fillRect(x, y, 1, 5); }
+      else if (p.k === 'ember') { const a = Math.min(1, p.life / 2) * (0.6 + Math.sin(time * 9 + p.ph) * 0.3); ctx.fillStyle = 'rgba(255,' + (120 + Math.round(Math.sin(p.ph) * 60)) + ',60,' + a + ')'; ctx.fillRect(x, y, 1 + (p.ph > 4 ? 1 : 0), 1); }
+      else if (p.k === 'mote') { const a = Math.min(1, p.life) * 0.5; ctx.fillStyle = 'rgba(200,170,255,' + a + ')'; ctx.fillRect(x, y, 1, 1); }
+      else if (p.k === 'fly') { const a = 0.4 + Math.sin(time * 5 + p.ph) * 0.4; ctx.fillStyle = 'rgba(230,255,140,' + Math.max(0, a) + ')'; ctx.fillRect(x, y, 1, 1); ctx.fillStyle = 'rgba(230,255,140,' + Math.max(0, a) * 0.25 + ')'; ctx.fillRect(x - 1, y - 1, 3, 3); }
+      else { ctx.fillStyle = (p.ph > 3 ? '#b8732e' : '#8a9a3a'); ctx.fillRect(x, y, 2, 1); ctx.fillRect(x + (Math.sin(time * 4 + p.ph) > 0 ? 1 : 0), y + 1, 1, 1); }
+    });
+  }
   function drawSideHollow() {
     const W = canvas.width, H = canvas.height;
     ctx.save();
@@ -4701,9 +5815,12 @@ const Overworld = (() => {
     drawThrone(3150);
     drawLoreSpots();
     drawDad();
+    if (story.ch2Started) drawSignpost(HOLLOW_SIDE_WIDTH - 70, 'ASHEN PASS', 1);
     drawSideMobs();
     drawSidePlayer();
+    drawPlayerWaves();
     drawCombatFx();
+    drawAmbient();
     // Low mist drifting in front.
     hollowMist.forEach(m => {
       const x = ((m.x + time * 8 * m.s) % (HOLLOW_SIDE_WIDTH + 200)) - 100;
@@ -4759,7 +5876,10 @@ const Overworld = (() => {
     }
     ctx.fillStyle = 'rgba(8,9,16,.72)'; ctx.fillRect(0, 226, W, 14);
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-    ctx.fillText(inputMode === 'pad' ? '✕ JUMP  □ ATTACK  △ BAG  TOUCHPAD QUICK ITEM  (□ IN AIR = PLUNGE)' : 'A/D MOVE  SPACE JUMP  J ATTACK  H QUICK ITEM  I BAG  (J IN AIR = PLUNGE)', 4, 236);
+    ctx.font = '6px monospace';
+    ctx.fillText(inputMode === 'pad' ? '✕ JUMP  □ ATTACK (HOLD = MOONBLADE)  ↑+□ UPPER  ○ ROLL  △ BAG' : 'SPACE JUMP  J ATTACK (HOLD = MOONBLADE)  U UPPER  K ROLL  H ITEM  I BAG', 4, 235);
+    if (time < flashUntil) { ctx.fillStyle = 'rgba(190,230,255,' + Math.min(0.5, (flashUntil - time) * 3) + ')'; ctx.fillRect(0, 0, W, canvas.height); }
+    if (time - fadeIn < 0.8) { ctx.fillStyle = 'rgba(0,0,0,' + (1 - (time - fadeIn) / 0.8) + ')'; ctx.fillRect(0, 0, W, canvas.height); }
     const near = !dialogue && !panel && nearbyInteraction();
     if (near) {
       const text = '[ ' + K('E') + ' ] ' + near.label;
@@ -4790,7 +5910,7 @@ const Overworld = (() => {
         ctx.save(); ctx.globalAlpha = a; ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(0, 62, W, 40);
         ctx.font = 'bold 15px monospace'; ctx.fillStyle = '#1a0e1a'; ctx.fillText(sceneTitle.text, 161, 84);
-        ctx.fillStyle = platformScene === 'hollow' ? '#c9a8ff' : '#ffe3a1'; ctx.fillText(sceneTitle.text, 160, 83);
+        ctx.fillStyle = region().color; ctx.fillText(sceneTitle.text, 160, 83);
         ctx.font = '7px monospace'; ctx.fillStyle = '#d9cdb8'; ctx.fillText(sceneTitle.sub, 160, 95);
         ctx.restore();
       }
@@ -4828,6 +5948,8 @@ const Overworld = (() => {
     if (comboTimer > 0 || (sidePlayer.atk && sidePlayer.atk.name !== 'slash1')) {
       const step = sidePlayer.atk ? ({ slash1: 1, slash2: 2, finisher: 3, thrust: 1, air: 1 })[sidePlayer.atk.name] : ({ slash1: 1, slash2: 2 })[lastMove] || 0;
       if (step >= 2) { ctx.fillStyle = '#ffe3a1'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'left'; ctx.fillText(step + ' HIT' + (step === 3 ? '!' : ''), 8, 48); }
+      const nm = sidePlayer.atk && sidePlayer.atk.name;
+      if (nm === 'upper' || nm === 'power') { ctx.fillStyle = nm === 'power' ? '#8fd8ff' : '#ffe3a1'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'left'; ctx.fillText(nm === 'power' ? 'MOONBLADE' : 'UPPER SLASH', 8, 58); }
     }
     if (levelUpUntil > time) {
       const a = Math.min(1, (levelUpUntil - time) / 0.5);
@@ -4850,6 +5972,8 @@ const Overworld = (() => {
   function drawPlatformer() {
     if (platformScene === 'house') drawSideInterior();
     else if (platformScene === 'hollow') drawSideHollow();
+    else if (platformScene === 'pass') drawSidePass();
+    else if (platformScene === 'gloam') drawSideGloam();
     else drawSideForest();
     drawSideHUD();
     drawPanel();
@@ -5225,7 +6349,7 @@ const Overworld = (() => {
       if (!fallback) { notice = 'No food or tonics left.'; noticeUntil = time + 1.4; sfx('uiError'); return; }
       quickSlot = fallback;
     }
-    consumeItem(quickSlot, true);
+    if (consumeItem(quickSlot, true) !== false && platformMode && outdoorScene() && sidePlayer.onGround && !sidePlayer.atk && !sidePlayer.roll) sidePlayer.drink = { t: 0 };
   }
   function useSelectedItem() {
     // Opens the action menu for the highlighted item (ITEMS tab) or acts on
@@ -5243,26 +6367,29 @@ const Overworld = (() => {
       const entry = LORE[loreSel];
       if (entry && story.pages.includes(entry.id)) { sfx('bookFlip'); invInspect = { lore: entry.id, t: time }; }
       else sfx('uiError');
-    } else sfx('uiError');
+    } else if (invTab === 5) mapConfirm();
+    else sfx('uiError');
   }
   function toggleWeapon() {
     if (!equipment.armor) { sfx('uiError'); return; }
-    if (!(inventory.boneblade > 0)) { notice = 'You only have the Knight Sword.'; noticeUntil = time + 1.6; sfx('uiError'); invShake = time; return; }
-    equipment.weapon = equipment.weapon === 'boneblade' ? 'sword' : 'boneblade';
+    const own = ownedWeapons();
+    if (own.length < 2) { notice = 'You only have the Knight Sword.'; noticeUntil = time + 1.6; sfx('uiError'); invShake = time; return; }
+    equipment.weapon = own[(own.indexOf(currentWeapon()) + 1) % own.length];
     sfx('draw'); invSwing = time;
-    notice = (equipment.weapon === 'boneblade' ? 'Bone Blade' : 'Knight Sword') + ' equipped.'; noticeUntil = time + 1.6;
+    notice = WEAPONS[equipment.weapon].name + ' equipped.'; noticeUntil = time + 1.6;
     if (onSave) onSave(getSaveData());
   }
   function runItemOption(opt) {
     const key = invMenu.key, def = ITEM_DEFS[key];
     invMenu = null;
     if (opt === 'USE') consumeItem(key, false);
-    else if (opt === 'EQUIP' || opt === 'UNEQUIP') toggleWeapon();
+    else if (opt === 'EQUIP') { if (!equipment.armor) sfx('uiError'); else { equipment.weapon = key; sfx('draw'); invSwing = time; notice = def.name + ' equipped.'; noticeUntil = time + 1.6; if (onSave) onSave(getSaveData()); } }
+    else if (opt === 'UNEQUIP') { equipment.weapon = 'sword'; sfx('draw'); notice = 'Knight Sword equipped.'; noticeUntil = time + 1.6; }
     else if (opt === 'SET QUICK') { quickSlot = key; sfx('uiConfirm'); notice = def.name + ' set to quick slot.'; noticeUntil = time + 1.6; }
     else if (opt === 'CLEAR QUICK') { quickSlot = null; sfx('uiBack'); }
     else if (opt === 'INSPECT') { invInspect = { key, t: time }; sfx('bookOpen'); }
     else if (opt === 'DROP') {
-      if (key === 'boneblade' && equipment.weapon === 'boneblade' && inventory.boneblade <= 1) equipment.weapon = 'sword';
+      if (WEAPONS[key] && equipment.weapon === key && inventory[key] <= 1) equipment.weapon = 'sword';
       inventory[key] = Math.max(0, inventory[key] - 1);
       sfx('cloth'); notice = 'Dropped 1 ' + def.name + '.'; noticeUntil = time + 1.4;
       const left = ownedItems(); if (invSel >= left.length) invSel = Math.max(0, left.length - 1);
@@ -5277,7 +6404,7 @@ const Overworld = (() => {
       const count = Math.max(1, ownedItems().length);
       const cols = 6;
       let col = invSel % cols, row = Math.floor(invSel / cols);
-      col = clamp(col + dx, 0, cols - 1); row = clamp(row + dy, 0, 2);
+      col = clamp(col + dx, 0, cols - 1); row = clamp(row + dy, 0, Math.max(0, Math.ceil(count / cols) - 1));
       const next = row * cols + col;
       invSel = Math.min(next, count - 1);
       const key = ownedItems()[invSel]; if (key) newItems.delete(key);
@@ -5285,6 +6412,8 @@ const Overworld = (() => {
       gearSel = clamp(gearSel + dy + dx, 0, 3);
     } else if (invTab === 4) {
       loreSel = clamp(loreSel + dy + dx, 0, LORE.length - 1);
+    } else if (invTab === 5) {
+      mapSel = clamp(mapSel + dy + dx, 0, Math.max(0, mapFires().length - 1));
     } else return;
     sfx('uiMove');
   }
@@ -5349,14 +6478,19 @@ const Overworld = (() => {
     }
     if (invTab === 0) {
       const items = ownedItems();
-      for (let i = 0; i < items.length; i++) {
-        const r = itemSlotRect(i);
+      const off = itemOffset();
+      for (let j = 0; j < 18 && j + off < items.length; j++) {
+        const r = itemSlotRect(j), i = j + off;
         if (inside(r.x, r.y, r.w, r.h)) { if (invSel === i) useSelectedItem(); else { invSel = i; newItems.delete(items[i]); sfx('uiMove'); } return; }
       }
     } else if (invTab === 1) {
       for (let i = 0; i < 4; i++) if (inside(120, 42 + i * 33, 182, 30)) { if (gearSel === i) useSelectedItem(); else { gearSel = i; sfx('uiMove'); } return; }
     } else if (invTab === 4) {
-      for (let i = 0; i < LORE.length; i++) if (inside(120, 42 + i * 12, 182, 11)) { if (loreSel === i) useSelectedItem(); else { loreSel = i; sfx('uiMove'); } return; }
+      const off = loreOffset();
+      for (let j = 0; j < LORE_ROWS; j++) { const i = j + off; if (i < LORE.length && inside(120, 42 + j * 12, 182, 11)) { if (loreSel === i) useSelectedItem(); else { loreSel = i; sfx('uiMove'); } return; } }
+    } else if (invTab === 5) {
+      const fl = mapFires();
+      for (let i = 0; i < fl.length; i++) if (inside(120, 168 + i * 12, 182, 11)) { if (mapSel === i) mapConfirm(); else { mapSel = i; sfx('uiMove'); } return; }
     }
     if (inside(18, 17, 92, 130) && equipment.armor) { invSwing = time; sfx('swing'); }
   }
@@ -5452,7 +6586,7 @@ const Overworld = (() => {
     });
     const pad = inputMode === 'pad';
     invText(pad ? 'L1' : 'Q', tabX0 - 3, 27, '#8f8478', '6px monospace', 'right');
-    invText(pad ? 'R1' : 'R', tabX0 + 5 * (tabW + 2), 27, '#8f8478', '6px monospace', 'left');
+    invText(pad ? 'R1' : 'R', tabX0 + INV_TABS.length * (tabW + 2), 27, '#8f8478', '6px monospace', 'left');
     ctx.fillStyle = '#d6b477'; ctx.fillRect(116, 34, W - 132, 1);
 
     // Left: hero card.
@@ -5482,22 +6616,24 @@ const Overworld = (() => {
     else if (invTab === 1) drawGearTab(RX, RY, RW);
     else if (invTab === 2) drawStatsTab(RX, RY, RW);
     else if (invTab === 3) drawQuestTab(RX, RY, RW);
-    else drawLoreTab(RX, RY, RW);
+    else if (invTab === 4) drawLoreTab(RX, RY, RW);
+    else drawMapTab(RX, RY, RW);
     if (invMenu) drawItemMenu();
 
     // Footer hints.
     ctx.fillStyle = '#0f0c13'; ctx.fillRect(116, 211, W - 132, 14);
-    const acts = invTab === 0 || invTab === 4 || (invTab === 1 && gearSel === 3);
+    const acts = invTab === 0 || invTab === 4 || invTab === 5 || (invTab === 1 && gearSel === 3);
     const hint = invMenu ? (pad ? '✥ CHOOSE   ✕ OK   ○ BACK' : 'ARROWS CHOOSE   E OK   X BACK')
-      : pad ? (acts ? '✥ SELECT  ✕ ' + (invTab === 4 ? 'READ' : 'ACTIONS') + '  □ SWING  ○ CLOSE' : 'L1/R1 TAB   □ SWING   ○ CLOSE')
-      : (acts ? 'ARROWS  E ' + (invTab === 4 ? 'READ' : 'ACTIONS') + '  J SWING  Q/R TAB  I CLOSE' : 'Q/R TAB   J SWING   I / ESC CLOSE');
+      : pad ? (acts ? '✥ SELECT  ✕ ' + (invTab === 4 ? 'READ' : invTab === 5 ? 'TRAVEL' : 'ACTIONS') + '  □ SWING  ○ CLOSE' : 'L1/R1 TAB   □ SWING   ○ CLOSE')
+      : (acts ? 'ARROWS  E ' + (invTab === 4 ? 'READ' : invTab === 5 ? 'TRAVEL' : 'ACTIONS') + '  J SWING  Q/R TAB  I CLOSE' : 'Q/R TAB   J SWING   I / ESC CLOSE');
     invText(hint, 116 + (W - 132) / 2, 221, '#c9bca6', '6px monospace', 'center');
     if (invInspect) drawInspect();
     ctx.restore();
   }
 
-  const INV_TAB_W = 34, INV_TAB_X0 = 120;
+  const INV_TAB_W = 28, INV_TAB_X0 = 120;
   const loreSeen = new Set();
+  function itemOffset() { return Math.max(0, Math.floor(invSel / 6) - 2) * 6; }
   function itemSlotRect(i) {
     const cols = 6, slot = 28, gap = 3, x = 118, w = 186, y = 40;
     const gx = x + Math.floor((w - (cols * slot + (cols - 1) * gap)) / 2);
@@ -5506,10 +6642,15 @@ const Overworld = (() => {
   function drawItemsTab(x, y, w) {
     const items = ownedItems();
     invSel = clamp(invSel, 0, Math.max(0, items.length - 1));
-    const slot = 28;
+    const slot = 28, off = itemOffset();
+    if (items.length > 18) {
+      const rows = Math.ceil(items.length / 6), vis = 3;
+      ctx.fillStyle = '#151119'; ctx.fillRect(x + w - 3, y + 2, 2, 90);
+      ctx.fillStyle = '#d6b477'; ctx.fillRect(x + w - 3, y + 2 + Math.round(90 * (off / 6) / rows), 2, Math.round(90 * vis / rows));
+    }
     for (let i = 0; i < 18; i++) {
       const { x: sx, y: sy } = itemSlotRect(i);
-      const key = items[i];
+      const key = items[i + off];
       const def = key && ITEM_DEFS[key];
       const edge = def ? RARITY_COLOR[def.rarity] : '#2c2430';
       invBox(sx, sy, slot, slot, key ? '#2a2231' : '#1d1824', key ? edge : '#2c2430');
@@ -5520,7 +6661,7 @@ const Overworld = (() => {
       }
       ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(sx + 3, sy + slot - 5, slot - 6, 2);
       if (key) {
-        const sel = i === invSel;
+        const sel = i + off === invSel;
         const lift = sel ? Math.round(Math.sin(time * 6) * 1) : 0;
         const shake = sel && time - invShake < 0.25 ? Math.round(Math.sin(time * 80) * 2) : 0;
         drawItemIcon(def.icon, sx + 2 + shake, sy + 2 + lift, 2);
@@ -5532,10 +6673,10 @@ const Overworld = (() => {
           invText('NEW', sx + 1, sy + 5, '#ffffff', 'bold 5px monospace');
         }
         if (quickSlot === key) { ctx.fillStyle = '#f2c14e'; ctx.fillRect(sx + slot - 7, sy + 1, 6, 6); invText('Q', sx + slot - 6, sy + 6, '#2a1a12', 'bold 5px monospace'); }
-        if (key === 'boneblade' && equipment.weapon === 'boneblade') { ctx.fillStyle = '#71b86c'; ctx.fillRect(sx + slot - 7, sy + 1, 6, 6); invText('E', sx + slot - 6, sy + 6, '#102010', 'bold 5px monospace'); }
+        if (WEAPONS[key] && currentWeapon() === key) { ctx.fillStyle = '#71b86c'; ctx.fillRect(sx + slot - 7, sy + 1, 6, 6); invText('E', sx + slot - 6, sy + 6, '#102010', 'bold 5px monospace'); }
       }
     }
-    if (items.length) { const r = itemSlotRect(invSel); invCursor(r.x, r.y, r.w, r.h); }
+    if (items.length) { const r = itemSlotRect(invSel - off); invCursor(r.x, r.y, r.w, r.h); }
     // Description card.
     const dy = y + 100;
     invBox(x + 2, dy, w - 4, 66, '#201a26', '#4b3d35');
@@ -5649,12 +6790,12 @@ const Overworld = (() => {
 
   function drawGearTab(x, y, w) {
     const on = equipment.armor;
-    const blade = equipment.weapon === 'boneblade' && inventory.boneblade > 0;
+    const Wp = WEAPONS[currentWeapon()];
     const slots = [
       { label: 'HEAD', icon: 'helm', name: 'Steel Helm', stat: 'DEF +1' },
       { label: 'BODY', icon: 'armor', name: "Dad's Armor" + (stats.defUp ? ' +' + stats.defUp : ''), stat: 'DEF +' + (2 + (stats.defUp || 0)) },
       { label: 'LEGS', icon: 'legs', name: 'Iron Greaves', stat: 'SPD  -' },
-      { label: 'WEAPON', icon: blade ? 'boneblade' : 'sword', name: (blade ? 'Bone Blade' : 'Knight Sword') + (stats.atkUp ? ' +' + stats.atkUp : ''), stat: 'ATK +' + ((blade ? 3 : 2) + (stats.atkUp || 0)) }
+      { label: 'WEAPON', icon: Wp.icon, name: Wp.name + (stats.atkUp ? ' +' + stats.atkUp : ''), stat: 'ATK +' + (Wp.atk + (stats.atkUp || 0)) }
     ];
     slots.forEach((s, i) => {
       const sy = y + 2 + i * 33;
@@ -5666,10 +6807,10 @@ const Overworld = (() => {
       invText(s.label, x + 36, sy + 11, '#8f8478', '6px monospace');
       invText(on ? s.name : 'Empty', x + 36, sy + 22, on ? '#f3e7c9' : '#6f6670', 'bold 7px monospace');
       if (on) invText(s.stat, x + w - 10, sy + 19, s.stat.startsWith('ATK') ? '#ffb27a' : '#9fd3ff', 'bold 7px monospace', 'right');
-      if (i === 3 && on && inventory.boneblade > 0) invText((inputMode === 'pad' ? '✕' : 'E') + ' SWAP', x + w - 10, sy + 9, '#ffe3a1', 'bold 5px monospace', 'right');
+      if (i === 3 && on && ownedWeapons().length > 1) invText((inputMode === 'pad' ? '✕' : 'E') + ' SWAP', x + w - 10, sy + 9, '#ffe3a1', 'bold 5px monospace', 'right');
       if (i === gearSel) invCursor(x + 2, sy, w - 4, 30);
     });
-    invText(on ? (inventory.boneblade > 0 ? 'Swap weapons on the WEAPON slot.' : 'Dad\'s old knight set. It still fits.') : 'Find Dad\'s armor stand in his room.', x + w / 2, y + 144, on ? '#a9c8a0' : '#e8b07a', '6px monospace', 'center');
+    invText(on ? (ownedWeapons().length > 1 ? 'Swap weapons on the WEAPON slot.' : 'Dad\'s old knight set. It still fits.') : 'Find Dad\'s armor stand in his room.', x + w / 2, y + 144, on ? '#a9c8a0' : '#e8b07a', '6px monospace', 'center');
     if (stats.atkUp || stats.defUp) invText('Bram upgrades: ATK +' + (stats.atkUp || 0) + '  DEF +' + (stats.defUp || 0), x + w / 2, y + 156, '#d6b477', '6px monospace', 'center');
   }
 
@@ -5700,7 +6841,26 @@ const Overworld = (() => {
     });
   }
 
+  function questChapter() { return !story.chapterDone ? 1 : !story.ch2Done ? 2 : !story.ch3Done ? 3 : 4; }
   function mainQuestSteps() {
+    const ch = questChapter();
+    if (ch === 2) return [
+      ['Hear the truth from Dad', story.ch2Started],
+      ['Travel east to the Ashen Pass', story.passEntered],
+      ['Find the Watch scout', story.metWren],
+      ['Rest at the lookout fire', story.fires.includes('lookout')],
+      ['Defeat the guardian of the pass', story.passBossDefeated]
+    ];
+    if (ch === 3) return [
+      ['Enter Gloamhold', story.gloamEntered],
+      ['Reach the city gate', story.gloamGate],
+      ['Search the castle quarter', story.gloamBossStarted],
+      ['Defeat the Moon-Eater', story.gloamBossDefeated]
+    ];
+    if (ch === 4) return [
+      ['Find a way across the eastern sea', false],
+      ['Find the Pale Court', false]
+    ];
     const inForest = outdoorScene() && !insideHouse;
     return [
       ['Read the note from Dad', dadNoteRead],
@@ -5716,7 +6876,7 @@ const Overworld = (() => {
     const steps = mainQuestSteps();
     invBox(x + 2, y + 2, w - 4, 112, '#201a26', '#4b3d35');
     invText('MAIN QUEST', x + 10, y + 12, '#d6b477', 'bold 6px monospace');
-    invText(story.chapterDone ? 'Chapter 1 Complete' : 'Where Did Dad Go?', x + 10, y + 22, '#ffe3a1', 'bold 8px monospace');
+    invText(['', 'Ch.1  Where Did Dad Go?', 'Ch.2  The Riders East', 'Ch.3  The Drowned City', 'Ch.4  To the Pale Court'][questChapter()], x + 10, y + 22, '#ffe3a1', 'bold 8px monospace');
     const current = steps.findIndex(s => !s[1]);
     steps.forEach(([label, done], i) => {
       const sy = y + 28 + i * 12;
@@ -5745,10 +6905,91 @@ const Overworld = (() => {
     invText('Find Dad\'s journal pages and lore stones.', x + 10, y + 163, '#8f8478', '5px monospace');
   }
 
+  // ---- MAP tab: the known world and fast travel between campfires ----
+  let mapSel = 0;
+  const MAP_NODES = [
+    { id: 'home', name: 'Home', x: 14, y: 84, known: () => true },
+    { id: 'wood', name: 'Woodland', x: 44, y: 70, known: () => equipment.armor },
+    { id: 'camp', name: "Bram's Camp", x: 70, y: 82, known: () => story.campReached },
+    { id: 'hollow', name: 'The Hollow', x: 88, y: 52, known: () => story.hollowEntered },
+    { id: 'pass', name: 'Ashen Pass', x: 120, y: 64, known: () => story.passEntered },
+    { id: 'gloam', name: 'Gloamhold', x: 146, y: 40, known: () => story.gloamEntered },
+    { id: 'court', name: 'Pale Court?', x: 166, y: 16, known: () => false }
+  ];
+  function mapFires() { return FIRES.filter(f => story.fires.includes(f.id)); }
+  function mapNodeHere() {
+    if (!platformMode || !outdoorScene()) return 'home';
+    if (platformScene === 'forest') return sidePlayer.x > CAMP.start - 200 ? 'camp' : 'wood';
+    return platformScene;
+  }
+  function drawMapTab(x, y, w) {
+    const mh = 108, mx0 = x + 2, my0 = y + 2;
+    // parchment
+    ctx.fillStyle = '#5a3e22'; ctx.fillRect(mx0 - 1, my0 - 1, w - 2, mh + 2);
+    ctx.fillStyle = '#d9c08a'; ctx.fillRect(mx0, my0, w - 4, mh);
+    ctx.fillStyle = '#cdb27a';
+    for (let i = 0; i < 40; i++) ctx.fillRect(mx0 + (i * 53) % (w - 6), my0 + (i * 29) % (mh - 2), 2 + (i % 3), 1);
+    ctx.fillStyle = 'rgba(90,60,30,.25)'; ctx.fillRect(mx0, my0, w - 4, 3); ctx.fillRect(mx0, my0 + mh - 3, w - 4, 3);
+    // the eastern sea
+    ctx.fillStyle = '#9fb7a8'; ctx.beginPath(); ctx.moveTo(mx0 + 156, my0); ctx.lineTo(mx0 + w - 4, my0); ctx.lineTo(mx0 + w - 4, my0 + mh); ctx.lineTo(mx0 + 176, my0 + mh); ctx.lineTo(mx0 + 160, my0 + 60); ctx.fill();
+    ctx.fillStyle = '#c8d8cc';
+    for (let i = 0; i < 6; i++) ctx.fillRect(mx0 + 168 + (i % 2) * 6, my0 + 30 + i * 12 + Math.round(Math.sin(time * 2 + i) * 1), 4, 1);
+    // forest, mountains and the canyon
+    ctx.fillStyle = '#6f8a4a'; for (let i = 0; i < 9; i++) { const tx = mx0 + 24 + i * 6, ty = my0 + 70 + (i % 3) * 5; ctx.fillRect(tx, ty, 3, 4); ctx.fillRect(tx + 1, ty - 2, 1, 2); }
+    ctx.fillStyle = '#8a6a4a'; [[96, 36], [106, 42], [130, 50], [138, 44]].forEach(([a, b]) => { ctx.beginPath(); ctx.moveTo(mx0 + a - 6, my0 + b + 6); ctx.lineTo(mx0 + a, my0 + b - 2); ctx.lineTo(mx0 + a + 6, my0 + b + 6); ctx.fill(); });
+    // road
+    ctx.strokeStyle = '#7a5530'; ctx.lineWidth = 1; ctx.setLineDash([2, 2]);
+    ctx.beginPath(); MAP_NODES.forEach((n, i) => { const px = mx0 + n.x, py = my0 + n.y; if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.stroke(); ctx.setLineDash([]);
+    const here = mapNodeHere();
+    MAP_NODES.forEach(n => {
+      const px = mx0 + n.x, py = my0 + n.y, known = n.known();
+      ctx.fillStyle = '#3a2412'; ctx.fillRect(px - 3, py - 3, 7, 7);
+      ctx.fillStyle = known ? (n.id === 'court' ? '#b98cff' : '#f2e2b0') : '#a08a60'; ctx.fillRect(px - 2, py - 2, 5, 5);
+      const fire = FIRES.find(f => (f.id === 'camp' && n.id === 'camp') || (f.id === 'lookout' && n.id === 'pass') || (f.id === 'gate' && n.id === 'gloam'));
+      if (fire && story.fires.includes(fire.id)) { ctx.fillStyle = '#e8542e'; ctx.fillRect(px + 4, py - 7, 3, 4); ctx.fillStyle = '#ffd36a'; ctx.fillRect(px + 5, py - 6, 1, 2); }
+      invText(known || n.id === 'court' ? n.name : '???', n.id === 'court' ? px + 12 : px, n.id === 'court' ? py + 3 : py + 11, known ? '#3a2412' : n.id === 'court' ? '#5a2a7a' : '#8a7450', 'bold 5px monospace', n.id === 'court' ? 'right' : 'center');
+      if (n.id === here) {
+        const r = 5 + (Math.sin(time * 5) + 1) * 2;
+        ctx.strokeStyle = 'rgba(200,40,40,' + (0.9 - (r - 5) / 8) + ')'; ctx.beginPath(); ctx.arc(px + 0.5, py + 0.5, r, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = '#c8324a'; ctx.fillRect(px - 1, py - 1, 3, 3);
+      }
+    });
+    invText('N', mx0 + 8, my0 + 12, '#5a3e22', 'bold 6px monospace', 'center');
+    ctx.fillStyle = '#5a3e22'; ctx.fillRect(mx0 + 7, my0 + 14, 3, 1); ctx.fillRect(mx0 + 8, my0 + 13, 1, 6);
+    // fast travel list
+    const fl = mapFires(), at = fireHere();
+    mapSel = clamp(mapSel, 0, Math.max(0, fl.length - 1));
+    invBox(x + 2, y + 114, w - 4, 52, '#201a26', '#4b3d35');
+    invText('CAMPFIRES', x + 8, y + 123, '#d6b477', 'bold 6px monospace');
+    invText(at ? 'Fast travel ready' : 'Rest at a fire to travel', x + w - 8, y + 123, at ? '#9be37a' : '#8f8478', '5px monospace', 'right');
+    if (!fl.length) invText('No campfires discovered yet.', x + w / 2, y + 145, '#8f8478', '6px monospace', 'center');
+    fl.forEach((f, i) => {
+      const ry = y + 128 + i * 12, sel = i === mapSel;
+      ctx.fillStyle = sel ? '#2c2433' : '#231d2a'; ctx.fillRect(x + 4, ry, w - 8, 11);
+      ctx.fillStyle = '#e8542e'; ctx.fillRect(x + 8, ry + 3, 3, 5); ctx.fillStyle = '#ffd36a'; ctx.fillRect(x + 9, ry + 5, 1, 2);
+      invText(f.name, x + 16, ry + 8, sel ? '#ffe3a1' : '#f3e7c9', (sel ? 'bold ' : '') + '6px monospace');
+      invText(REGIONS[f.scene].name, x + w - 10, ry + 8, '#8f8478', '5px monospace', 'right');
+      if (at && at.id === f.id) invText('HERE', x + w - 58, ry + 8, '#9be37a', 'bold 5px monospace', 'right');
+      if (sel) invCursor(x + 4, ry, w - 8, 11);
+    });
+  }
+  function mapConfirm() {
+    const fl = mapFires(), f = fl[mapSel], at = fireHere();
+    if (!f) { sfx('uiError'); return; }
+    if (!at) { notice = 'Rest at a campfire to fast travel.'; noticeUntil = time + 1.8; sfx('uiError'); invShake = time; return; }
+    if (at.id === f.id) { notice = 'You are already here.'; noticeUntil = time + 1.4; sfx('uiError'); return; }
+    sfx('magic'); fastTravel(f);
+  }
+  const LORE_ROWS = 7;
+  function loreOffset() { return clamp(loreSel - 3, 0, Math.max(0, LORE.length - LORE_ROWS)); }
   function drawLoreTab(x, y, w) {
     invText('JOURNAL & LORE  ' + story.pages.length + '/' + LORE.length, x + 4, y + 0, '#d6b477', 'bold 6px monospace');
-    LORE.forEach((entry, i) => {
-      const ry = y + 2 + i * 12, found = story.pages.includes(entry.id), sel = i === loreSel;
+    const off = loreOffset();
+    ctx.fillStyle = '#151119'; ctx.fillRect(x + w - 2, y + 2, 2, LORE_ROWS * 12);
+    ctx.fillStyle = '#d6b477'; ctx.fillRect(x + w - 2, y + 2 + Math.round(LORE_ROWS * 12 * off / LORE.length), 2, Math.round(LORE_ROWS * 12 * LORE_ROWS / LORE.length));
+    LORE.slice(off, off + LORE_ROWS).forEach((entry, j) => {
+      const i = j + off;
+      const ry = y + 2 + j * 12, found = story.pages.includes(entry.id), sel = i === loreSel;
       ctx.fillStyle = sel ? '#2c2433' : i % 2 ? '#1d1824' : '#231d2a'; ctx.fillRect(x + 2, ry, w - 4, 11);
       drawItemIcon(entry.kind === 'stone' ? 'whetstone' : 'page', x + 4, ry - 1, 1);
       invText(found ? entry.title : '? ? ?', x + 20, ry + 8, found ? (sel ? '#ffe3a1' : '#f3e7c9') : '#5f5662', (sel ? 'bold ' : '') + '6px monospace');
@@ -5756,12 +6997,13 @@ const Overworld = (() => {
       if (sel) invCursor(x + 2, ry, w - 4, 11);
     });
     const entry = LORE[loreSel], found = entry && story.pages.includes(entry.id);
-    const by = y + 2 + LORE.length * 12 + 4;
+    const by = y + 2 + LORE_ROWS * 12 + 4;
     invBox(x + 2, by, w - 4, 166 - (by - y), '#201a26', '#4b3d35');
+    if (found) invText(entry.title.toUpperCase(), x + 8, by + 9, '#ffe3a1', 'bold 6px monospace');
     if (!found) { invText('Not found yet.', x + w / 2, by + 20, '#8f8478', '7px monospace', 'center'); invText(entry.hint, x + w / 2, by + 32, '#6f6670', '6px monospace', 'center'); return; }
     const lines = wrapText(entry.text, w - 18, '6px monospace');
-    lines.slice(0, 9).forEach((ln, i) => invText(ln, x + 8, by + 10 + i * 8, '#d9cdb8', '6px monospace'));
-    if (lines.length > 9) invText('... ' + (inputMode === 'pad' ? '✕' : 'E') + ' READ ALL', x + w - 8, by + 84, '#ffe3a1', 'bold 5px monospace', 'right');
+    lines.slice(0, 7).forEach((ln, i) => invText(ln, x + 8, by + 19 + i * 7, '#d9cdb8', '6px monospace'));
+    if (lines.length > 7) invText('... ' + (inputMode === 'pad' ? '✕' : 'E') + ' READ ALL', x + w - 8, by + 72, '#ffe3a1', 'bold 5px monospace', 'right');
   }
 
   function drawPauseMenu() {
@@ -5984,7 +7226,9 @@ const Overworld = (() => {
       stats: { ...stats },
       stepDistance,
       worldClock,
-      story: { ...story, pages: story.pages.slice() },
+      story: { ...story, pages: story.pages.slice(), fires: (story.fires || []).slice() },
+      chapter: questChapter(),
+      area: REGIONS[platformScene] && platformScene !== 'forest' ? REGIONS[platformScene].name : platformScene === 'forest' ? (sidePlayer.x > CAMP.start ? "BRAM'S CAMP" : 'WOODLAND') : 'HOME',
       quickSlot,
       newItems: Array.from(newItems),
       loreSeen: Array.from(loreSeen)
@@ -5999,7 +7243,7 @@ const Overworld = (() => {
     Object.keys(inventory).forEach(k => { inventory[k] = 0; }); inventory.berries = 3;
     equipment.armor = false; equipment.weapon = 'sword';
     quickSlot = 'berries'; newItems.clear(); loreSeen.clear();
-    Object.assign(story, { campReached: false, hollowEntered: false, hollowSeen: false, metBram: false, rested: false, bossStarted: false, bossDefeated: false, dadFound: false, chapterDone: false, pages: [] });
+    Object.assign(story, STORY_DEFAULTS, { pages: [], fires: [], lastFire: null });
     dialogue = null; bossFight = null; bossOutro = null; dad = null; bossWaves.length = 0;
     armorTutorialPending = false; armorQuestActive = false; dadNoteRead = false;
     Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0, xp: 0, kills: 0, goblinKills: 0, atkUp: 0, defUp: 0 });
@@ -6019,12 +7263,15 @@ const Overworld = (() => {
     if (['up', 'down', 'left', 'right'].includes(saveData.facing)) player.facing = saveData.facing;
     if (saveData.equipment && typeof saveData.equipment === 'object') {
       equipment.armor = saveData.equipment.armor === true;
-      if (saveData.equipment.weapon === 'boneblade') equipment.weapon = 'boneblade';
+      if (WEAPONS[saveData.equipment.weapon]) equipment.weapon = saveData.equipment.weapon;
     }
     if (saveData.story && typeof saveData.story === 'object') {
       Object.keys(story).forEach(k => { if (k !== 'pages' && typeof saveData.story[k] === 'boolean') story[k] = saveData.story[k]; });
       ['hollowSeen', 'metBram', 'rested'].forEach(k => { if (typeof saveData.story[k] === 'boolean') story[k] = saveData.story[k]; });
       if (Array.isArray(saveData.story.pages)) story.pages = saveData.story.pages.filter(id => LORE.some(l => l.id === id));
+      if (Array.isArray(saveData.story.fires)) story.fires = saveData.story.fires.filter(id => FIRES.some(f => f.id === id));
+      const lf = saveData.story.lastFire;
+      if (lf && FIRES.some(f => f.id === lf)) story.lastFire = lf;
     }
     if (typeof saveData.quickSlot === 'string' && ITEM_DEFS[saveData.quickSlot]) quickSlot = saveData.quickSlot;
     else if (saveData.quickSlot === null) quickSlot = null;
@@ -6164,8 +7411,16 @@ const Overworld = (() => {
       if (!e.repeat || k.startsWith('arrow')) inventoryKey(k);
       e.preventDefault(); e.stopPropagation(); return;
     }
-    if ((k === 'j' || k === 'k' || k === 'f') && platformMode && outdoorScene()) {
-      if (!e.repeat && !panel) sideAttackQueued = true;
+    if ((k === 'j' || k === 'f') && platformMode && outdoorScene()) {
+      if (!e.repeat && !panel) { sideAttackQueued = true; attackPressed(); }
+      e.preventDefault(); e.stopPropagation(); return;
+    }
+    if ((k === 'k' || k === 'l') && platformMode && outdoorScene()) {
+      if (!e.repeat && !panel) sideRollQueued = true;
+      e.preventDefault(); e.stopPropagation(); return;
+    }
+    if (k === 'u' && platformMode && outdoorScene()) {
+      if (!e.repeat && !panel) sideUpperQueued = true;
       e.preventDefault(); e.stopPropagation(); return;
     }
     if (k === 'h' && platformMode && outdoorScene()) {
@@ -6199,7 +7454,7 @@ const Overworld = (() => {
     }
   }
 
-  function onKeyUp(e) { keys.delete(e.key.toLowerCase()); }
+  function onKeyUp(e) { const k = e.key.toLowerCase(); keys.delete(k); if (k === 'j' || k === 'f') attackReleased(); }
 
   function init(c, exitCallback, saveData = null, saveCallback = null) {
     canvas = c;
@@ -6225,17 +7480,22 @@ const Overworld = (() => {
     });
     applySave(saveData);
     platformMode = true;
-    platformScene = saveData && (saveData.platformScene === 'forest' || saveData.platformScene === 'hollow') ? saveData.platformScene : 'house';
+    platformScene = saveData && REGIONS[saveData.platformScene] ? saveData.platformScene : 'house';
+    syncArena();
     sidePlayer.x = saveData && Number.isFinite(saveData.sideX) ? clamp(saveData.sideX, 20, sideWorldWidth() - 20) : (platformScene === 'house' ? 410 : 72);
     // Never resume mid-arena: start the boss walk-in from the Hollow's last stretch instead.
-    if (platformScene === 'hollow' && !story.bossDefeated && sidePlayer.x > BOSS_ARENA.left - 60) sidePlayer.x = BOSS_ARENA.left - 120;
+    if (REGIONS[platformScene] && region().arena && !story[region().bossFlag] && sidePlayer.x > BOSS_ARENA.left - 60) sidePlayer.x = BOSS_ARENA.left - 120;
     sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
     sidePlayer.facing = 1; sidePlayer.moving = false; sidePlayer.walk = 0;
     dadNoteRead = !!(saveData && saveData.sideNoteRead);
     sideJumpQueued = false; sideAttackQueued = false; sidePlayer.attackTime = 0; sidePlayer.attackCooldown = 0; sidePlayer.hurtTime = 0; sidePlayer.invulnTime = 0; sidePlayer.deadTime = 0; sidePlayer.atk = null;
     combatFx.length = 0; damageNumbers.length = 0; pickups.length = 0; hitStop = 0; screenShake = 0; comboTimer = 0;
-    loadSceneMobs(platformScene === 'hollow' ? 'hollow' : 'forest');
-    dad = platformScene === 'hollow' && story.dadFound ? { x: 3060, dir: -1, state: 'idle', t: 0 } : null;
+    loadSceneMobs(REGIONS[platformScene] ? platformScene : 'forest');
+    placeNpcs();
+    sidePlayer.roll = null; sidePlayer.charge = null; sidePlayer.pray = null; sidePlayer.drink = null; sidePlayer.rollCooldown = 0;
+    attackHeld = false; sideRollQueued = false; sideUpperQueued = false;
+    playerWaves.length = 0; mobShots.length = 0; groundFires.length = 0; ambient.length = 0;
+    bossFight = null; bossOutro = null;
     sceneTitle = null;
     sideCameraX = Math.max(0, sidePlayer.x - canvas.width * 0.43);
     insideHouse = platformScene === 'house';
@@ -6275,6 +7535,7 @@ const Overworld = (() => {
   // PS5 layout: ✕ jump/interact/confirm, □ attack, ○ back, △ inventory,
   // touchpad/Create stats, Options pause.
   function controllerAction(action) {
+    if (action === 'attackRelease') { attackReleased(); return; }
     inputMode = 'pad';
     unlockAudio();
     if (introActive) { finishIntro(); return; }
@@ -6350,9 +7611,13 @@ const Overworld = (() => {
 
     const inForest = platformMode && outdoorScene() && !insideHouse;
     if (action === 'attack') {
-      if (inForest) { sideAttackQueued = true; padRumble(0.05, 0.25, 60); }
+      if (inForest) {
+        if (keys.has('arrowup')) sideUpperQueued = true; else sideAttackQueued = true;
+        attackPressed(); padRumble(0.05, 0.25, 60);
+      }
       return;
     }
+    if (action === 'back') { if (inForest) sideRollQueued = true; return; }
     if (action === 'primary') {
       if (inForest && !forestInteractAvailable()) sideJumpQueued = true;
       else interact();

@@ -370,7 +370,7 @@ function readSlot(slot) {
 function slotLabels() {
   return [1, 2, 3].map(n => {
     const save = readSlot(n);
-    return save ? `SLOT ${n} - LEVEL ${(save.stats && save.stats.level) || 1}` : `SLOT ${n} - NEW GAME`;
+    return save ? `SLOT ${n} - CH.${save.chapter || 1} LV ${(save.stats && save.stats.level) || 1}` : `SLOT ${n} - NEW GAME`;
   }).concat('BACK');
 }
 
@@ -528,62 +528,293 @@ document.querySelectorAll('[data-game-key]').forEach(button => {
 });
 
 function update(dt) {
+  updateMenuFx(dt);
   clouds.forEach(c => { c.x -= dt * 4; if (c.x + c.w < 0) c.x = 320; });
   motes.forEach(m => {
     m.y -= dt * (4 + m.s * 4);
     m.x += Math.sin(t + m.ph) * 0.15;
-    if (m.y < 100) { m.y = 230; m.x = Math.random() * 320; }
+    if (m.y < 150) { m.y = 236; m.x = Math.random() * 320; }
   });
 }
 
-function drawLogo() {
-  ctx.textAlign = 'center';
-  const bob = Math.sin(t * 1.15) * 1.4;
-  const y = 61 + bob;
-  const pulse = 0.5 + 0.5 * Math.sin(t * 1.8);
+// ---- Main menu art: the Moonfall title screen ----
+const menuKnight = new Image(); menuKnight.src = 'assets/knight/Idle.png';
+const TITLE = 'PIXELQUEST';
+let menuStart = -1;               // time the title animation began
+let cursorY = 118;                // sliding sword cursor
+let comet = null, nextComet = 3.5, landFlash = 0, landX = 0;
+let shooting = null, nextShoot = 6;
+const embers = [];
+const ridges = [0, 1].map(layer => [...Array(42)].map((_, i) => rnd(i * 3 + layer * 91)));
 
-  // A warm, floating title with a deep outline and a slow ember-like glow.
+function updateMenuFx(dt) {
+  if (menuStart < 0) menuStart = t;
+  // The moon shard periodically breaks loose and falls to earth.
+  nextComet -= dt;
+  if (!comet && nextComet <= 0) {
+    comet = { x: 252, y: 112, vx: -70 - Math.random() * 20, vy: 6, trail: [] };
+    nextComet = 11 + Math.random() * 5;
+  }
+  if (comet) {
+    comet.vy += dt * 22;
+    comet.x += comet.vx * dt; comet.y += comet.vy * dt;
+    comet.trail.push({ x: comet.x, y: comet.y, life: 0.9 });
+    if (comet.y > 168) { landFlash = 1; landX = comet.x; comet = null; }
+  }
+  if (comet) comet.trail.forEach(p => p.life -= dt);
+  if (comet) comet.trail = comet.trail.filter(p => p.life > 0);
+  landFlash = Math.max(0, landFlash - dt * 0.9);
+  nextShoot -= dt;
+  if (!shooting && nextShoot <= 0) { shooting = { x: 20 + Math.random() * 140, y: 8 + Math.random() * 30, life: 0.7 }; nextShoot = 5 + Math.random() * 6; }
+  if (shooting) { shooting.x += dt * 170; shooting.y += dt * 60; shooting.life -= dt; if (shooting.life <= 0) shooting = null; }
+  // Campfire embers.
+  if (Math.random() < dt * 14) embers.push({ x: 74 + (Math.random() - 0.5) * 6, y: 204, vx: (Math.random() - 0.5) * 8, vy: -18 - Math.random() * 20, life: 1.4 + Math.random() });
+  for (let i = embers.length - 1; i >= 0; i--) {
+    const e = embers[i]; e.life -= dt; e.x += (e.vx + Math.sin(t * 3 + i) * 6) * dt; e.y += e.vy * dt;
+    if (e.life <= 0) embers.splice(i, 1);
+  }
+  const s = screens[state.screen];
+  const target = s ? s.y + state.sel * 20 : 118;
+  cursorY += (target - cursorY) * Math.min(1, dt * 14);
+}
+
+function drawMoonfallSky() {
+  const sky = ctx.createLinearGradient(0, 0, 0, 200);
+  sky.addColorStop(0, '#070a1c'); sky.addColorStop(0.45, '#161536'); sky.addColorStop(0.8, '#3a2347'); sky.addColorStop(1, '#5a2f4a');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, 320, 240);
+  // the Moonfall light painting the horizon after a shard lands
+  if (landFlash > 0) {
+    const g = ctx.createRadialGradient(landX, 160, 4, landX, 160, 140);
+    g.addColorStop(0, 'rgba(150,210,255,' + 0.45 * landFlash + ')'); g.addColorStop(1, 'rgba(150,210,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 320, 240);
+  }
+  drawStars();
+  if (shooting) {
+    const a = shooting.life / 0.7;
+    const g = ctx.createLinearGradient(shooting.x - 26, shooting.y - 9, shooting.x, shooting.y);
+    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(255,255,255,' + a + ')');
+    ctx.strokeStyle = g; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(shooting.x - 26, shooting.y - 9); ctx.lineTo(shooting.x, shooting.y); ctx.stroke();
+  }
+}
+
+function drawCrackedMoon() {
+  const x = 272, y = 100, r = 26;
   ctx.save();
-  ctx.font = 'bold 29px monospace';
-  ctx.textBaseline = 'alphabetic';
-  ctx.shadowColor = 'rgba(255,151,91,' + (0.35 + pulse * 0.3) + ')';
-  ctx.shadowBlur = 5 + pulse * 5;
-  ctx.lineWidth = 4;
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = '#21182a';
-  ctx.strokeText('PIXELQUEST', 160, y + 2);
-  const g = ctx.createLinearGradient(0, y - 27, 0, y + 4);
-  g.addColorStop(0, '#fff5cf');
-  g.addColorStop(0.42, '#ffd27e');
-  g.addColorStop(1, '#e87951');
-  ctx.fillStyle = g;
-  ctx.fillText('PIXELQUEST', 160, y);
+  ctx.globalCompositeOperation = 'lighter';
+  const halo = ctx.createRadialGradient(x, y, r * 0.6, x, y, r * 3);
+  halo.addColorStop(0, 'rgba(190,200,255,.28)'); halo.addColorStop(1, 'rgba(120,110,220,0)');
+  ctx.fillStyle = halo; ctx.fillRect(x - r * 3, y - r * 3, r * 6, r * 6);
   ctx.restore();
-
-  // A moving glint passes across the lettering, like light through the trees.
-  const sweep = ((t * 34) % 230) - 35;
-  ctx.save();
+  // body
+  const body = ctx.createRadialGradient(x - 9, y - 10, 4, x, y, r);
+  body.addColorStop(0, '#fbf6e8'); body.addColorStop(0.7, '#d9d6e6'); body.addColorStop(1, '#a9a6c6');
+  ctx.fillStyle = body; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  // maria and craters
+  ctx.fillStyle = 'rgba(120,118,160,.35)';
+  [[-10, -6, 8], [8, 10, 6], [-4, 14, 4], [12, -12, 4], [-16, 8, 3]].forEach(([a, b, rr]) => { ctx.beginPath(); ctx.arc(x + a, y + b, rr, 0, Math.PI * 2); ctx.fill(); });
+  ctx.fillStyle = 'rgba(255,255,255,.35)';
+  [[-11, -8, 2], [7, 8, 1.5]].forEach(([a, b, rr]) => { ctx.beginPath(); ctx.arc(x + a, y + b, rr, 0, Math.PI * 2); ctx.fill(); });
+  // terminator shading
+  const sh = ctx.createLinearGradient(x - r, y, x + r, y);
+  sh.addColorStop(0, 'rgba(20,16,50,0)'); sh.addColorStop(0.75, 'rgba(20,16,50,.05)'); sh.addColorStop(1, 'rgba(20,16,50,.45)');
+  ctx.fillStyle = sh; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  // the missing shard: a dark notch on the lower left edge
+  ctx.save(); ctx.beginPath(); ctx.arc(x, y, r + 1, 0, Math.PI * 2); ctx.clip();
+  ctx.fillStyle = '#2c1f45';
+  ctx.beginPath(); ctx.moveTo(x - 28, y + 4); ctx.lineTo(x - 19, y + 3); ctx.lineTo(x - 15, y + 8); ctx.lineTo(x - 17, y + 13); ctx.lineTo(x - 12, y + 19); ctx.lineTo(x - 22, y + 24); ctx.lineTo(x - 30, y + 14); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(160,225,255,.8)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x - 19, y + 3); ctx.lineTo(x - 15, y + 8); ctx.lineTo(x - 17, y + 13); ctx.lineTo(x - 12, y + 19); ctx.stroke();
+  ctx.restore();
+  // glowing cracks running from the wound
+  const pulse = 0.55 + Math.sin(t * 2.4) * 0.3;
+  ctx.strokeStyle = 'rgba(130,210,255,' + pulse + ')'; ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.rect(45 + sweep, y - 28, 13, 34);
-  ctx.clip();
-  ctx.font = 'bold 29px monospace';
-  ctx.fillStyle = 'rgba(255,255,238,0.82)';
-  ctx.fillText('PIXELQUEST', 160, y);
+  ctx.moveTo(x - 15, y + 8); ctx.lineTo(x - 6, y + 1); ctx.lineTo(x + 2, y + 3); ctx.lineTo(x + 9, y - 5); ctx.lineTo(x + 18, y - 8);
+  ctx.moveTo(x - 6, y + 1); ctx.lineTo(x - 7, y - 9); ctx.lineTo(x - 2, y - 17);
+  ctx.moveTo(x + 2, y + 3); ctx.lineTo(x + 6, y + 13); ctx.lineTo(x + 3, y + 22);
+  ctx.stroke();
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  const wg = ctx.createRadialGradient(x - 16, y + 11, 1, x - 16, y + 11, 14);
+  wg.addColorStop(0, 'rgba(120,200,255,' + pulse * 0.7 + ')'); wg.addColorStop(1, 'rgba(120,200,255,0)');
+  ctx.fillStyle = wg; ctx.fillRect(x - 34, y - 2, 32, 32);
   ctx.restore();
+  // floating debris near the break
+  for (let i = 0; i < 5; i++) {
+    const a = t * 0.3 + i * 1.3, dx = x - 32 - i * 6 + Math.cos(a) * 3, dy = y + 16 + i * 4 + Math.sin(a) * 2;
+    ctx.fillStyle = i % 2 ? '#cfd0e6' : '#8fd8ff'; ctx.fillRect(Math.round(dx), Math.round(dy), i % 3 ? 1 : 2, 1 + (i % 2));
+  }
+  // falling shard
+  if (comet) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    comet.trail.forEach(p => {
+      const a = p.life / 0.9;
+      ctx.fillStyle = 'rgba(120,200,255,' + a * 0.35 + ')'; ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 3, 3);
+      ctx.fillStyle = 'rgba(230,248,255,' + a * 0.6 + ')'; ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
+    });
+    const g = ctx.createRadialGradient(comet.x, comet.y, 1, comet.x, comet.y, 10);
+    g.addColorStop(0, 'rgba(220,245,255,.9)'); g.addColorStop(1, 'rgba(120,200,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(comet.x - 10, comet.y - 10, 20, 20);
+    ctx.restore();
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(comet.x) - 1, Math.round(comet.y) - 1, 3, 3);
+  }
+}
 
-  // Small rune-like pixels pulse on either side of the title.
-  const runeGlow = 0.45 + pulse * 0.45;
-  ctx.fillStyle = 'rgba(255,207,128,' + runeGlow + ')';
-  ctx.fillRect(49, y - 15, 3, 3);
-  ctx.fillRect(53, y - 19, 3, 3);
-  ctx.fillRect(57, y - 15, 3, 3);
-  ctx.fillRect(263, y - 15, 3, 3);
-  ctx.fillRect(267, y - 19, 3, 3);
-  ctx.fillRect(271, y - 15, 3, 3);
+function drawRidge(layer, baseY, height, color, speed) {
+  const pts = ridges[layer], step = 16, off = (t * speed) % step, shift = Math.floor(t * speed / step);
+  ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0, 240);
+  for (let i = 0; i < 24; i++) {
+    const h = pts[(i + shift) % pts.length], x = i * step - off;
+    ctx.lineTo(x, baseY - h * height);
+    ctx.lineTo(x + step / 2, baseY - h * height * 0.55 - (i % 3 === 0 ? height * 0.35 : 0));
+  }
+  ctx.lineTo(340, 240); ctx.closePath(); ctx.fill();
+}
 
-  ctx.font = '8px monospace';
-  ctx.fillStyle = '#e7c8a2';
-  ctx.fillText('WHERE THE OLD WOODS WHISPER', 160, 82);
+function drawCampScene() {
+  // hill
+  ctx.fillStyle = '#0d1418';
+  ctx.beginPath(); ctx.moveTo(0, 240); ctx.lineTo(0, 202); ctx.quadraticCurveTo(60, 196, 120, 210); ctx.lineTo(130, 240); ctx.fill();
+  // warm fire light
+  const flick = 0.85 + Math.sin(t * 17) * 0.06 + Math.sin(t * 7.3) * 0.06;
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  const fg = ctx.createRadialGradient(74, 200, 2, 74, 200, 64 * flick);
+  fg.addColorStop(0, 'rgba(255,150,70,.42)'); fg.addColorStop(1, 'rgba(255,90,40,0)');
+  ctx.fillStyle = fg; ctx.fillRect(0, 130, 150, 110);
+  ctx.restore();
+  // logs
+  ctx.fillStyle = '#3a2416'; ctx.fillRect(64, 204, 20, 3); ctx.fillStyle = '#4e301c'; ctx.fillRect(66, 202, 16, 3);
+  // flames
+  for (let i = 0; i < 4; i++) {
+    const h = 9 + Math.sin(t * 13 + i * 1.7) * 3 + (i === 1 || i === 2 ? 4 : 0), w = 3, fx = 67 + i * 4;
+    ctx.fillStyle = '#e8542e'; ctx.beginPath(); ctx.moveTo(fx - w, 203); ctx.quadraticCurveTo(fx - w, 203 - h * 0.6, fx + Math.sin(t * 9 + i) * 1.5, 203 - h); ctx.quadraticCurveTo(fx + w, 203 - h * 0.6, fx + w, 203); ctx.fill();
+    ctx.fillStyle = '#ffc24a'; ctx.beginPath(); ctx.moveTo(fx - 1.5, 203); ctx.quadraticCurveTo(fx - 1, 203 - h * 0.4, fx, 203 - h * 0.6); ctx.quadraticCurveTo(fx + 1, 203 - h * 0.4, fx + 1.5, 203); ctx.fill();
+  }
+  embers.forEach(e => { ctx.fillStyle = 'rgba(255,' + (140 + Math.round(e.life * 50)) + ',70,' + Math.min(1, e.life) + ')'; ctx.fillRect(Math.round(e.x), Math.round(e.y), 1, 1); });
+  // Rowan resting by the fire, looking up at the broken moon.
+  if (menuKnight.complete && menuKnight.naturalWidth) {
+    const f = Math.floor(t * 6) % 8, cols = 2;
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    ctx.translate(44, 206);
+    ctx.drawImage(menuKnight, (f % cols) * 128, Math.floor(f / cols) * 64, 128, 64, -62, -64, 128, 64);
+    ctx.restore();
+    // firelight rim on the armor
+    ctx.fillStyle = 'rgba(255,150,80,.12)'; ctx.fillRect(48, 176, 6, 28);
+  }
+}
+
+function drawLogo() {
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  const el = t - menuStart, baseY = 58;
+  ctx.font = 'bold 29px monospace';
+  const total = ctx.measureText(TITLE).width, x0 = 160 - total / 2;
+  const pulse = 0.5 + 0.5 * Math.sin(t * 1.8);
+  let x = x0;
+  for (let i = 0; i < TITLE.length; i++) {
+    const ch = TITLE[i], w = ctx.measureText(ch).width;
+    const lt = el - i * 0.08;
+    if (lt > 0) {
+      // drop in with a small bounce, then a gentle wave
+      const k = Math.min(1, lt / 0.45);
+      const drop = k < 1 ? -60 * Math.pow(1 - k, 2) + Math.sin(k * Math.PI) * -4 : 0;
+      const y = baseY + drop + Math.sin(t * 1.6 + i * 0.5) * 1.3;
+      ctx.globalAlpha = Math.min(1, lt / 0.2);
+      ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.strokeStyle = '#150f22';
+      ctx.strokeText(ch, x + w / 2, y + 2);
+      const g = ctx.createLinearGradient(0, y - 26, 0, y + 3);
+      g.addColorStop(0, '#ffffff'); g.addColorStop(0.35, '#d8ecff'); g.addColorStop(0.7, '#8fbaf0'); g.addColorStop(1, '#5a6fc0');
+      ctx.shadowColor = 'rgba(120,190,255,' + (0.35 + pulse * 0.35) + ')'; ctx.shadowBlur = 6 + pulse * 5;
+      ctx.fillStyle = g; ctx.fillText(ch, x + w / 2, y);
+      ctx.shadowBlur = 0;
+    }
+    x += w;
+  }
+  ctx.globalAlpha = 1;
+  // glint sweep
+  if (el > 1.2) {
+    const sweep = ((t * 40) % 260) - 40;
+    ctx.save(); ctx.beginPath(); ctx.rect(x0 + sweep, baseY - 28, 10, 34); ctx.clip();
+    ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.fillText(TITLE, 160, baseY + Math.sin(t * 1.6) * 0);
+    ctx.restore();
+  }
+  // subtitle with crescent ornaments
+  const sa = clamp01((el - 1.0) / 0.8);
+  ctx.globalAlpha = sa;
+  ctx.font = 'bold 7px monospace'; ctx.fillStyle = '#e9d6a8';
+  ctx.fillText('THE  MOONFALL  CHRONICLE', 160, 75);
+  const lw = 34 * sa;
+  ctx.fillStyle = '#c9a86a'; ctx.fillRect(160 - 62 - lw, 72, lw, 1); ctx.fillRect(160 + 62, 72, lw, 1);
+  ctx.fillStyle = '#8fd8ff'; ctx.fillRect(160 - 64 - lw, 71, 2, 3); ctx.fillRect(160 + 62 + lw, 71, 2, 3);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+
+function drawRuneButton(r, label, on, i) {
+  const el = t - menuStart, appear = state.screen === 'title' ? clamp01((el - 1.4 - i * 0.12) / 0.3) : 1;
+  if (appear <= 0) return;
+  ctx.save(); ctx.globalAlpha = appear;
+  const ox = Math.round((1 - appear) * 14 * (i % 2 ? 1 : -1));
+  const x = r.x + ox, y = r.y, w = r.w, h = r.h;
+  // stone slab with chipped corners
+  ctx.fillStyle = '#0a0812'; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, on ? '#3d4a6e' : '#2a2638'); g.addColorStop(1, on ? '#232c4a' : '#18151f');
+  ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = on ? '#7f9bd6' : '#3c364c'; ctx.fillRect(x, y, w, 1);
+  ctx.fillStyle = '#0a0812'; ctx.fillRect(x, y, 1, 1); ctx.fillRect(x + w - 1, y, 1, 1); ctx.fillRect(x, y + h - 1, 1, 1); ctx.fillRect(x + w - 1, y + h - 1, 1, 1);
+  // cracks in the stone
+  ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(x + 14 + (i * 23) % 70, y + 3, 1, 4); ctx.fillRect(x + 15 + (i * 23) % 70, y + 6, 3, 1);
+  if (on) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const gl = ctx.createRadialGradient(x + w / 2, y + h / 2, 2, x + w / 2, y + h / 2, w * 0.6);
+    gl.addColorStop(0, 'rgba(110,180,255,' + (0.22 + Math.sin(t * 5) * 0.06) + ')'); gl.addColorStop(1, 'rgba(110,180,255,0)');
+    ctx.fillStyle = gl; ctx.fillRect(x - 20, y - 8, w + 40, h + 16); ctx.restore();
+    ctx.strokeStyle = 'rgba(160,215,255,.9)'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  }
+  // runes at both ends
+  const rc = on ? 'rgba(170,225,255,' + (0.7 + Math.sin(t * 6 + i) * 0.3) + ')' : 'rgba(140,130,170,.5)';
+  ctx.fillStyle = rc;
+  [[x + 5, 1], [x + w - 9, -1]].forEach(([rx]) => { ctx.fillRect(rx, y + 4, 1, 6); ctx.fillRect(rx + 1, y + 4, 2, 1); ctx.fillRect(rx + 2, y + 7, 2, 1); ctx.fillRect(rx + 3, y + 8, 1, 2); });
+  ctx.font = (on ? 'bold ' : '') + '9px monospace'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#0a0812'; ctx.fillText(label, x + w / 2 + 1, y + 11);
+  ctx.fillStyle = on ? '#f2f8ff' : '#cfc3e0'; ctx.fillText(label, x + w / 2, y + 10);
+  ctx.restore();
+}
+
+function drawSwordCursor(x, y) {
+  const bob = Math.sin(t * 6) * 1.5;
+  ctx.save(); ctx.translate(Math.round(x + bob), Math.round(y));
+  ctx.fillStyle = '#0a0812'; ctx.fillRect(-15, -2, 16, 5);
+  ctx.fillStyle = '#d8e6f4'; ctx.fillRect(-10, -1, 10, 3);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(-10, -1, 10, 1);
+  ctx.fillStyle = '#8fd8ff'; ctx.fillRect(0, 0, 2, 1);
+  ctx.fillStyle = '#c9a86a'; ctx.fillRect(-12, -3, 2, 7);
+  ctx.fillStyle = '#6b4a2a'; ctx.fillRect(-16, -1, 4, 3);
+  ctx.fillStyle = '#c9a86a'; ctx.fillRect(-17, -1, 1, 3);
+  ctx.restore();
+}
+
+function drawMenu() {
+  const s = screens[state.screen];
+  const items = s.items();
+  items.forEach((label, i) => drawRuneButton(rectFor(s, i), label, i === state.sel, i));
+  const appear = state.screen === 'title' ? clamp01((t - menuStart - 1.6) / 0.3) : 1;
+  if (appear > 0 && items.length) { ctx.globalAlpha = appear; drawSwordCursor(rectFor(s, 0).x - 4, cursorY + 7); ctx.globalAlpha = 1; }
+  if (state.screen === 'slots') items.slice(0, 3).forEach((_, i) => {
+    const r = rectFor(s, i);
+    ctx.fillStyle = 'rgba(10,8,18,0.85)'; ctx.fillRect(224, r.y - 2, 16, 17);
+    drawTrashCan(226, r.y);
+  });
+}
+
+function slotDetail(n) {
+  const save = readSlot(n);
+  if (!save) return ['EMPTY SLOT', 'A NEW TALE BEGINS IN THE WOODLAND'];
+  const ch = save.chapter || (save.story && save.story.chapterDone ? 2 : 1);
+  const names = ['', 'WHERE DID DAD GO?', 'THE RIDERS EAST', 'THE DROWNED CITY', 'TO THE PALE COURT'];
+  const pages = save.story && save.story.pages ? save.story.pages.length : 0;
+  return ['CHAPTER ' + ch + ' - ' + (names[ch] || ''), (save.area || 'HOME') + '   LV ' + ((save.stats && save.stats.level) || 1) + '   LORE ' + pages];
 }
 
 function drawTrashCan(x, y) {
@@ -598,37 +829,19 @@ function drawTrashCan(x, y) {
   ctx.restore();
 }
 
-function drawMenu() {
-  const s = screens[state.screen];
-  s.items().forEach((label, i) => {
-    const r = rectFor(s, i);
-    const on = i === state.sel;
-    ctx.fillStyle = on ? '#ffd27a' : 'rgba(20,8,30,0.75)';
-    ctx.fillRect(r.x, r.y, r.w, r.h);
-    ctx.strokeStyle = '#ffd27a';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = on ? '#2a0f2a' : '#ffe9b8';
-    ctx.fillText(label, 160, r.y + 10);
-    if (on) { ctx.textAlign = 'left'; ctx.fillText('>', r.x + 6, r.y + 10); }
-    if (state.screen === 'slots' && i < 3) {
-      ctx.fillStyle = 'rgba(20,8,30,0.8)';
-      ctx.fillRect(224, r.y - 2, 16, 17);
-      drawTrashCan(226, r.y);
-    }
-  });
-}
-
 function drawScreen() {
   ctx.textAlign = 'center';
   if (state.screen === 'title') {
     drawLogo();
     drawMenu();
-    ctx.font = '7px monospace';
-    ctx.fillStyle = '#ffd9a0';
-    ctx.fillText('ARROWS / WASD / PS5 CONTROLLER + X', 160, 228);
+    const ha = clamp01((t - menuStart - 2.2) / 0.6);
+    ctx.globalAlpha = ha * (0.85 + Math.sin(t * 3) * 0.15);
+    ctx.font = '6px monospace';
+    ctx.fillStyle = '#d8d0ee';
+    ctx.fillText('ARROWS / WASD / PS5 CONTROLLER  -  ENTER OR \u2715 TO CHOOSE', 160, 228);
+    ctx.globalAlpha = ha * 0.6; ctx.textAlign = 'right'; ctx.fillStyle = '#8f88aa';
+    ctx.fillText('CHAPTERS I - III', 314, 236);
+    ctx.globalAlpha = 1; ctx.textAlign = 'center';
     return;
   }
   ctx.font = 'bold 12px monospace';
@@ -636,10 +849,18 @@ function drawScreen() {
   if (state.screen === 'slots') {
     ctx.fillText('SELECT SAVE', 160, 86);
     drawMenu();
+    if (state.sel < 3) {
+      const [l1, l2] = slotDetail(state.sel + 1);
+      ctx.fillStyle = 'rgba(10,8,18,.8)'; ctx.fillRect(70, 182, 180, 24);
+      ctx.strokeStyle = '#5a5480'; ctx.strokeRect(70.5, 182.5, 179, 23);
+      ctx.font = 'bold 7px monospace'; ctx.fillStyle = '#bfe2ff'; ctx.fillText(l1, 160, 192);
+      ctx.font = '6px monospace'; ctx.fillStyle = '#d8d0ee'; ctx.fillText(l2, 160, 201);
+      ctx.font = 'bold 12px monospace'; ctx.fillStyle = '#ffe9b8';
+    }
     if (message) {
       ctx.font = '10px monospace';
       ctx.fillStyle = '#ffd27a';
-      ctx.fillText(message, 160, 210);
+      ctx.fillText(message, 160, 218);
     }
   } else if (state.screen === 'deleteConfirm') {
     ctx.fillText('DELETE SAVE SLOT ' + state.deleteSlot + '?', 160, 88);
@@ -817,31 +1038,32 @@ function drawFireflies() {
 
 function draw() {
   ctx.clearRect(0, 0, 320, 240);
-  drawNightSky();
-  drawStars();
-  drawMoon();
-
-  // Three slow parallax tree lines create depth around the clearing.
-  drawForestLayer(157, 0.82, 1.0, ['#17232b', '#263b38'], 10, 100);
+  drawMoonfallSky();
+  drawCrackedMoon();
+  drawRidge(0, 156, 46, '#26234a', 1.2);
+  drawRidge(1, 170, 34, '#1a1834', 2.4);
   drawForestMist();
-  drawForestLayer(183, 1.03, 1.8, ['#101e23', '#1c332f'], 10, 180);
-  drawWoodlandGround();
-
-  // Framing trees remain at the edges so the title and menu stay readable.
-  drawPixelTree(7 - (t * 2 % 9), 242, 1.62, '#101b20', '#20352d', 0);
-  drawPixelTree(315 + (t * 1.5 % 9), 244, 1.72, '#101b20', '#20352d', 1);
-  drawForestMist();
+  drawForestLayer(178, 0.9, 4, ['#0e1420', '#1a2433'], 10, 100);
+  drawForestLayer(198, 1.08, 7, ['#090d16', '#141c28'], 10, 180);
+  ctx.fillStyle = '#080b12'; ctx.fillRect(0, 204, 320, 36);
+  drawCampScene();
+  drawPixelTree(309 + Math.sin(t * 0.6) * 1, 246, 1.75, '#070a10', '#121a24', 1);
   drawFireflies();
+  // a slow wall of fog in front of the woods
+  for (let i = 0; i < 4; i++) {
+    const fx = ((t * (5 + i * 2) + i * 97) % 420) - 60, fy = 186 + i * 8;
+    const g = ctx.createRadialGradient(fx, fy, 2, fx, fy, 70);
+    g.addColorStop(0, 'rgba(150,140,200,.10)'); g.addColorStop(1, 'rgba(150,140,200,0)');
+    ctx.fillStyle = g; ctx.fillRect(fx - 70, fy - 30, 140, 60);
+  }
+  if (state.screen !== 'title') { ctx.fillStyle = 'rgba(6,5,14,.45)'; ctx.fillRect(0, 0, 320, 240); }
   drawScreen();
-
-  const v = ctx.createRadialGradient(160, 120, 74, 160, 120, 200);
-  v.addColorStop(0, 'rgba(0,0,0,0)');
-  v.addColorStop(1, 'rgba(4,8,15,0.7)');
-  ctx.fillStyle = v;
-  ctx.fillRect(0, 0, 320, 240);
-
-  ctx.fillStyle = 'rgba(0,0,0,0.07)';
-  for (let y = 0; y < 240; y += 2) ctx.fillRect(0, y, 320, 1);
+  const v = ctx.createRadialGradient(160, 120, 80, 160, 120, 210);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(3,3,12,0.72)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, 320, 240);
+  // fade in from black when the page opens
+  const fade = clamp01(1 - (t - menuStart) / 1.2);
+  if (fade > 0) { ctx.fillStyle = 'rgba(0,0,0,' + fade + ')'; ctx.fillRect(0, 0, 320, 240); }
 }
 
 function drawCRT() {
@@ -975,6 +1197,7 @@ function pollGamepad(now) {
         go('deleteConfirm');
       }
     }
+    if (!down && wasDown && action === 'attack' && inWorld) Overworld.controllerAction('attackRelease');
     if (down) gamepadState.actions.add(button); else gamepadState.actions.delete(button);
   }
 }

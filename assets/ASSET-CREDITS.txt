@@ -52,3 +52,10 @@ The Hollow backgrounds, ogre boss, ghosts, and Aldric (assets/hollow):
 
 House armor sprite (assets/knight/mini-idle.png, mini-run.png):
 - Scaled-down versions of the existing knight sheets in assets/knight.
+
+Chapter 2 and 3 areas, bosses, and creatures (assets/pass, assets/gloam, assets/beasts):
+- Ansimuz, Legacy Collection (Gothicvania backgrounds and creatures: mountain pass, town, castle, nightmare mare, demon, hell hound, fire skull, crow, toad, lamp spirit, and the heroine used for Wren). Taken from assets/Legacy Collection.zip (CC0).
+
+More music (assets/audio/music):
+- pass.mp3: yd, Desert theme: https://opengameart.org/content/desert-theme (CC0)
+- gloam.mp3: qubodup / yd, Dark Shrine Loop: https://opengameart.org/content/dark-shrine-loop (CC0)
