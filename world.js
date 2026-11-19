@@ -1179,7 +1179,7 @@ const Overworld = (() => {
       drawIntroNight(t);
       drawIntroLetterbox();
       if (t > 9.0 && t < 14.3) {
-        introTextBox(['Long ago, people built quiet homes between the fields and forests, under a gentle moon.'], (t - 9.0) * 17, 'settled-world');
+        introTextBox(['Long ago, people built quiet homes between fields and forests, under a gentle moon.'], (t - 9.0) * 17, 'settled-world');
       } else if (t >= 14.8 && t < 20.0) {
         introTextBox(['Twenty winters ago the moon cracked, and burning shards fell into forgotten places.'], (t - 14.8) * 17, 'awakening');
       } else if (t >= 20.5 && t < 25.7) {
