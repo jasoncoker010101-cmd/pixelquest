@@ -2821,7 +2821,7 @@ const Overworld = (() => {
   }
   let levelUpUntil = 0;
 
-  function xpForNext(level) { return 20 + level * 15; }
+  function xpForNext(level) { return 42 + level * 20 + 3 * (level - 1) ** 2; }
   function totalDefense() { return stats.defense + (stats.defUp || 0) + (stats.perkDef || 0) + (equipment.armor ? ARMOR_DEFENSE + tideDefense() : 0); }
   function totalAttack() { return stats.strength + (stats.atkUp || 0) + (stats.perkAtk || 0) + (equipment.armor ? WEAPONS[currentWeapon()].atk + (tide.forge[currentWeapon()] || 0) : 0); }
 
@@ -3281,6 +3281,8 @@ const Overworld = (() => {
         const bonus = Math.floor((totalAttack() - 5) / 4);
         damageMob(m, (w.dmg || 4) + bonus, w.f, w.small ? 120 : 220, true, false);
       });
+      // A half-health hit can clear the wave list from inside damageMob.
+      if (bossFight?.phaseTwo) return;
       if (w.age >= w.life || w.x < 0 || w.x > sideWorldWidth()) playerWaves.splice(i, 1);
     }
   }
@@ -3451,7 +3453,7 @@ const Overworld = (() => {
     fortuneOnKill(m, dropY);
     if (!m.arenaWave) depthsOnKill(m);
     tideOnKill(m);
-    if (T.xp) gainXp(Math.round(T.xp * (m.elite ? 2.5 : 1) * (bloodMoon ? 2 : 1)));
+    if (T.xp) gainXp(Math.round(T.xp * (m.elite ? 1.75 : 1) * (bloodMoon ? 1.4 : 1)));
     if (T.boss) onBossDefeated(m);
   }
 
@@ -3461,9 +3463,10 @@ const Overworld = (() => {
     while (stats.xp >= xpForNext(stats.level)) {
       stats.xp -= xpForNext(stats.level);
       stats.level++;
-      stats.maxHealth += 4; stats.strength += 1;
+      stats.maxHealth += 3; stats.strength += 1;
       if (stats.level % 2 === 0) stats.defense += 1;
-      stats.health = stats.maxHealth; stats.stamina = stats.maxStamina;
+      stats.health = Math.min(stats.maxHealth, stats.health + 6);
+      stats.stamina = Math.min(stats.maxStamina, stats.stamina + 30);
       levelUpUntil = time + 2.4; pendingPerks++;
       notice = 'LEVEL UP! You reached level ' + stats.level + '.'; noticeUntil = time + 2.6;
       sfx('level'); padRumble(0.4, 0.4, 260);
@@ -3471,8 +3474,17 @@ const Overworld = (() => {
     }
   }
 
-  function hurtSidePlayer(amount, fromDir, who) {
-    amount = fortuneHurt(amount);
+  function bossHitFloor(maxHealth, enraged, hazard) {
+    return Math.max(hazard ? 2 : 3, Math.ceil(maxHealth * (hazard ? (enraged ? .08 : .06) : (enraged ? .12 : .09))));
+  }
+  function hurtByBoss(raw, fromDir, who, enraged, hazard = false) {
+    const defense = totalDefense();
+    const mitigation = Math.min(.42, defense / (defense + 17));
+    const amount = Math.ceil((raw + (enraged ? 2 : 0)) * (1 - mitigation));
+    hurtSidePlayer(amount, fromDir, who, bossHitFloor(stats.maxHealth, enraged, hazard));
+  }
+  function hurtSidePlayer(amount, fromDir, who, minimum = 1) {
+    amount = Math.max(minimum, fortuneHurt(amount));
     if (equipment.armor && tide.coatTemper > 0) tide.armorWear = Math.min(100, tide.armorWear + 5);
     stats.health = Math.max(0, stats.health - amount);
     sidePlayer.hurtTime = 0.36; sidePlayer.invulnTime = 1.1;
@@ -4258,7 +4270,42 @@ const Overworld = (() => {
     pixel(18, 28, 3, 2, steel);
   }
 
-  const bossWaves = [];   // ground shockwaves from the Hollow King's club
+  const bossWaves = [];
+  const SKARN_HEW = 0.21, SKARN_SLAM = 0.76;
+  function skarnAttackFrame(p) {
+    // The second upswing holds for a beat; the axe hits on source frames 5 and 11.
+    const marks = [[0,0], [SKARN_HEW,4], [.49,9], [.64,9], [SKARN_SLAM,10], [1,16]];
+    for (let i = 1; i < marks.length; i++) {
+      const [end, b] = marks[i], [start, a] = marks[i - 1];
+      if (p < end) return Math.floor(a + (b - a) * (p - start) / (end - start));
+    }
+    return 15;
+  }
+  function updateSkarnSwing(m, playerAlive, distance, dx, enraged) {
+    const p = 1 - m.attackTime / m.atkLen;
+    if (enraged && p >= .49 && !m.chargeCue) { m.chargeCue = true; sfx('charge', .78, .66); }
+    for (const [mark, flag, slam] of [[SKARN_HEW, 'hewDone', false], [SKARN_SLAM, 'waveDone', true]]) {
+      if (p < mark || m[flag]) continue;
+      m[flag] = true;
+      const x = m.x + m.dir * (slam ? 55 : 28);
+      if (slam && enraged) {
+        screenShake = Math.max(screenShake, 8);
+        padRumble(0.95, 0.9, 260);
+        sfx('slam', 1, 0.65);
+        spawnDust(x, SIDE_GROUND_Y, 18);
+        for (const [site, dir, life] of [[x, m.dir, 2.35], [m.x - m.dir * 20, -m.dir, 1.95]]) {
+          bossWaves.push({ x: site, dir, life, hit: false, kind: 'mire', age: 0, enraged });
+        }
+      } else {
+        sfx('swingBig', 0.72, slam ? 0.68 : 0.88);
+        if (slam) spawnDust(x, SIDE_GROUND_Y, 8);
+      }
+      if (distance < m.T.reach + 4 && (Math.sign(dx) === m.dir || distance < 12) &&
+          playerBodyOverlaps(m.y - m.T.bodyH - 6, m.y + 4) && playerAlive && canHitPlayer()) {
+        hurtByBoss(m.T.dmg, m.dir, 'Skarn', enraged);
+      }
+    }
+  }
   function playerBodyOverlaps(top, bottom) { return sidePlayer.y - 40 < bottom && sidePlayer.y > top; }
   function updateForestCombat(dt) {
     if (bossFight && bossFight.phaseTwo) return;
@@ -4315,7 +4362,8 @@ const Overworld = (() => {
           m.walk += speed * dt / 6;
           m.moving = true;
         } else if (m.attackCooldown <= 0) {
-          m.attackTime = T.atkTime / speedMul; m.atkLen = m.attackTime; m.attackHit = false; m.waveDone = false;
+          m.attackTime = T.atkTime / (m.type === 'skarn' && enraged ? 1 : speedMul); m.atkLen = m.attackTime;
+          m.attackHit = false; m.waveDone = false; m.hewDone = false; m.chargeCue = false;
           m.attackCooldown = (T.cd[0] + Math.random() * (T.cd[1] - T.cd[0])) / speedMul * (m.elite && m.elite.cd || 1);
           if (T.boss) m.attackCooldown = Math.max(m.attackCooldown, m.atkLen + (enraged ? 0.62 : 0.82));
           if (Math.random() < 0.6) mobVoice(m, 'attack');
@@ -4349,7 +4397,9 @@ const Overworld = (() => {
         if (T.pounce && m.attackTime > 0) { const p = 1 - m.attackTime / m.atkLen; m.y -= Math.max(0, Math.sin(Math.min(1, Math.max(0, (p - 0.15) / 0.6)) * Math.PI)) * 22; }
       }
       // Damage window, measured as a share of the swing so animation and hit agree.
-      if (m.attackTime > 0 && !m.attackHit) {
+      if (m.attackTime > 0 && m.type === 'skarn') {
+        updateSkarnSwing(m, playerAlive, distance, dx, enraged);
+      } else if (m.attackTime > 0 && !m.attackHit) {
         const p = 1 - m.attackTime / m.atkLen;
         if (p >= T.hit[0] && p <= T.hit[1]) {
           if (T.boss && !m.waveDone) {
@@ -4357,13 +4407,13 @@ const Overworld = (() => {
             screenShake = Math.max(screenShake, 5); padRumble(0.9, 0.9, 220); sfx('slam', 1, 0.75);
             spawnDust(m.x + m.dir * 60, SIDE_GROUND_Y, 10);
             if (!T.volley || (m.type === 'tidemaw' && enraged)) {
-              bossWaves.push({ x: m.x + m.dir * 45, dir: m.dir, life: enraged ? 2.3 : 1.9, hit: false });
-              if (enraged && !T.volley) bossWaves.push({ x: m.x - m.dir * 30, dir: -m.dir, life: 1.6, hit: false });
+              bossWaves.push({ x: m.x + m.dir * 45, dir: m.dir, life: enraged ? 2.3 : 1.9, hit: false, enraged });
+              if (enraged && !T.volley) bossWaves.push({ x: m.x - m.dir * 30, dir: -m.dir, life: 1.6, hit: false, enraged });
             }
             if (T.volley) {
               const n = T.volley + (enraged ? 1 : 0), sx = m.x + m.dir * 24, sy = m.y - T.bodyH * 0.6;
               const base = Math.atan2(sidePlayer.y - 22 - sy, sidePlayer.x - sx);
-              for (let k = 0; k < n; k++) { const a = base + (k - (n - 1) / 2) * 0.2; mobShots.push({ x: sx, y: sy, vx: Math.cos(a) * 125, vy: Math.sin(a) * 125, life: 3, dmg: Math.max(2, T.dmg - 3), who: T.short, kind: T.shot || 'fire' }); }
+              for (let k = 0; k < n; k++) { const a = base + (k - (n - 1) / 2) * 0.2; mobShots.push({ x: sx, y: sy, vx: Math.cos(a) * 125, vy: Math.sin(a) * 125, life: 3, dmg: Math.max(2, T.dmg - 3), who: T.short, kind: T.shot || 'fire', boss: true, enraged }); }
               sfx(T.shot === 'moon' ? 'magic' : 'fire', 0.8);
             }
           }
@@ -4378,7 +4428,8 @@ const Overworld = (() => {
             }
           } else if (distance < T.reach + 4 && facing && playerBodyOverlaps(m.y - T.bodyH - 6, m.y + 4) && playerAlive && canHitPlayer()) {
             m.attackHit = true;
-            hurtSidePlayer(Math.max(1, T.dmg + eliteDmg(m) - Math.floor(totalDefense() / 2)), m.dir, T.boss ? T.short : m.elite ? 'The ' + m.elite.name.toLowerCase() + ' ' + T.name.toLowerCase() : 'The ' + T.name.toLowerCase());
+            if (T.boss) hurtByBoss(T.dmg, m.dir, T.short, enraged);
+            else hurtSidePlayer(Math.max(1, T.dmg + eliteDmg(m) - Math.floor(totalDefense() / 2)), m.dir, m.elite ? 'The ' + m.elite.name.toLowerCase() + ' ' + T.name.toLowerCase() : 'The ' + T.name.toLowerCase());
           }
         } else if (p > T.hit[1]) m.attackHit = true;
       }
@@ -4394,10 +4445,12 @@ const Overworld = (() => {
     for (let i = sideMobs.length - 1; i >= 0; i--) if (sideMobs[i].summoned && sideMobs[i].dead && sideMobs[i].deadTime > 1.5) sideMobs.splice(i, 1);
     for (let i = bossWaves.length - 1; i >= 0; i--) {
       const w = bossWaves[i];
-      w.x += w.dir * 175 * dt; w.life -= dt;
-      if (Math.random() < 0.5) spawnDust(w.x, SIDE_GROUND_Y, 1);
-      if (!w.hit && Math.abs(w.x - sidePlayer.x) < 12 && sidePlayer.y > SIDE_GROUND_Y - 12 && playerAlive && canHitPlayer()) {
-        w.hit = true; hurtSidePlayer(Math.max(1, 5 - Math.floor(totalDefense() / 2)), w.dir, 'The shockwave');
+      const mire = w.kind === 'mire';
+      w.x += w.dir * (mire ? 192 : 175) * dt; w.life -= dt;
+      if (mire) w.age += dt;
+      else if (Math.random() < 0.5) spawnDust(w.x, SIDE_GROUND_Y, 1);
+      if (!w.hit && Math.abs(w.x - sidePlayer.x) < (mire ? 17 : 12) && sidePlayer.y > SIDE_GROUND_Y - (mire ? 20 : 12) && playerAlive && canHitPlayer()) {
+        w.hit = true; hurtByBoss(mire ? 6 : 5, w.dir, mire ? 'Mirebreaker' : 'The shockwave', w.enraged, true);
       }
       if (w.life <= 0 || w.x < BOSS_ARENA.left || w.x > BOSS_ARENA.right) bossWaves.splice(i, 1);
     }
@@ -4421,7 +4474,9 @@ const Overworld = (() => {
         spawnSparks(s.x, s.y, pf, 8, ['#ffd27a', '#ff8a3a', '#ffffff']); sfx('clash', 0.6, 1.3); mobShots.splice(i, 1); continue;
       }
       if (playerAlive && Math.abs(s.x - sidePlayer.x) < 10 && s.y > sidePlayer.y - 42 && s.y < sidePlayer.y + 2 && canHitPlayer()) {
-        hurtSidePlayer(Math.max(1, s.dmg - Math.floor(totalDefense() / 2)), Math.sign(s.vx) || 1, s.who);
+        const dir = Math.sign(s.vx) || 1;
+        if (s.boss) hurtByBoss(s.dmg, dir, s.who, s.enraged, true);
+        else hurtSidePlayer(Math.max(1, s.dmg - Math.floor(totalDefense() / 2)), dir, s.who);
         spawnSparks(s.x, s.y, Math.sign(s.vx) || 1, 8, ['#ffd27a', '#ff8a3a']);
         mobShots.splice(i, 1); continue;
       }
@@ -4430,7 +4485,9 @@ const Overworld = (() => {
     for (let i = groundFires.length - 1; i >= 0; i--) {
       const f = groundFires[i];
       f.life -= dt;
-      if (playerAlive && sidePlayer.onGround && Math.abs(f.x - sidePlayer.x) < 8 && f.life > 0.3 && canHitPlayer()) hurtSidePlayer(Math.max(1, 4 - Math.floor(totalDefense() / 3)), sidePlayer.x < f.x ? -1 : 1, 'Pale fire');
+      if (playerAlive && sidePlayer.onGround && Math.abs(f.x - sidePlayer.x) < 8 && f.life > 0.3 && canHitPlayer()) {
+        hurtByBoss(4, sidePlayer.x < f.x ? -1 : 1, 'Pale fire', f.enraged, true);
+      }
       if (f.life <= 0) groundFires.splice(i, 1);
     }
   }
@@ -4470,7 +4527,7 @@ const Overworld = (() => {
   // ---------------------------------------------------------------------------
   function bossTouch(m, rangeX, top, dmg) {
     if (Math.abs(sidePlayer.x - m.x) < rangeX && sidePlayer.y > top && canHitPlayer()) {
-      hurtSidePlayer(Math.max(1, dmg - Math.floor(totalDefense() / 2)), m.dir, m.T.short);
+      hurtByBoss(dmg, m.dir, m.T.short, m.enraged);
       return true;
     }
     return false;
@@ -4507,7 +4564,7 @@ const Overworld = (() => {
       } else if (m.st === 'charge') {
         const sp = enraged ? 410 : 340;
         m.dir = m.chargeDir; m.x += m.dir * sp * dt; m.moving = true; m.walk += dt * 15;
-        if (Math.abs(m.x - m.trailX) > 22) { m.trailX = m.x; groundFires.push({ x: m.x - m.dir * 20, life: enraged ? 2.1 : 1.6 }); }
+        if (Math.abs(m.x - m.trailX) > 22) { m.trailX = m.x; groundFires.push({ x: m.x - m.dir * 20, life: enraged ? 2.1 : 1.6, enraged }); }
         if (Math.random() < dt * 30) spawnDust(m.x - m.dir * 30, SIDE_GROUND_Y, 1);
         if (playerAlive && bossTouch(m, 34, SIDE_GROUND_Y - 44, T.dmg)) padRumble(1, 1, 220);
         if ((m.dir > 0 && m.x >= R) || (m.dir < 0 && m.x <= L)) { m.x = clamp(m.x, L, R); screenShake = Math.max(screenShake, 4); sfx('slam', 0.8, 0.9); spawnDust(m.x + m.dir * 30, SIDE_GROUND_Y, 8); go('stun'); }
@@ -4517,7 +4574,7 @@ const Overworld = (() => {
         m.tele = m.stT < 0.45;
         if (m.stT > 0.45 && !m.stomped) {
           m.stomped = true; screenShake = Math.max(screenShake, 5); sfx('slam', 1, 0.8); padRumble(0.9, 0.9, 200);
-          bossWaves.push({ x: m.x + 30, dir: 1, life: 1.6, hit: false }, { x: m.x - 30, dir: -1, life: 1.6, hit: false });
+          bossWaves.push({ x: m.x + 30, dir: 1, life: 1.6, hit: false, enraged }, { x: m.x - 30, dir: -1, life: 1.6, hit: false, enraged });
           spawnDust(m.x, SIDE_GROUND_Y, 10);
         }
         if (m.stT > 0.95) { m.stomped = false; m.tele = false; go('stalk'); }
@@ -4550,7 +4607,7 @@ const Overworld = (() => {
           const lo = Math.min(x0, x1), hi = Math.max(x0, x1);
           for (let k = 0; k < 3; k++) { const fx = x0 + (x1 - x0) * Math.random(); combatFx.push({ kind: 'spark', x: fx, y: SIDE_GROUND_Y - 4 - Math.random() * 30, vx: m.dir * 60, vy: -40 - Math.random() * 40, color: ['#8fd8ff', '#ffffff', '#5fa8ff'][k], life: 0.4, max: 0.4 }); }
           if (playerAlive && sidePlayer.x > lo && sidePlayer.x < hi && sidePlayer.y > SIDE_GROUND_Y - 46 && !m.breathHit && canHitPlayer()) {
-            m.breathHit = true; hurtSidePlayer(Math.max(1, T.dmg - Math.floor(totalDefense() / 2)), m.dir, 'Moonfire');
+            m.breathHit = true; hurtByBoss(T.dmg, m.dir, 'Moonfire', enraged);
           }
           if (Math.random() < dt * 8) screenShake = Math.max(screenShake, 1.5);
         }
@@ -4567,7 +4624,7 @@ const Overworld = (() => {
           for (let k = 0; k < n; k++) {
             const sx = m.x + m.dir * 16, sy = m.y - 50;
             const tx = sidePlayer.x + (k - (n - 1) / 2) * 34, ty = SIDE_GROUND_Y - 14, d = Math.max(1, Math.hypot(tx - sx, ty - sy));
-            mobShots.push({ x: sx, y: sy, vx: (tx - sx) / d * 135, vy: (ty - sy) / d * 135, life: 3, dmg: 6, who: 'Moonfire', kind: 'moon' });
+            mobShots.push({ x: sx, y: sy, vx: (tx - sx) / d * 135, vy: (ty - sy) / d * 135, life: 3, dmg: 6, who: 'Moonfire', kind: 'moon', boss: true, enraged });
           }
         }
         if (m.stT > 1.2) { m.fired = false; m.tele = false; go('stalk'); }
@@ -4607,8 +4664,7 @@ const Overworld = (() => {
     if (m.hurtTime > 0 && A.hurt) return [A.hurt, Math.min(A.hurt[1] - 1, Math.floor((0.3 - m.hurtTime) / 0.3 * A.hurt[1]))];
     if (m.attackTime > 0) {
       const n = A.attack[1], t = 1 - m.attackTime / m.atkLen;
-      // Show the raised hammer before contact. Frame five is the impact, not the wind-up.
-      const f = m.type === 'skarn' ? (t < T.hit[0] ? t / T.hit[0] * 5 : 5 + (t - T.hit[0]) / (1 - T.hit[0]) * 7) : t * n;
+      const f = m.type === 'skarn' ? skarnAttackFrame(t) : t * n;
       return [A.attack, clamp(Math.floor(f), 0, n - 1)];
     }
     if (m.moving && !m.dormant) { const an = A.move; return [an, Math.floor(m.walk * an[2] / 14) % an[1]]; }
@@ -4621,7 +4677,7 @@ const Overworld = (() => {
     const [anim, frame] = mobFrame(m);
     const img0 = mobSheet(T, anim);
     if (!imgReady(img0)) return;
-    const tint = m.enraged ? hexRgb(BOSS_FORMS[m.type][2]) + ',.32' : T.tint;
+    const tint = m.enraged ? hexRgb(BOSS_FORMS[m.type][2]) + (m.type === 'skarn' ? ',.15' : ',.32') : T.tint;
     const second = T.second && m.enraged ? tideArt[T.second] : null;
     const img = imgReady(second) ? second : tint ? tintedSheet(img0, tint) : img0;
     let alpha = T.alpha || 1;
@@ -4639,9 +4695,22 @@ const Overworld = (() => {
     ctx.globalAlpha = alpha;
     ctx.translate(Math.round(m.x), Math.round(m.y + sink));
     if (flip) ctx.scale(-1, 1);
+    if (m.type === 'skarn' && m.dead) {
+      const collapse = Math.min(1, m.deadTime * 3);
+      ctx.rotate(collapse * 1.33);
+      ctx.scale(1, 1 - collapse * 0.25);
+    }
     if (squash !== 1) ctx.scale(1 + (1 - squash) * 0.4, squash);
     ctx.drawImage(img, frame * T.fw, 0, T.fw, T.fh, -T.ax * sc, -T.ay * sc, w, h);
     if (m.type === 'skarn' && m.enraged && !m.dead) drawSkarnMask(anim[0], frame, T);
+    if (m.type === 'skarn' && m.enraged && anim === T.anims.attack && frame === 9) {
+      const p = clamp((1 - m.attackTime / m.atkLen - .49) / .27, 0, 1);
+      ctx.fillStyle = '#ffdc9b';
+      for (let i = 0; i < 9; i++) {
+        const a = i * 2.4 + p * 4, r = 8 + (1 - p) * 16;
+        ctx.fillRect(Math.round(-25 + Math.cos(a) * r), Math.round(-75 + Math.sin(a) * r * .65), i % 3 ? 2 : 3, 2);
+      }
+    }
     if (m.flash > 0 || (m.tele && Math.floor(time * 14) % 2)) {
       mobFlashCanvas.width = T.fw; mobFlashCanvas.height = T.fh;
       mobFlashCtx.clearRect(0, 0, T.fw, T.fh);
@@ -4655,23 +4724,46 @@ const Overworld = (() => {
     ctx.restore();
   }
 
-  // Eye positions in the original hand-animated poses, relative to each source cell.
+  // Face anchors in Chierit's uncropped frames. No overlay on away-facing poses.
   const SKARN_EYES = {
-    'skarn-idle': [[84,50],[84,50],[82,52],[82,52],[84,50],[84,50],[86,52],[86,52]],
-    'skarn-walk': [[84,50],[86,52],[86,52],[90,52],[94,52],[92,50]],
-    'skarn-attack': [[84,50],[82,52],[86,52],[86,52],[84,52],[84,52],[84,52],[84,52],[84,52],[86,52],[86,52],[84,50]],
-    'skarn-hurt': [[82,52],[82,52],[82,52],[82,52]]
+    idle: [[132,83],[132,82],[130,83],[129,83],[128,84],[128,83],[130,83],[130,83],[130,83],[130,83],[131,83],[131,83],[132,83],[132,83],[132,83],[132,83]],
+    walk: [[127,84],[130,85],[129,84],[130,83],[132,85],[130,84],[129,84],[128,85],[124,83],[126,82],[125,82],[126,82]],
+    axe: [[132,83],[148,82],[148,82],[148,82],null,null,null,null,null,null,[134,86],[123,83],[130,82],[130,82],[131,82],[132,83]]
   };
   function drawSkarnMask(anim, frame, T) {
     const eye = SKARN_EYES[anim]?.[frame];
     if (!eye) return;
-    const x = (eye[0] - T.ax) * T.scale, y = (eye[1] - T.ay) * T.scale;
+    const x = (eye[0] - 8 - T.ax) * T.scale, y = (eye[1] - 22 - T.ay) * T.scale;
     const p = (c, dx, dy, w, h) => { ctx.fillStyle = c; ctx.fillRect(Math.round(x) + dx, Math.round(y) + dy, w, h); };
     p('#271b24', -15, -12, 17, 19); p('#291d26', -12, -8, 19, 20);
     p('#a67f60', -13, -9, 14, 17); p('#d4b791', -10, -7, 13, 15); p('#f8e5bd', -9, -7, 10, 3);
     p('#bba080', -9, -15, 4, 7); p('#e9d3ad', -12, -18, 3, 7); p('#dcc39f', 0, -12, 3, 5);
     p('#26191d', -2, -2, 6, 4); p('#ff9f61', 0, -1, 2, 2); p('#80514b', -2, 5, 5, 4);
     p('#f3dfb9', -7, 7, 3, 4); p('#ecd4a9', 2, 7, 2, 3);
+  }
+
+  function drawMireWave(w) {
+    const tick = Math.floor(w.age * 23), a = clamp(w.life * 5, 0, 1);
+    ctx.save();
+    ctx.translate(Math.round(w.x), SIDE_GROUND_Y);
+    ctx.scale(w.dir, 1);
+    const pixel = (color, x, y, width, height, opacity = 1) => {
+      ctx.globalAlpha = a * opacity; ctx.fillStyle = color; ctx.fillRect(x, y, width, height);
+    };
+    for (let i = 0; i < 8; i++) {
+      const x = 12 - i * 5, h = Math.max(2, 20 - Math.abs(i - 2) * 5 + (tick + i * 7) % 4);
+      pixel('#241b27', x - 2, -h, 7, h + 2);
+      pixel(i % 2 ? '#755139' : '#996d49', x, 1 - h, 4, h - 1);
+      pixel('#d7a976', x + 2, 2 - h, 2, Math.max(1, h / 3 | 0));
+    }
+    for (let i = 0; i < 13; i++) {
+      const t = ((w.age * (2.6 + i % 3 * .47) + i * .37) % 1);
+      const x = Math.round(7 - t * (24 + i * 3)), y = -Math.round(3 + 4 * t * (1 - t) * (12 + i % 5 * 5));
+      const s = 2 + i % 4;
+      pixel(i % 2 ? '#80543d' : '#b68555', x, y, s, s - 1, 1 - t * .75);
+      pixel('#e0b580', x, y, s - 1, 1, 1 - t * .75);
+    }
+    ctx.restore();
   }
 
   // Original sprites for the three champions that used to borrow enemy sheets.
@@ -4789,6 +4881,7 @@ const Overworld = (() => {
       drawEliteTag(m);
     });
     bossWaves.forEach(w => {
+      if (w.kind === 'mire') { drawMireWave(w); return; }
       const a = Math.min(1, w.life * 2);
       ctx.fillStyle = 'rgba(255,190,120,' + a * 0.85 + ')';
       ctx.fillRect(Math.round(w.x) - 4, SIDE_GROUND_Y - 9, 8, 9);
@@ -6359,7 +6452,8 @@ const Overworld = (() => {
   // Boss entrance cinematics: letterbox bars, the camera swings to the boss,
   // it does its signature move, and its name card burns in above its head.
   const CINE_END = 4.5;
-  const PHASE_END = 2.9;
+  const PHASE_REVEAL = 1.05;
+  const PHASE_END = 3.55;
   // Each second form has its own outline, drawn behind the original animation.
   const BOSS_FORMS = {
     ogre: ['THE BROKEN CROWN', "Don't touch my crown!", '#a45987', '#ffbcaa', [[-27,-79,-7,35],[-10,-95,2,39],[1,-89,17,30]], [[-18,-49,10,5],[7,-33,6,3]]],
@@ -6370,32 +6464,46 @@ const Overworld = (() => {
     wyrm: ['THE EMBER STAR', "Get back. It's waking up.", '#be442a', '#ffdc7a', [[-34,-81,-50,32],[-20,-93,-29,43],[-7,-87,-3,36],[7,-73,18,47],[21,-61,36,32]], [[-28,-37,11,4],[-25,-33,8,3],[-20,-30,4,5]]],
     tidemaw: ['THE CRACKED BELL', 'No. Not the bell.', '#386e64', '#c3f8cb', [[-31,-76,-29,65],[27,-71,39,61],[-19,-91,-3,33]], [[-20,-60,6,3],[-16,-57,4,6],[-12,-54,7,2],[-7,-52,2,7],[-32,-36,7,3],[26,-29,7,3]]]
   };
+  const PHASE_SHOWS = {
+    ogre:       { style: 'rubble', cue: 'slam', seed: 1 },
+    mare:       { style: 'flame', cue: 'fire', seed: 2 },
+    demon:      { style: 'eclipse', cue: 'demon', seed: 3 },
+    skarn:      { style: 'mire', cue: 'slam', seed: 4 },
+    mourn:      { style: 'spirits', cue: 'ghost', seed: 5 },
+    wyrm:       { style: 'eruption', cue: 'fire', seed: 6 },
+    tidemaw:    { style: 'bell', cue: 'gem', seed: 7 },
+    saltStag:   { style: 'crystal', cue: 'clash', seed: 8 },
+    wellKeeper: { style: 'lantern', cue: 'magic', seed: 9 }
+  };
   function beginBossSecondPhase(m) {
-    Object.assign(bossFight, { phaseTwo: true, intro: true, cine: true, active: false, t: 0, ev: {} });
-    keys.clear();
-    attackHeld = false; sideRollQueued = false; sideUpperQueued = false; attackBuffer = 0; rollBuffer = 0;
+    Object.assign(bossFight, { phaseTwo: true, intro: true, cine: true, active: false, t: 0, ev: {}, skipPhase: false });
+    clearHeldInput();
     Object.assign(sidePlayer, { atk: null, charge: null, roll: null, attackTime: 0, vx: 0 });
     Object.assign(m, { attackTime: 0, moving: false, kvx: 0, tele: false, dir: sidePlayer.x < m.x ? -1 : 1 });
-    mobShots.length = groundFires.length = bossWaves.length = cineFx.length = sporeClouds.length = 0;
+    mobShots.length = groundFires.length = bossWaves.length = cineFx.length = sporeClouds.length = playerWaves.length = 0;
     sfx('magic', 0.55, 0.62);
   }
   function updateBossSecondPhase(c, boss, dt) {
     c.t += dt;
     boss.flash = Math.max(0, boss.flash - dt);
-    playerWaves.length = 0;
-    if (cineEvent(c, 'break', 0.65)) {
-      boss.enraged = true; screenShake = 5;
-      padRumble(0.65, 0.75, 350); sfx('roar', 0.75, 0.78);
+    if (!c.skipPhase && cineEvent(c, 'break', PHASE_REVEAL)) {
+      boss.enraged = true; screenShake = 6;
+      padRumble(0.68, 0.78, 290); sfx(PHASE_SHOWS[boss.type].cue, 0.9, 0.78);
       const color = hexRgb(BOSS_FORMS[boss.type][3]);
-      cineFx.push({kind: 'ring', x: boss.x, y: boss.y - 24, r: 8, vr: 125, life: 0.72, max: 0.72, color});
-      cineBurst(boss.x, boss.y - boss.T.bodyH * 0.56, 24, { speed: 90, life: 0.95, g: 35, color });
+      const grounded = ['ogre', 'skarn', 'wyrm', 'saltStag'].includes(boss.type);
+      if (grounded) spawnDust(boss.x, SIDE_GROUND_Y, 14);
+      cineBurst(boss.x, grounded ? SIDE_GROUND_Y : boss.y - boss.T.bodyH * .55, 24,
+        { kind: grounded ? 'rock' : 'spark', speed: 105, life: 1.12, g: grounded ? 210 : -15, color, size: 3,
+          spread: grounded ? 2.8 : Math.PI * 2 });
     }
     updateCineParticles(dt);
-    if (c.t < PHASE_END) return;
-    Object.assign(c, { phaseTwo: false, intro: false, cine: false, active: true });
+    if (!c.skipPhase && c.t < PHASE_END) return;
+    boss.enraged = true;
+    clearHeldInput();
+    Object.assign(c, { phaseTwo: false, intro: false, cine: false, active: true, skipPhase: false });
     cineFx.length = 0;
     Object.assign(boss, { st: 'stalk', stT: 0, attackCooldown: 1.2, attackTime: 0, tele: false, swoop: null,
-      second: false, stomped: false, breathHit: false, fired: false });
+      moving: false, hewDone: false, waveDone: false, second: false, stomped: false, breathHit: false, fired: false });
     sidePlayer.invulnTime = Math.max(sidePlayer.invulnTime, 0.7);
     const flank = sidePlayer.x < (BOSS_ARENA.left + BOSS_ARENA.right) / 2 ? BOSS_ARENA.right - 55 : BOSS_ARENA.left + 55;
     const add = makeMob(boss.T.summon || 'ghost', flank, 42, 0);
@@ -6422,18 +6530,106 @@ const Overworld = (() => {
     }
     ctx.restore();
   }
-  function drawSecondPhase(c, boss) {
-    const [title, line, , hot] = BOSS_FORMS[boss.type], t = c.t;
-    const k = Math.min(1, t * 5, (PHASE_END - t) * 6), bar = Math.round(25 * k);
+  function drawPhasePower(boss, t, fade) {
+    const [,, shade, hot] = BOSS_FORMS[boss.type];
+    const { style, seed } = PHASE_SHOWS[boss.type];
+    const x = Math.round(boss.x - sideCameraX), y = Math.round(boss.y - boss.T.bodyH * .55);
+    const floor = SIDE_GROUND_Y, p = t - PHASE_REVEAL;
+    const build = clamp(t / PHASE_REVEAL, 0, 1);
+    const burst = p < 0 ? 0 : Math.max(0, 1 - p / 1.55);
+    const poly = (color, pts) => {
+      ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+      for (const [px, py] of pts.slice(1)) ctx.lineTo(px, py);
+      ctx.closePath(); ctx.fill();
+    };
+    const orb = (px, py, r, color) => {
+      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+    };
     ctx.save();
-    ctx.fillStyle = 'rgba(8,6,17,' + (0.16 * k) + ')'; ctx.fillRect(0, 0, 320, 240);
+    if (p < 0) {
+      ctx.globalAlpha = fade * build * .78;
+      for (let i = 0; i < 18; i++) {
+        const a = i * 2.4 + t * (2 + seed * .19), r = (1 - build) * (30 + i * 4) + 13;
+        const px = Math.round(x + Math.cos(a) * r), py = Math.round(y + Math.sin(a) * r * .66);
+        ctx.fillStyle = i % 3 ? hot : shade; ctx.fillRect(px, py, i % 4 === 0 ? 3 : 2, 2);
+      }
+    } else if (burst > 0) {
+      ctx.globalAlpha = fade * burst * .87;
+      if (style === 'eclipse') {
+        const r = 26 + Math.min(16, p * 48);
+        orb(x, y - 24, r + 3, hot); orb(x + 4, y - 27, r, '#19152e');
+        for (let i = 0; i < 8; i++) {
+          const dx = (i < 4 ? -1 : 1) * (28 + (i % 4) * (13 + p * 9));
+          poly(shade, [[x + dx - 10,y - 18],[x + dx + 12,y - 42],[x + dx + 5,y - 11],[x + dx,y + 9]]);
+        }
+      } else if (style === 'bell' || style === 'lantern') {
+        for (let i = 0; i < 3; i++) {
+          const q = p - i * .13; if (q < 0) continue;
+          ctx.strokeStyle = i === 0 ? hot : shade; ctx.lineWidth = i === 0 ? 2 : 4;
+          ctx.beginPath(); ctx.ellipse(x, style === 'bell' ? floor - 12 - i * 15 : y, 10 + q * 111, 6 + q * (style === 'bell' ? 23 : 50), 0, 0, Math.PI * 2); ctx.stroke();
+        }
+        if (style === 'lantern') {
+          poly(hot, [[x,y-48],[x+12,y],[x,y+43],[x-12,y]]);
+          poly(shade, [[x,y-29],[x+5,y],[x,y+28],[x-5,y]]);
+        }
+      } else {
+        for (let i = -5; i <= 5; i++) {
+          const px = Math.round(x + i * (13 + p * 12));
+          const h = Math.round((17 + (5 - Math.abs(i)) * 6 + ((i + 5) * seed % 13)) * Math.min(1, p * 12) * Math.sqrt(burst));
+          if (style === 'spirits') {
+            const py = floor - 5 - p * (32 + (i + 5) % 4 * 22);
+            poly(shade, [[px-6,py],[px-5,py-8],[px,py-13],[px+5,py-8],[px+5,py+1],[px-2,py+7]]);
+            ctx.fillStyle = hot; ctx.fillRect(px - 3, py - 7, 2, 2); ctx.fillRect(px + 1, py - 7, 2, 2);
+          } else if (style === 'mire' || style === 'rubble') {
+            const w = style === 'mire' ? 12 : 8, base = floor - 1;
+            const tilt = style === 'mire' ? i * 2 : Math.sin(i * 13) * 8;
+            const dy = style === 'rubble' ? Math.round(p * (18 + 4 * (i * i % 7))) : 0;
+            const py = base - dy;
+            const sx = px + tilt;
+            poly(shade, [[px-w,py],[px-w,py-h*.42],[sx-w*.7,py-h*.64],[sx-w*.62,py-h],[sx+w*.43,py-h],[sx+w*.75,py-h*.66],[px+w,py-h*.4],[px+w,py]]);
+            poly(hot, [[sx-w*.58,py-h*.8],[sx-w*.55,py-h],[sx+w*.4,py-h],[sx+w*.68,py-h*.72],[sx-w*.09,py-h*.78]]);
+          } else if (style === 'flame' || style === 'eruption') {
+            const sway = (style === 'flame' ? Math.sign(i) * 10 : 0) + Math.sin(t * 18 + i) * 5;
+            const tall = style === 'eruption' ? 1 + (5 - Math.abs(i)) * .16 : .9;
+            for (let layer = 0; layer < 2; layer++) {
+              const w = layer ? 3.5 : 9, top = floor - h * tall * (layer ? .63 : 1);
+              ctx.fillStyle = layer ? hot : shade;
+              ctx.beginPath(); ctx.moveTo(px - w, floor);
+              ctx.quadraticCurveTo(px - w * 1.6, floor - h * .34, px + sway, top);
+              ctx.quadraticCurveTo(px + sway * .48, floor - h * .5, px + w, floor - h * .28);
+              ctx.quadraticCurveTo(px + w * 1.4, floor - h * .1, px + w, floor);
+              ctx.closePath(); ctx.fill();
+            }
+          } else {
+            const lean = Math.sign(i) * 6, w = 6, base = floor;
+            poly(shade, [[px-w,base],[px-w+2,base-h*.45],[px+lean,base-h],[px+lean+w,base-h*.46],[px+w,base]]);
+            poly(hot, [[px-2,base-h*.28],[px+lean,base-h],[px+lean+3,base-h*.57],[px+4,base-h*.23]]);
+          }
+        }
+      }
+    }
+    ctx.restore();
+  }
+  function drawSecondPhase(c, boss) {
+    const [title, line, shade, hot] = BOSS_FORMS[boss.type], t = c.t;
+    const k = clamp(Math.min(t * 4, (PHASE_END - t) * 4), 0, 1), bar = Math.round(29 * k);
+    ctx.save();
+    const vignette = ctx.createRadialGradient(boss.x - sideCameraX, boss.y - 45, 26, boss.x - sideCameraX, boss.y - 45, 169);
+    vignette.addColorStop(0, 'rgba(8,6,17,0)');
+    vignette.addColorStop(1, 'rgba(8,6,17,' + (.78 * k) + ')');
+    ctx.fillStyle = vignette; ctx.fillRect(0, 0, 320, 240);
+    drawPhasePower(boss, t, k);
     drawCineFx();
     ctx.fillStyle = '#080610'; ctx.fillRect(0, 0, 320, bar); ctx.fillRect(0, 240 - bar, 320, bar);
-    if (t > 0.55) {
-      ctx.globalAlpha = Math.min(k, (t - 0.55) * 5);
-      ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
-      ctx.fillStyle = hot; ctx.fillText('PHASE II / ' + title, 160, 16);
-      ctx.font = '8px monospace'; ctx.fillStyle = '#eee7dc'; ctx.fillText(line, 160, 230);
+    if (t > PHASE_REVEAL) {
+      ctx.globalAlpha = Math.min(k, (t - PHASE_REVEAL) * 7);
+      ctx.textAlign = 'center';
+      ctx.font = '7px monospace'; ctx.fillStyle = '#e8dfdf'; ctx.fillText('P H A S E   I I', 160, 10);
+      ctx.font = 'bold 12px monospace'; ctx.fillStyle = hot; ctx.fillText(title, 160, 24);
+      ctx.fillStyle = shade; ctx.fillRect(20, 21, 43, 1); ctx.fillRect(257, 21, 43, 1);
+      ctx.font = '9px monospace'; ctx.fillStyle = '#eee7dc'; ctx.fillText(line, 160, 223);
+      ctx.font = '7px monospace'; ctx.fillStyle = '#aea4b1';
+      ctx.fillText((inputMode === 'pad' ? '\u2715' : inputMode === 'touch' ? 'USE' : 'E') + '  SKIP', 160, 235);
     }
     ctx.restore();
   }
@@ -6582,7 +6778,7 @@ const Overworld = (() => {
   }
   function skipBossCine() {
     if (bossFight && bossFight.phaseTwo) {
-      if (bossFight.t > 0.7) bossFight.t = Math.max(bossFight.t, PHASE_END - 0.18);
+      bossFight.skipPhase = true;
       return true;
     }
     if (bossFight && bossFight.cine && bossFight.t > 0.4) { bossFight.t = Math.max(bossFight.t, CINE_END - 0.45); return true; }
@@ -7008,10 +7204,10 @@ const Overworld = (() => {
                 fw: 48, fh: 48, ax: 24, ay: 34, scale: 1.0, bodyH: 26, width: 20, fly: 56, dive: true, hp: 6, speed: 100, chase: 250, reach: 40, dmg: 4,
                 atkTime: 0.7, hit: [0.4, 0.8], cd: [1.3, 1.9], xp: 18, coins: [2, 5], drops: [['eye', 0.5]], voice: 'eye' },
     // ---- Champions: one waits at the end of each side area ----
-    skarn:    { name: 'Skarn, the Mire Chief', boss: true, champion: true, src: 'warden/',
-                anims: { idle: ['skarn-idle', 8, 7], move: ['skarn-walk', 6, 11], attack: ['skarn-attack', 12], hurt: ['skarn-hurt', 4], death: ['skarn-death', 9, 8] },
-                fw: 156, fh: 106, ax: 67, ay: 104, scale: 1.08, bodyH: 62, width: 34, hp: 52, speed: 60, chase: 700, reach: 72, dmg: 6,
-                atkTime: 1.25, hit: [0.61, 0.74], cd: [1.95, 2.25], xp: 150, coins: [30, 40], drops: [['cleaver', 1], ['tonic', 1]], voice: 'goblin', armor: true, short: 'Skarn',
+    skarn:    { name: 'Skarn, the Mire Chief', boss: true, champion: true, src: 'skarn/',
+                anims: { idle: ['idle', 16, 10], move: ['walk', 12, 14], attack: ['axe', 16], hurt: null, death: null },
+                fw: 216, fh: 128, ax: 132, ay: 122, scale: .88, faceLeft: true, bodyH: 72, width: 34, hp: 52, speed: 60, chase: 700, reach: 72, dmg: 6,
+                atkTime: 1.65, hit: [SKARN_HEW, SKARN_SLAM], cd: [2.4, 2.65], xp: 150, coins: [30, 40], drops: [['cleaver', 1], ['tonic', 1]], voice: 'goblin', armor: true, short: 'Skarn',
                 enrageText: 'Skarn whistles. Cutthroats drop from the trees...', summon: 'sneak' },
     mourn:    { name: 'Mourn, the Barrow Warden', boss: true, champion: true, art: 'mourn', drawH: 86,
                 bodyH: 84, width: 32, hp: 68, speed: 45, chase: 700, reach: 68, dmg: 6, volley: 2, shot: 'moon',
@@ -7864,7 +8060,12 @@ const Overworld = (() => {
     vault: [['hexer', 430, 59], ['hexer', 785, 80], ['reever', 1050, 48]],
     well: [['hexer', 410, 53], ['hexer', 810, 54]]
   });
-  for (const id of ['hexer', 'saltStag', 'wellKeeper']) mobSheet(MOB_TYPES[id], MOB_TYPES[id].anims.idle);
+  // Boss sheets defined by later chapters are not in the initial mob preload.
+  // Warm up every pose so the first swing does not start on a blank frame.
+  mobSheet(MOB_TYPES.hexer, MOB_TYPES.hexer.anims.idle);
+  for (const T of Object.values(MOB_TYPES)) {
+    if (T.boss && T.anims) for (const anim of Object.values(T.anims)) if (anim) mobSheet(T, anim);
+  }
   Object.assign(SPEAKERS, {
     mara: { name: 'MARA', color: '#ffc3a5' }, teo: { name: 'TEO', color: '#ffd881' }, orrin: { name: 'ORRIN', color: '#f6a877' },
     seren: { name: 'SEREN', color: '#c6fff0' }, ione: { name: 'IONE', color: '#acf9eb', mob: 'wellKeeper' }, stag: { name: 'SALT STAG', color: '#f1ce83', mob: 'saltStag' },

@@ -28,10 +28,11 @@ const context = {
 const marker = '  return { init, update, draw, stop,';
 assert(js.includes(marker), 'Could not locate runtime data for validation');
 new vm.Script(js.replace(marker, `
-  window.buildData = { REGIONS, SCENE_MOBS, MOB_TYPES, STORY_DEFAULTS, LORE, FIRES, SFX_BANK, MUSIC_FILES, BOSS_FORMS, BOSS_LINES };
+  window.buildData = { REGIONS, SCENE_MOBS, MOB_TYPES, STORY_DEFAULTS, LORE, FIRES, SFX_BANK, MUSIC_FILES, BOSS_FORMS, BOSS_LINES, PHASE_SHOWS };
   window.bloodTest = { bloodDrops, spawnBlood, updateBlood, setBloodEffects };
+  window.balanceTest = { xpForNext, gainXp, bossHitFloor, hurtByBoss, stats, equipment, skarnAttackFrame, SKARN_HEW, SKARN_SLAM };
 ${marker}`), { filename: 'world.js' }).runInNewContext(context);
-const { REGIONS, SCENE_MOBS, MOB_TYPES, STORY_DEFAULTS, LORE, FIRES, SFX_BANK, MUSIC_FILES, BOSS_FORMS, BOSS_LINES } = context.window.buildData;
+const { REGIONS, SCENE_MOBS, MOB_TYPES, STORY_DEFAULTS, LORE, FIRES, SFX_BANK, MUSIC_FILES, BOSS_FORMS, BOSS_LINES, PHASE_SHOWS } = context.window.buildData;
 const unique = (rows, name) => assert.equal(new Set(rows.map(row => row.id)).size, rows.length, `Duplicate ${name} IDs`);
 unique(LORE, 'lore');
 unique(FIRES, 'fire');
@@ -42,6 +43,7 @@ for (const [key, region] of Object.entries(REGIONS)) {
   assert(region.entry >= 0 && region.entry < region.width, `Invalid entry point for ${key}`);
   if (region.boss) {
     assert(MOB_TYPES[region.boss]?.boss && BOSS_FORMS[region.boss] && BOSS_LINES[region.boss], `Incomplete boss in ${key}`);
+    assert(SFX_BANK[PHASE_SHOWS[region.boss]?.cue], `Missing phase-two show or sound in ${key}`);
     assert(Object.hasOwn(STORY_DEFAULTS, region.bossFlag), `Missing boss save flag ${region.bossFlag}`);
     const { left, trigger, right } = region.arena;
     assert(left < trigger && trigger < region.bossX && region.bossX < right && right <= region.width, `Invalid arena for ${key}`);
@@ -86,5 +88,27 @@ assert(bloodDrops.length <= 128, 'Keep the particle budget bounded');
 setBloodEffects(false);
 spawnBlood(64, 96, 1, true);
 assert.equal(bloodDrops.length, 0, 'Turning blood off clears existing blood and suppresses new bursts');
+const { xpForNext, gainXp, bossHitFloor, hurtByBoss, stats, skarnAttackFrame, SKARN_HEW, SKARN_SLAM } = context.window.balanceTest;
+assert.equal(skarnAttackFrame(SKARN_HEW), 4, 'First hit must land on the first axe contact');
+assert.equal(skarnAttackFrame(SKARN_SLAM), 10, 'Mirebreaker must launch on the second axe contact');
+assert.equal(skarnAttackFrame(.56), 9, 'Hold the raised axe before the slam');
+assert.equal(skarnAttackFrame(1), 15, 'The final attack pose stays in the strip');
+for (let level = 1; level <= 30; level++) {
+  assert(xpForNext(level) > 20 + level * 15, 'Slower than the legacy XP curve');
+  assert(xpForNext(level + 1) > xpForNext(level), 'XP cost rises with level');
+}
+Object.assign(stats, { level: 1, xp: 0, health: 6, stamina: 10, maxHealth: 20 });
+gainXp(xpForNext(1) - 1);
+assert.equal(stats.level, 1, 'Do not level below the threshold');
+gainXp(1);
+assert.equal(stats.level, 2);
+assert.equal(stats.maxHealth, 23);
+assert.equal(stats.health, 12, 'Leveling no longer fully heals');
+assert.equal(stats.stamina, 40);
+Object.assign(stats, { health: 120, maxHealth: 120, defense: 100 });
+hurtByBoss(6, 1, 'Test boss', true);
+assert.equal(120 - stats.health, bossHitFloor(120, true, false), 'Endgame armor cannot trivialize a direct hit');
+assert(bossHitFloor(120, true, false) > bossHitFloor(120, false, false), 'Phase two is more dangerous');
+assert(bossHitFloor(120, true, false) > bossHitFloor(120, true, true), 'Hazards are less damaging than direct hits');
 
 console.log(`Verified ${Object.keys(REGIONS).length} regions, ${LORE.length} lore entries, ${FIRES.length} campfires, ${Object.keys(MOB_TYPES).length} monster types, and ${refs.size} runtime asset references.`);

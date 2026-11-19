@@ -29,13 +29,14 @@ own epilogue. Existing Chapter 4 saves keep their original ledger progress.
 ## Earlier Pale Court update
 
 - **Chapter 4 opens the coast:** after Vael's final scene, take the east road out of Gloamhold to Lantern Quay. Learn the night-ferry signal, visit the Court's outer gallery, and look for a fresh trace of Seren.
-- **New art:** Skarn has his own animated hammer-wielder, with a bone mask that tracks his second-form animation. Mourn and Tidemaw have extra costume detail. The house armor is a steel suit on a wooden rack that empties when equipped.
+- **New art:** Skarn wields a two-handed axe with chierit's Minotaur animations. His second form wears a tracked bone mask and charges Mirebreaker, a ground slam that sends rocks and mud in both directions. Mourn and Tidemaw have extra costume detail. The house armor is a steel suit on a wooden rack that empties when equipped.
 - **Readability and input:** dialogue paginates instead of cutting off long lines. The touch controls sit below the screen on phones. The CRT effect, sound and music can be switched off from Settings; Blood Effects also has a pause-menu switch.
 - **Release checks:** `node tools/verify-build.mjs` validates scripts, lore IDs, spawn locations, boss configuration, sprite-sheet frame bounds and runtime asset references. GitHub Pages checks the staged game before uploading it and excludes editable/source packs from the website.
 
 ## Combat and accounts
 
-- All seven bosses now reveal a second form at half health. The short cutscene can be skipped with the same controls as the first entrance; combat resumes with a brief grace period.
+- All nine bosses, including the Salt Stag and Ione, reveal a second form at half health. Each boss gets its own visual reveal and sound cue. Skip with the same controls as the first entrance; combat resumes in phase two with a brief grace period.
+- Leveling takes more XP, and each level restores some health and stamina instead of refilling both. Existing saves keep their earned levels and stats. Armor still softens boss hits, but direct attacks and hazards cannot be reduced to one damage, and phase-two hits are stronger.
 - Skarn, Mourn and Tidemaw use their own pixel art. Both opening moon shots show the fracture, and each outdoor region has its own set of scenery and lighting accents. See `assets/ASSET-CREDITS.txt` for the scenery source.
 - Hits on living enemies and the player leave short-lived pixel blood sprays and splashes. Shield blocks and enemies like skeletons and ghosts don't bleed. Switch Blood Effects off in either the title settings or the in-game pause menu.
 - Choose **Account → Create Account**, enter an email, password and player name, then follow the email confirmation link before signing in. If an old link failed, try signing in first, then use **Resend confirmation** if your email is still unconfirmed. Guest saves are separate from account saves. Existing cloud saves are read from the same Supabase project.

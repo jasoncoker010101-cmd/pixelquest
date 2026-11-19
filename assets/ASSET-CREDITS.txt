@@ -15,7 +15,13 @@ Regional scenery (assets/scenery):
 - Four in-game props from the project's existing Legacy archive: woods, pillars, crystal and plant.
 - Mourn and Tidemaw are original game artwork, as are the phase-two overlays and the armor rack.
 
-Skarn (assets/warden):
+Skarn (assets/skarn):
+- chierit, Boss: Minotaur: https://chierit.itch.io/boss-minotaur
+- Creative Commons Attribution 4.0 International: https://creativecommons.org/licenses/by/4.0/
+- Free idle, walk and attack_1 frames cropped and packed into runtime strips. The
+  Bone Mask, charge sparks, collapse effect and Mirebreaker VFX are Pixel Quest additions.
+
+Previous Skarn art (legacy assets/warden):
 - The Pixel Alchemist, Goblin Pack (Goblin Tank): https://thepixelalchemist.itch.io/goblin-pack
 - The game uses resized idle, walk, attack, hurt and death strips from the project's supplied sheet.
   The creator permits modification and use in games. Do not redistribute the sheets as an asset pack.
