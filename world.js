@@ -187,6 +187,7 @@ const Overworld = (() => {
   // First-play cinematic: illustrated Moonfall book, countryside, then the bedroom.
   let introActive = false, introTime = 0, introAudio = null, introWolfHowlOne = false, introWolfHowlTwo = false, introWolfHowlEcho = false;
   let introBookCue = -1;
+  let introReplayOnly = false;
   const INTRO_SPACE_END = 8.5;
   const INTRO_LORE = [
     { id: 'long-winter', seconds: 11.0, heading: ['THE LONG', 'WINTER'] },
@@ -269,6 +270,12 @@ const Overworld = (() => {
     introTime = INTRO_DURATION;
     stopIntroNarration();
     [introWolfHowlAudioOne, introWolfHowlAudioTwo].forEach(a => { a.pause(); a.currentTime = 0; });
+    if (introReplayOnly) {
+      introReplayOnly = false;
+      stop();
+      onExit?.();
+      return;
+    }
     insideHouse = true;
     interiorPlayer.x = KID_SPAWN.x;
     interiorPlayer.y = KID_SPAWN.y;
@@ -12132,7 +12139,7 @@ const Overworld = (() => {
     sidePlayer.charge = null;
   }
 
-  function init(c, exitCallback, saveData = null, saveCallback = null) {
+  function init(c, exitCallback, saveData = null, saveCallback = null, options = {}) {
     if (Array.isArray(saveData)) saveData = null;
     canvas = c;
     ctx = canvas.getContext('2d');
@@ -12185,6 +12192,7 @@ const Overworld = (() => {
     sideCameraX = clamp(sidePlayer.x - canvas.width * 0.43, 0, Math.max(0, sideWorldWidth() - canvas.width));
     insideHouse = platformScene === 'house';
     introActive = !saveData || typeof saveData !== 'object';
+    introReplayOnly = options.replayIntro === true;
     introTime = 0; introBookCue = -1;
     stopIntroNarration(); introNarratorBlocked = false;
     introWolfFleePaths = null;

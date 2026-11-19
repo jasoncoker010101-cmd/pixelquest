@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = process.argv[2] ? path.resolve(process.argv[2]) : fileURLToPath(new URL('../', import.meta.url));
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-assert.match(html, /<script\s+defer\s+src="\.\/world\.js"\s*><\/script>/, 'Game must load the same-site runtime directly');
+assert.match(html, /<script\s+defer\s+src="\.\/world\.js(?:\?v=[\w.-]+)?"\s*><\/script>/, 'Game must load the same-site runtime directly');
 for (const [i, match] of [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].entries()) {
   new vm.Script(match[1], { filename: `index.html inline script ${i + 1}` });
 }
