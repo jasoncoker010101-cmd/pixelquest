@@ -2141,16 +2141,18 @@ const Overworld = (() => {
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
     ctx.fillText('A/D MOVE  SPACE JUMP  J ATTACK  E INTERACT', 5, 236);
 
-    if (Math.abs(sidePlayer.x - 144) < 18 && Math.abs(sidePlayer.y - 164) < 52) {
+    const noteDistance = Math.hypot(sidePlayer.x - 144, sidePlayer.y - 164);
+    const armorDistance = Math.hypot(sidePlayer.x - 181, sidePlayer.y - 164);
+    if (Math.abs(sidePlayer.y - 164) < 58 && Math.min(noteDistance, armorDistance) < 43 && noteDistance <= armorDistance) {
       ctx.fillStyle = 'rgba(15,12,24,.97)'; ctx.fillRect(82 - sideCameraX, 176, 124, 16);
       ctx.strokeStyle = '#f4d27b'; ctx.lineWidth = 1; ctx.strokeRect(82.5 - sideCameraX, 176.5, 123, 15);
       ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('[ E / X ] READ DAD\'S NOTE', 144 - sideCameraX, 187);
-    } else if (Math.abs(sidePlayer.x - 181) < 17 && Math.abs(sidePlayer.y - 164) < 52) {
+      ctx.fillText('[ E / ✕ ] READ DAD\'S NOTE', 144 - sideCameraX, 187);
+    } else if (Math.abs(sidePlayer.y - 164) < 58 && armorDistance < 43) {
       ctx.fillStyle = 'rgba(15,12,24,.97)'; ctx.fillRect(119 - sideCameraX, 176, 125, 16);
       ctx.strokeStyle = '#f4d27b'; ctx.lineWidth = 1; ctx.strokeRect(119.5 - sideCameraX, 176.5, 124, 15);
       ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-      ctx.fillText(equipment.armor ? 'ARMOR EQUIPPED' : '[ E / X ] EQUIP ARMOR', 181 - sideCameraX, 187);
+      ctx.fillText(equipment.armor ? 'ARMOR EQUIPPED' : '[ E / ✕ ] EQUIP ARMOR', 181 - sideCameraX, 187);
     } else if (Math.abs(sidePlayer.x - 930) < 55) {
       ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(875 - sideCameraX, 180, 110, 13);
       ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(875.5 - sideCameraX, 180.5, 109, 12);
@@ -2281,12 +2283,15 @@ const Overworld = (() => {
 
   function interactPlatformer() {
     if (platformScene === 'house') {
-      if (Math.abs(sidePlayer.x - 144) < 18 && Math.abs(sidePlayer.y - 164) < 48) {
+      const nearDadObjects = Math.abs(sidePlayer.y - 164) < 58;
+      const noteDistance = Math.hypot(sidePlayer.x - 144, sidePlayer.y - 164);
+      const armorDistance = Math.hypot(sidePlayer.x - 181, sidePlayer.y - 164);
+      if (nearDadObjects && Math.min(noteDistance, armorDistance) < 43 && noteDistance <= armorDistance) {
         panel = 'dad-note';
         dadNoteRead = true;
         return;
       }
-      if (Math.abs(sidePlayer.x - 181) < 17 && Math.abs(sidePlayer.y - 164) < 52) {
+      if (nearDadObjects && armorDistance < 43) {
         if (!equipment.armor) {
           equipment.armor = true;
           notice = "You equipped Dad's armor.";
@@ -2963,6 +2968,7 @@ const Overworld = (() => {
       }
       return;
     }
+    if (action === 'jump') { if (platformMode && !panel && platformScene === 'forest') sideJumpQueued = true; return; }
     if (action === 'attack') { if (platformScene === 'forest' && !panel) sideAttackQueued = true; return; }
     if (action === 'back' || action === 'pause') {
       paused = true;
