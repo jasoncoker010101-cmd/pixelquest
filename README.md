@@ -4,9 +4,26 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
 
 **Play online:** https://jasoncoker010101-cmd.github.io/pixelquest/
 
-## The Pale Court update
+## Salt Coast expansion
 
-- **Chapter 4 is playable:** after Vael's final scene, take the east road out of Gloamhold to Lantern Quay. Learn the night-ferry signal, visit the Court's outer gallery, and look for a fresh trace of Seren. Both new areas are non-combat maps with optional conversations and lore. The Court's lower well is not open yet.
+In Chapter 4, look for the Brinewick path east of Wren at Lantern Quay.
+Brinewick has a campfire, pier, smith, kitchen, stable, and three-wave arena.
+Cast at the pier, watch the float, and interact again when it dips. Give your
+first Saltfin to Mara to learn how to find the hidden vault.
+
+Orrin works on the blade you have equipped. Tempered blades and reinforced
+coats wear in combat and can be repaired; base gear never breaks. Equip both
+Brineguard pieces for a defense bonus. Land hits with a blade to unlock
+Undertow, then hold down and press Attack while grounded. The Tideglass Blade
+learns it faster.
+
+After reading the Pale Court ledger, enter the east door to descend to the
+Lower Well. Saga I ends there. Optional lore unlocks a second ending with its
+own epilogue. Existing Chapter 4 saves keep their original ledger progress.
+
+## Earlier Pale Court update
+
+- **Chapter 4 opens the coast:** after Vael's final scene, take the east road out of Gloamhold to Lantern Quay. Learn the night-ferry signal, visit the Court's outer gallery, and look for a fresh trace of Seren.
 - **New art:** Skarn has his own animated hammer-wielder, with a bone mask that tracks his second-form animation. Mourn and Tidemaw have extra costume detail. The house armor is a steel suit on a wooden rack that empties when equipped.
 - **Readability and input:** dialogue paginates instead of cutting off long lines. The touch controls sit below the screen on phones. The CRT effect, sound and music can be switched off from Settings; Blood Effects also has a pause-menu switch.
 - **Release checks:** `node tools/verify-build.mjs` validates scripts, lore IDs, spawn locations, boss configuration, sprite-sheet frame bounds and runtime asset references. GitHub Pages checks the staged game before uploading it and excludes editable/source packs from the website.

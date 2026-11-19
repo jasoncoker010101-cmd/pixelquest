@@ -32,6 +32,7 @@ jobs:
             --exclude='*.pdf' --exclude='__MACOSX/' --exclude='._*' \
             --exclude='/goblinpack/' assets/ "$RUNNER_TEMP/pixelquest-site/assets/"
           node tools/verify-build.mjs "$RUNNER_TEMP/pixelquest-site"
+          node tools/verify-tide.mjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload site

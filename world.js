@@ -167,8 +167,8 @@ const Overworld = (() => {
       respawn: 0, moving: false, kvx: 0, flash: 0, walk: 0, showHpUntil: 0, blockTime: 0, bob: Math.random() * 6 };
   }
   function loadSceneMobs(scene) {
-    sideMobs = (SCENE_MOBS[scene] || []).map(([type, x, range], i) => makeMob(type, x, range, i));
-    sideMobs.forEach(m => { if (m.T.riser) m.dormant = true; rollElite(m); });
+    sideMobs = (SCENE_MOBS[scene] || []).filter(([type]) => type !== 'reever' || !story.reeverDown).map(([type, x, range], i) => makeMob(type, x, range, i));
+    sideMobs.forEach(m => { if (m.T.riser) m.dormant = true; if (m.type !== 'reever') rollElite(m); });
     const R = REGIONS[scene];
     if (R && R.boss && !story[R.bossFlag]) {
       const boss = makeMob(R.boss, R.bossX, 120, 0);
@@ -2816,8 +2816,8 @@ const Overworld = (() => {
   let levelUpUntil = 0;
 
   function xpForNext(level) { return 20 + level * 15; }
-  function totalDefense() { return stats.defense + (stats.defUp || 0) + (stats.perkDef || 0) + (equipment.armor ? ARMOR_DEFENSE : 0); }
-  function totalAttack() { return stats.strength + (stats.atkUp || 0) + (stats.perkAtk || 0) + (equipment.armor ? WEAPONS[currentWeapon()].atk : 0); }
+  function totalDefense() { return stats.defense + (stats.defUp || 0) + (stats.perkDef || 0) + (equipment.armor ? ARMOR_DEFENSE + tideDefense() : 0); }
+  function totalAttack() { return stats.strength + (stats.atkUp || 0) + (stats.perkAtk || 0) + (equipment.armor ? WEAPONS[currentWeapon()].atk + (tide.forge[currentWeapon()] || 0) : 0); }
 
   // ---------- Audio: recorded CC0 sound effects + area music ----------
   const SFX_BANK = {
@@ -2936,6 +2936,10 @@ const Overworld = (() => {
     if (platformScene === 'pass') return Math.abs(sidePlayer.x - 1900) < 260 ? { camp: 0.8, pass: 0.4 } : { pass: 1 };
     if (platformScene === 'harbor') return { camp: 0.7, ambience: 0.35 };
     if (platformScene === 'court') return { gloam: 0.45 };
+    if (platformScene === 'village') return { house: .53, ambience: .48 };
+    if (platformScene === 'ring') return tideArena ? { bossMare: .65 } : { pass: .44, ambience: .4 };
+    if (platformScene === 'vault') return { hollow: .72, ambience: .18 };
+    if (platformScene === 'well') return tide.ending ? { house: .55 } : { gloam: .57, hollow: .22 };
     if (platformScene === 'gloam') return Math.abs(sidePlayer.x - 2240) < 220 ? { camp: 0.7, gloam: 0.5 } : { gloam: 1, ambience: 0.25 };
     if (platformScene === 'hollow') {
       if (story.chapterDone) return { camp: 1 };
@@ -3061,6 +3065,7 @@ const Overworld = (() => {
     if (upHeld) return 'upper';
     if (!sidePlayer.onGround && downHeld()) return 'down';
     if (!sidePlayer.onGround) return groundBelowDistance() > 22 ? 'air' : 'slash1';
+    if (downHeld() && tideMastered()) return 'undertow';
     if (comboTimer > 0 && lastMove && KNIGHT_MOVES[lastMove].next) return KNIGHT_MOVES[lastMove].next;
     if (Math.abs(sidePlayer.vx) > 132) return 'thrust';
     return 'slash1';
@@ -3144,6 +3149,11 @@ const Overworld = (() => {
       if (move.down) combatFx.push({ kind: 'downarc', x: sidePlayer.x, y: sidePlayer.y, f: sidePlayer.facing, color: WEAPONS[currentWeapon()].arc, life: 0.18, max: 0.18, vx: 0, vy: 0 });
       if (move.fx === 'upper') combatFx.push({ kind: 'arc', x: sidePlayer.x + sidePlayer.facing * 8, y: sidePlayer.y - 26, f: sidePlayer.facing, r: 34, up: true, color: WEAPONS[currentWeapon()].arc, life: 0.2, max: 0.2, vx: 0, vy: 0 });
       if (move.fx === 'power') { releaseMoonblade(); sfx('waveHum'); }
+      if (atk.name === 'undertow') {
+        combatFx.push({ kind: 'arc', x: sidePlayer.x + sidePlayer.facing * 30, y: sidePlayer.y - 23,
+          f: sidePlayer.facing, r: 43, color: WEAPONS[currentWeapon()].arc, life: .24, max: .24, vx: 0, vy: 0 });
+        sfx('waveHum', .55, 1.22);
+      }
     }
     if (idx >= move.frames.length) {
       const queued = atk.queued;
@@ -3351,7 +3361,7 @@ const Overworld = (() => {
   function mobTop(m) { return m.y - m.T.bodyH; }
   function weaponAttack() { return WEAPONS[currentWeapon()].atk; }
 
-  function damageMob(m, dmg, f, knock, big, crit) {
+  function damageMob(m, dmg, f, knock, big, crit, companion = false) {
     if (bossFight && (bossFight.phaseTwo || (m.T.boss && bossFight.intro))) return;
     // Skeletons sometimes raise their shield against hits from the front.
     if (m.T.block && !m.dead && m.attackTime <= 0 && m.hurtTime <= 0 && Math.random() < m.T.block && Math.sign(sidePlayer.x - m.x) === m.dir) {
@@ -3365,6 +3375,7 @@ const Overworld = (() => {
     const turns = m.T.boss && bossFight && bossFight.active && !m.enraged && m.hp - dmg <= halfway;
     if (turns) dmg = m.hp - halfway;
     m.hp = Math.max(0, m.hp - dmg);
+    if (!companion && dmg > 0) tideWearBlade();
     m.flash = 0.07; m.showHpUntil = time + 3;
     if (!m.T.armor) {
       m.hurtTime = 0.3; m.kvx = f * knock; m.attackTime = 0; m.attackHit = true;
@@ -3419,7 +3430,7 @@ const Overworld = (() => {
 
   function defeatMob(m, f) {
     const T = m.T;
-    m.dead = true; m.deadTime = 0; m.respawn = T.boss ? Infinity : 24; m.attackTime = 0;
+    m.dead = true; m.deadTime = 0; m.respawn = T.boss || m.arenaWave || m.type === 'reever' ? Infinity : 24; m.attackTime = 0;
     m.kvx = T.armor ? 0 : f * 160;
     hitStop = T.boss ? 0.3 : 0.11; screenShake = Math.max(screenShake, T.boss ? 7 : 3.5);
     stats.kills = (stats.kills || 0) + 1;
@@ -3434,8 +3445,9 @@ const Overworld = (() => {
       if (Math.random() < chance) pickups.push({ type: item, amount: 1, x: m.x, y: dropY, vx: (k % 2 ? -1 : 1) * f * 60, vy: -190 - k * 20, age: 0 });
     });
     fortuneOnKill(m, dropY);
-    depthsOnKill(m);
-    gainXp(Math.round(T.xp * (m.elite ? 2.5 : 1) * (bloodMoon ? 2 : 1)));
+    if (!m.arenaWave) depthsOnKill(m);
+    tideOnKill(m);
+    if (T.xp) gainXp(Math.round(T.xp * (m.elite ? 2.5 : 1) * (bloodMoon ? 2 : 1)));
     if (T.boss) onBossDefeated(m);
   }
 
@@ -3457,6 +3469,7 @@ const Overworld = (() => {
 
   function hurtSidePlayer(amount, fromDir, who) {
     amount = fortuneHurt(amount);
+    if (equipment.armor && tide.coatTemper > 0) tide.armorWear = Math.min(100, tide.armorWear + 5);
     stats.health = Math.max(0, stats.health - amount);
     sidePlayer.hurtTime = 0.36; sidePlayer.invulnTime = 1.1;
     sidePlayer.atk = null; sidePlayer.attackTime = 0; comboTimer = 0; sidePlayer.charge = null; sidePlayer.roll = null; sidePlayer.drink = null;
@@ -4014,14 +4027,14 @@ const Overworld = (() => {
       'kk..........']
   };
   function drawItemIcon(name, x, y, scale = 2) {
-    const art = ICONS[name];
+    const art = TIDE_ICONS[name] || ICONS[name];
     if (!art) return;
     for (let r = 0; r < 12; r++) {
       const row = art[r];
       for (let c = 0; c < 12; c++) {
         const ch = row[c];
         if (!ch || ch === '.') continue;
-        ctx.fillStyle = ICON_PALETTE[ch] || '#ff00ff';
+        ctx.fillStyle = (TIDE_ICONS[name] ? TIDE_INK : ICON_PALETTE)[ch] || '#ff00ff';
         ctx.fillRect(x + c * scale, y + r * scale, scale, scale);
       }
     }
@@ -4031,6 +4044,8 @@ const Overworld = (() => {
     syncArena();
     if (hitStop > 0) { hitStop -= dt; sideMobs.forEach(g => { g.flash = Math.max(0, (g.flash || 0) - dt); }); updateSideCamera(dt); return; }
     time += dt;
+    if (!panel && !dialogue && !bossFight?.cine) tide.mealTime = Math.max(0, tide.mealTime - dt);
+    if (tideFishing) updateTideFishing(dt);
     saveTimer += dt;
     if (saveTimer >= 5) {
       saveTimer = 0;
@@ -4053,6 +4068,7 @@ const Overworld = (() => {
       sidePlayer.x = clamp(sidePlayer.x + sidePlayer.vx * dt, 16, sideWorldWidth() - 16);
       if (sidePlayer.y < SIDE_GROUND_Y) { sidePlayer.vy += 820 * dt; sidePlayer.y = Math.min(SIDE_GROUND_Y, sidePlayer.y + sidePlayer.vy * dt); } else sidePlayer.vy = 0;
       if (sidePlayer.deadTime <= 0) {
+        if (tideArena) { tideArena = null; loadSceneMobs(platformScene); }
         if (bossFight) endBossFight(false);
         const lf = FIRES.find(f => f.id === story.lastFire && f.scene === platformScene);
         sidePlayer.x = lf ? lf.x - 30 : region().entry; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.roll = null; sidePlayer.charge = null;
@@ -4120,7 +4136,7 @@ const Overworld = (() => {
       if (keys.has('arrowleft') || keys.has('a')) direction -= 1;
       if (keys.has('arrowright') || keys.has('d')) direction += 1;
       const sprinting = direction !== 0 && keys.has('shift') && stats.stamina > 0;
-      const targetSpeed = direction * (sprinting ? 154 : 112) * blessSpeed();
+      const targetSpeed = direction * (sprinting ? 154 : 112) * blessSpeed() * (tideMounted() ? 1.55 : 1);
       const response = Math.min(1, dt * (direction ? 12 : 15));
       sidePlayer.vx += (targetSpeed - sidePlayer.vx) * response;
       if (direction) sidePlayer.facing = direction < 0 ? -1 : 1;
@@ -4188,6 +4204,7 @@ const Overworld = (() => {
     while (stepDistance >= 20) { stats.steps++; stepDistance -= 20; }
 
     if (outdoorScene()) { updateForestCombat(time < witchUntil ? dt * 0.3 : dt); updateStory(dt); }
+    updateTideWorld(dt);
     updateSideCamera(dt);
   }
 
@@ -4221,8 +4238,7 @@ const Overworld = (() => {
         Math.max(1, Math.round(h * scale))
       );
     };
-    const outline = '#26313b', steel = '#718493', light = '#c5d0d3';
-    const shade = '#435665', gold = '#c49a55';
+    const [outline, steel, light, shade, gold] = TIDE_DYES[tide.dye] || TIDE_DYES.iron;
     pixel(9, 2, 14, 3, outline);
     pixel(7, 5, 18, 9, outline);
     pixel(9, 6, 14, 6, steel);
@@ -4610,12 +4626,14 @@ const Overworld = (() => {
   }
   function drawMob(m) {
     const T = m.T;
+    if (T.tideArt) { drawReever(m); return; }
     if (T.art) { drawChampion(m); return; }
     const [anim, frame] = mobFrame(m);
     const img0 = mobSheet(T, anim);
     if (!imgReady(img0)) return;
     const tint = m.enraged ? hexRgb(BOSS_FORMS[m.type][2]) + ',.32' : T.tint;
-    const img = tint ? tintedSheet(img0, tint) : img0;
+    const second = T.second && m.enraged ? tideArt[T.second] : null;
+    const img = imgReady(second) ? second : tint ? tintedSheet(img0, tint) : img0;
     let alpha = T.alpha || 1;
     if (m.dead) {
       const fadeStart = T.boss ? 1.6 : T.anims.death ? (anim[1] / (T.anims.death[2] || 9) + 0.5) : 0.12;
@@ -4801,6 +4819,7 @@ const Overworld = (() => {
     const col = frame % cols, row = Math.floor(frame / cols) % rows;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
+    if (TIDE_DYE_FILTERS[tide.dye]) ctx.filter = (ctx.filter === 'none' ? '' : ctx.filter + ' ') + TIDE_DYE_FILTERS[tide.dye];
     ctx.translate(Math.round(x), Math.round(y));
     ctx.scale(facing < 0 ? -scale : scale, scale);
     ctx.drawImage(sheet, col * 128, row * 64, 128, 64, -62, -64, 128, 64);
@@ -4851,7 +4870,7 @@ const Overworld = (() => {
 
   function drawSidePlayer() {
     const x = Math.round(sidePlayer.x);
-    const y = Math.round(sidePlayer.y);
+    let y = Math.round(sidePlayer.y);
     // The knight sheets are used whenever they are loaded so attacks always
     // animate; the story requires Dad's armor before the forest anyway.
     const useKnight = (equipment.armor || outdoorScene()) && knightSprites.idle && knightSprites.idle.complete && knightSprites.idle.naturalWidth;
@@ -4861,6 +4880,15 @@ const Overworld = (() => {
     const shadowW = Math.max(6, 22 - air * 0.12);
     ctx.fillStyle = 'rgba(0,0,0,.28)';
     ctx.fillRect(Math.round(x - shadowW / 2), groundBelow - 1, Math.round(shadowW), 2);
+    if (story.kiteFound && outdoorScene()) drawTideKite(x, y);
+    if (tideMounted()) {
+      const frame = sidePlayer.moving ? Math.floor(time * 12) % 4 : 0;
+      if (imgReady(tideArt.mount)) {
+        ctx.save(); ctx.translate(x, y); ctx.scale(sidePlayer.facing, 1);
+        ctx.drawImage(tideArt.mount, frame * 56, 0, 56, 32, -41, -45, 80, 46);
+        ctx.restore(); y -= 14;
+      }
+    }
     if (useKnight) {
       const r = sidePlayer.roll, c = sidePlayer.charge;
       // Blink while invulnerable after being hit (not during a dodge roll).
@@ -5251,6 +5279,10 @@ const Overworld = (() => {
       ctx.drawImage(beastArt.wrenIdle, 52, 20, 24, 24, x - 4, y - 4, 48, 48);
     } else if (who === 'nessa' && imgReady(coastArt.ferrier)) {
       ctx.drawImage(coastArt.ferrier, 5, 3, 29, 31, x - 2, y - 2, 44, 47);
+    } else if (who === 'mara' && imgReady(tideArt.fisher)) {
+      ctx.drawImage(tideArt.fisher, 8, 1, 16, 17, x, y, 40, 43);
+    } else if (who === 'seren') {
+      ctx.translate(x + 19, y + 47); ctx.scale(1.25, 1.25); drawTideSeren(0, 0);
     } else if (who === 'skarn') {
       const T = MOB_TYPES.skarn, img = mobSheet(T, T.anims.idle);
       if (imgReady(img)) ctx.drawImage(img, 52, 36, 45, 45, x, y, 40, 40);
@@ -5387,13 +5419,15 @@ const Overworld = (() => {
   function fortuneDamage(dmg) {
     if (hasRelic('glasssaint')) dmg += 3;
     if (hasRelic('bloodidol') && stats.health <= stats.maxHealth * 0.35) dmg = Math.ceil(dmg * 1.6);
-    return blessDamage(dmg);
+    const w = currentWeapon();
+    const edge = tide.wear[w] >= 100 ? 0 : (tide.forge[w] || 0);
+    return blessDamage(dmg + edge + (tide.mealTime > 0 && tide.meal === 'skewer' ? 1 : 0));
   }
   function fortuneHurt(amount) {
     if (hasRelic('glasssaint')) amount += 2;
     if (hasRelic('ironbark')) amount -= 1;
     if (bloodMoon) amount += 1;
-    return Math.max(1, blessHurt(amount));
+    return Math.max(1, blessHurt(amount) - (tide.mealTime > 0 && tide.meal === 'chowder' ? 1 : 0));
   }
   function rollRarity(bonus = 0, floor = 'common') {
     const L = luckValue() + bonus;
@@ -6432,7 +6466,7 @@ const Overworld = (() => {
     bossFight = { intro: true, active: false, t: 0, talked: false, cine: true, speed: retry ? 1.5 : 1, ev: {}, flash: 0, flashColor: '255,255,255', type: boss.type };
     cineFx.length = 0;
     // Regular monsters clear out of the arena so the duel is one on one.
-    sideMobs.forEach(o => { if (o !== boss && !o.dead && o.x > BOSS_ARENA.left - 220) { o.dead = true; o.deadTime = 99; o.hp = 0; o.respawn = Infinity; spawnDust(o.x, SIDE_GROUND_Y, 4); } });
+    sideMobs.forEach(o => { if (o !== boss && o.type !== 'reever' && !o.dead && o.x > BOSS_ARENA.left - 220) { o.dead = true; o.deadTime = 99; o.hp = 0; o.respawn = Infinity; spawnDust(o.x, SIDE_GROUND_Y, 4); } });
     mobShots.length = 0;
     sidePlayer.x = Math.max(sidePlayer.x, BOSS_ARENA.left + 40);
     sidePlayer.facing = 1;
@@ -6729,8 +6763,10 @@ const Overworld = (() => {
   }
   function onBossDefeated(m) {
     endBossFight(true);
-    sideMobs.forEach(o => { if (o !== m && !o.dead && o.x > BOSS_ARENA.left - 100) { o.hp = 0; defeatMob(o, 1); } });
+    sideMobs.forEach(o => { if (o !== m && o.type !== 'reever' && !o.dead && o.x > BOSS_ARENA.left - 100) { o.hp = 0; defeatMob(o, 1); } });
     story[region().bossFlag] = true;
+    if (m.type === 'saltStag') tideGrant('antler', 1);
+    if (m.type === 'wellKeeper') tideGrant('wellglass', 1);
     bossOutro = { t: 0, x: m.x, jingle: false, scene: platformScene };
     notice = m.T.short + ' has fallen.'; noticeUntil = time + 3;
     if (onSave) onSave(getSaveData());
@@ -6740,6 +6776,12 @@ const Overworld = (() => {
     if (!bossOutro) return;
     bossOutro.t += dt;
     if (bossOutro.t > 0.9 && !bossOutro.jingle) { bossOutro.jingle = true; sfx('victory'); }
+    if (region().tide && bossOutro.t > 1.5) {
+      bossOutro = null;
+      if (platformScene === 'well') tideNotice('Take the east path to Seren.', 'magic');
+      else tideNotice('The stag has fallen. Search the reliquary.', 'magic');
+      return;
+    }
     if (REGIONS[bossOutro.scene] && REGIONS[bossOutro.scene].side) { if (bossOutro.t > 2.2) depthsOutro(); return; }
     if (bossOutro.scene === 'hollow' && bossOutro.t > 2.6 && !dad) {
       const side = sidePlayer.x > 3150 ? -1 : 1;
@@ -6808,6 +6850,8 @@ const Overworld = (() => {
     }
     const fire = fireHere();
     if (fire) return { label: 'REST BY THE FIRE', act: () => restAtFire(fire) };
+    const tideSpot = tideInteraction(x);
+    if (tideSpot) return tideSpot;
     const chest = nearChest();
     if (chest) return { label: 'OPEN ' + RARITY[chest.rarity].name + ' CHEST', act: () => openChest(chest) };
     const dep = depthsInteraction(x);
@@ -6916,7 +6960,7 @@ const Overworld = (() => {
       addLore(entry.id); story.ch4Done = true;
       gainXp(100);
       if (onSave) onSave(getSaveData());
-      openChapterPanel(4);
+      tideNotice('The ledger releases the seal at the far door.', 'magic');
     });
   }
   const CAMP = { start: 3590, tent: 3625, fire: 3700, log: 3738, bram: 3800, cart: 3842, sign: 3912 };
@@ -7248,10 +7292,10 @@ const Overworld = (() => {
   // ---- Tess, the wandering peddler ----
   function rollPeddler(scene) {
     depths.peddler = null;
-    const R = REGIONS[scene]; if (!R || R.side || R.peaceful) return;
-    if (Math.random() > 0.38) return;
+    const R = REGIONS[scene]; if (!R || R.side || R.peaceful && scene !== 'village' || scene === 'ring') return;
+    if (Math.random() > (scene === 'village' ? .27 : .38)) return;
     const lo = 420, hi = (R.arena ? R.arena.left : R.width) - 400;
-    let x = lo + Math.random() * (hi - lo);
+    let x = scene === 'village' ? 925 : lo + Math.random() * Math.max(0, hi - lo);
     if (FIRES.some(f => f.scene === scene && Math.abs(f.x - x) < 200)) x = lo + 80;
     const wares = [];
     const relicR = rollRarity(0.35, 'rare'), rid = randomRelic(relicR);
@@ -7337,7 +7381,7 @@ const Overworld = (() => {
   // ---- Ambushes ----
   function rollAmbush(scene) {
     depths.ambush = null;
-    const R = REGIONS[scene]; if (!R || R.peaceful || scene === 'forest' && !equipment.armor) return;
+    const R = REGIONS[scene]; if (!R || R.peaceful || scene === 'ring' || scene === 'forest' && !equipment.armor) return;
     if (Math.random() > (R.side ? 0.45 : 0.3)) return;
     const hi = (R.arena ? R.arena.left : R.width - 400) - 260;
     const x = 500 + Math.random() * Math.max(100, hi - 500);
@@ -7345,7 +7389,7 @@ const Overworld = (() => {
     depths.ambush = { x: Math.round(x), armed: true, done: false, mobs: [] };
   }
   function startAmbush(x, trial) {
-    const types = Array.from(new Set((SCENE_MOBS[platformScene] || []).map(s => s[0]))).filter(t => !MOB_TYPES[t].riser && !MOB_TYPES[t].boss);
+    const types = Array.from(new Set((SCENE_MOBS[platformScene] || []).map(s => s[0]))).filter(t => !MOB_TYPES[t].riser && !MOB_TYPES[t].boss && t !== 'reever');
     const n = trial ? 3 : 3 + Math.min(2, questChapter() - 1);
     const mobs = [];
     for (let i = 0; i < n; i++) {
@@ -7753,9 +7797,586 @@ const Overworld = (() => {
     });
   }
   // Moves the knight to another outdoor region (or a different spot in one).
+  // The Salt Coast expansion. New state is namespaced so old slots still load.
+  const TIDE_POINTS = { quay: 555, camp: 132, smith: 267, cook: 487, fisher: 670, pier: 810, stable: 1018, ring: 1200, hatch: 1450 };
+  const TIDE_DYES = {
+    iron: ['#26313b', '#718493', '#c5d0d3', '#435665', '#c49a55'],
+    kelp: ['#142c32', '#367a68', '#b5e6ad', '#285450', '#e2bd65'],
+    coral: ['#31202e', '#a54d60', '#f4bba0', '#673342', '#ffcc74']
+  };
+  const TIDE_DYE_FILTERS = { kelp: 'sepia(.40) hue-rotate(73deg) saturate(1.65)', coral: 'sepia(.42) hue-rotate(310deg) saturate(1.9)' };
+  const TIDE_GEAR = ['coatTemper', 'armorWear', 'cowl', 'boots', 'cowlOn', 'bootsOn', 'dye', 'casts', 'caught', 'meal', 'mealTime', 'ending', 'arenaWins'];
+  const tide = {};
+  let tideFishing = null, tideArena = null, tideService = '', tideSel = 0, tideMessage = '', kiteClock = 0;
+  function tideLoad(s) {
+    Object.assign(tide, { coatTemper: 0, armorWear: 0, cowl: false, boots: false, cowlOn: false, bootsOn: false, dye: 'iron', casts: 0, caught: 0,
+      forge: {}, wear: {}, mastery: {}, meal: '', mealTime: 0, ending: '', arenaWins: 0 });
+    tideFishing = tideArena = null; kiteClock = 0; tideRide = tideDrift = false;
+    if (!s || typeof s !== 'object') return;
+    for (const k of ['cowl', 'boots', 'cowlOn', 'bootsOn']) tide[k] = s[k] === true;
+    tide.cowlOn &&= tide.cowl; tide.bootsOn &&= tide.boots;
+    for (const [k, max] of Object.entries({ coatTemper: 1, armorWear: 100, casts: 1e6, caught: 1e6, mealTime: 90, arenaWins: 1e6 })) {
+      if (Number.isFinite(s[k])) tide[k] = clamp(s[k], 0, max);
+    }
+    if (Object.hasOwn(TIDE_DYES, s.dye)) tide.dye = s.dye;
+    if (['shutter', 'homeward'].includes(s.ending)) tide.ending = s.ending;
+    if (['chowder', 'skewer'].includes(s.meal)) tide.meal = s.meal;
+    for (const w of Object.keys(WEAPONS)) for (const [k, max] of [['forge', 2], ['wear', 100], ['mastery', 100]]) {
+      const val = s[k]?.[w]; if (Number.isFinite(val)) tide[k][w] = clamp(Math.floor(val), 0, max);
+    }
+  }
+  function tideSave() {
+    return { ...Object.fromEntries(TIDE_GEAR.map(k => [k, tide[k]])), forge: { ...tide.forge }, wear: { ...tide.wear }, mastery: { ...tide.mastery } };
+  }
+  const TIDE_INK = { k: '#101d2a', t: '#41877e', T: '#91dfb1', b: '#567699', B: '#80c6e2', W: '#eeecc8', g: '#a5734d', G: '#e0b071', o: '#f19b72', r: '#9e525e' };
+  const TIDE_ICONS = Object.fromEntries(Object.entries({
+    saltfin: '............ ..t.....t... ..kt...kT... ...ktttTTk.. ....tTWWTk.. ..kkTTTkWk.. ...ttBBkk... .......k....',
+    ghosteel: '.......tt... ....ttTBWk.. ...tTBBBWk.. ..tTBBkkk... .tTBBk..t... .tBkk..tt... ..tBTTTk.... ...kkk......',
+    chowder: '............ ....W..W.... .....W..W... ..kWWWWWWk.. .kGrGoGrrGk. .kBBBBBBBBk. ..kBBBBBBk.. ...kkkkkk...',
+    skewer: '.........g.. ........g... ......rBG... .....rBWo... ....rBBG.... ...rBWG..... ...kBG...... ..gk........ .g..........',
+    antler: '......G..... ....g.G.G... ....G.G.G.G. ....G.GGG.G. ...GGGgGGGG. .....gGGGG.. ..gGGGGGg... .Gggg.......',
+    wellglass: '.....k...... ....kTk..... ...kTBTk.... ..kTBBWTk... ...kBWTk.... ...kTWTk.... ....kTk..... .....k......',
+    tideblade: '..........k. .........kT. ........kTB. .......kTBk. ......kTBk.. .....kTBk... ..k.kTBk.... ..kkTBk..... ...kGk...... ..kgkk...... .kk.........'
+  }).map(([k, rows]) => [k, rows.split(' ')]));
+  Object.values(TIDE_ICONS).forEach(rows => { while (rows.length < 12) rows.push('............'); });
+  const tideArt = {};
+  for (const id of ['village-sky', 'village-far', 'village-ridge', 'village-trees', 'salt-wall', 'salt-deep', 'salt-gold',
+    'well-far', 'well-reeds', 'well-reef', 'well-sand', 'fisher', 'smith', 'cook', 'kite', 'mount', 'stag-crown', 'keeper-lantern']) {
+    tideArt[id] = loadImg('tide/' + id + '.png');
+  }
+  const tideGround = w => ({ x: 0, y: SIDE_GROUND_Y, w, h: 44 });
+  Object.assign(REGIONS, {
+    village: { name: 'BRINEWICK', tide: true, peaceful: true, width: 1550, entry: 86, color: '#ffe3aa', plats: [tideGround(1550)] },
+    vault: { name: 'THE SALT VAULT', tide: true, width: 2110, entry: 75, color: '#e7bc83', plats: [tideGround(2110)], arena: { left: 1260, trigger: 1350, right: 1830 }, boss: 'saltStag', bossX: 1650, bossFlag: 'saltBossDone' },
+    well: { name: 'THE LOWER WELL', tide: true, width: 2070, entry: 70, color: '#a4f5ec', plats: [tideGround(2070)], arena: { left: 1230, trigger: 1330, right: 1790 }, boss: 'wellKeeper', bossX: 1600, bossFlag: 'wellBossDone' },
+    ring: { name: 'BREAKWATER RING', tide: true, width: 710, entry: 76, color: '#ffc692', plats: [tideGround(710)] }
+  });
+  for (const flag of ['villageVisited', 'vaultVisited', 'wellVisited', 'ringVisited', 'netQuest', 'netReturned', 'tideCache', 'saltBossSeen', 'saltBossDone',
+    'wellBossSeen', 'wellBossDone', 'kiteFound', 'mountFound', 'tideBounty', 'reeverDown', 'tidePaid', 'driftWitnessed']) story[flag] = STORY_DEFAULTS[flag] = false;
+  FIRES.push({ id: 'brine', scene: 'village', x: TIDE_POINTS.camp, name: 'Brinewick Hearth' });
+  Object.assign(REGION_SUBS, { village: 'Salt Coast / Fisher settlement', vault: 'Hidden below the tidal flats', well: 'Saga I / The last watch', ring: 'Three waves / One bell' });
+  const tideWalker = { src: 'tide/', voice: 'bones', hp: 23, speed: 65, chase: 250, reach: 48, dmg: 7, atkTime: 0.85, hit: [0.53, 0.68], cd: [1.4, 2.1], xp: 30, coins: [4, 7], drops: [] };
+  const tideBossAnims = (id, frames) => ({ idle: [id, frames, 5], move: [id, frames, 8], attack: [id, frames], hurt: null, death: null });
+  Object.assign(MOB_TYPES, {
+    hexer: { ...tideWalker, name: 'Brine Hexer', anims: tideBossAnims('hexer', 5), fw: 55, fh: 93, ax: 27, ay: 87, scale: .75, faceLeft: true,
+      bodyH: 43, width: 24, fly: 13, ranged: true, reach: 144, hp: 19, dmg: 6, light: '124,222,211', drops: [['saltfin', 0.20]] },
+    reever: { ...tideWalker, name: 'Low-Tide Reever', tideArt: 'reever', anims: {}, bodyH: 53, width: 22, hp: 58, speed: 87, reach: 59,
+      armor: true, pounce: 150, dmg: 9, atkTime: 0.99, cd: [1.65, 2.0], xp: 95, coins: [10, 14] },
+    saltStag: { ...tideWalker, name: 'Salt Stag, the Hoardbound', short: 'The Salt Stag', anims: tideBossAnims('watcher', 4), second: 'stag-crown',
+      fw: 112, fh: 144, ax: 47, ay: 142, scale: .85, faceLeft: true, bodyH: 83, width: 53, hp: 130, boss: true, armor: true,
+      chase: 900, reach: 76, speed: 70, dmg: 10, atkTime: 1.17, cd: [1.65, 2.0], xp: 280, coins: [25, 37] },
+    wellKeeper: { ...tideWalker, name: 'Ione, Keeper of the Lower Well', short: 'Ione', anims: tideBossAnims('keeper', 5), second: 'keeper-lantern',
+      fw: 64, fh: 96, ax: 32, ay: 85, scale: 1.27, faceLeft: true, bodyH: 82, width: 42, fly: 14, hp: 164, boss: true, armor: true,
+      chase: 900, reach: 90, speed: 58, dmg: 10, atkTime: 1.34, cd: [1.76, 2.1], volley: 2, shot: 'fire', xp: 400, coins: [32, 44] }
+  });
+  Object.assign(SCENE_MOBS, {
+    vault: [['hexer', 430, 59], ['hexer', 785, 80], ['reever', 1050, 48]],
+    well: [['hexer', 410, 53], ['hexer', 810, 54]]
+  });
+  for (const id of ['hexer', 'saltStag', 'wellKeeper']) mobSheet(MOB_TYPES[id], MOB_TYPES[id].anims.idle);
+  Object.assign(SPEAKERS, {
+    mara: { name: 'MARA', color: '#ffc3a5' }, teo: { name: 'TEO', color: '#ffd881' }, orrin: { name: 'ORRIN', color: '#f6a877' },
+    seren: { name: 'SEREN', color: '#c6fff0' }, ione: { name: 'IONE', color: '#acf9eb', mob: 'wellKeeper' }, stag: { name: 'SALT STAG', color: '#f1ce83', mob: 'saltStag' },
+    drift: { name: 'VOICE IN THE FOG', color: '#b6e5e9' }
+  });
+  Object.assign(BOSS_LINES, {
+    saltStag: { first: [{ who: 'rowan', text: 'Someone carved a name on every crate. Were you guarding all this for them?' },
+      { who: 'stag', text: 'They said they would come back. Put that coin down.' }], retry: [{ who: 'stag', text: 'Back for something else?' }],
+      flag: 'saltBossSeen', tip: 'Jump the low salt waves.' },
+    wellKeeper: { first: [{ who: 'ione', text: 'Hold there. The woman behind me has kept this door shut for twelve years.' },
+      { who: 'rowan', text: 'Her name is Seren. Did you ever ask if she wanted to stay?' },
+      { who: 'ione', text: 'She asked me to keep her son out.' }], retry: [{ who: 'ione', text: 'You have her stubborn feet.' }],
+      flag: 'wellBossSeen', tip: 'Roll through the glass volleys. Save room behind you.' }
+  });
+  Object.assign(BOSS_FORMS, {
+    saltStag: ['THE SALT CROWN', 'I kept what I could.', '#c6583c', '#ffe7a2', [[-17,-85,-29,51],[3,-88,17,39],[21,-70,47,30]], [[-14,-49,5,2]]],
+    wellKeeper: ['THE LAST LANTERN', "It was never my light.", '#307486', '#cefaf1', [[-17,-74,-45,51],[12,-85,44,49],[-7,-78,2,34]], [[-12,-41,25,2],[0,-51,2,27]]]
+  });
+  Object.assign(BOSS_CINE, {
+    saltStag: { nameAt: 1.85, main: '#ffd596', hot: '#fff3be', deep: '#9f542e', glow: '247,162,75', crest: 'fang' },
+    wellKeeper: { nameAt: 1.85, main: '#bbf9e9', hot: '#ecfff7', deep: '#387c89', glow: '83,233,221', crest: 'moon' }
+  });
+  ['reever', 'wellKeeper', 'saltStag'].forEach(k => DRY_MOBS.add(k));
+  Object.assign(ITEM_DEFS, {
+    saltfin: { name: 'Saltfin', icon: 'saltfin', type: 'INGREDIENT', rarity: 'common', value: 2, desc: ['Caught at Brinewick.', 'Use at the cookfire.'], lore: 'They turn sideways when the salt rain starts.' },
+    ghosteel: { name: 'Ghost Eel', icon: 'ghosteel', type: 'INGREDIENT', rarity: 'rare', value: 9, desc: ['A rare, luminous catch.', 'Use at the cookfire.'], lore: 'The eels only look transparent until they turn their heads.' },
+    chowder: { name: 'Saltfin Chowder', icon: 'chowder', type: 'CONSUMABLE', rarity: 'uncommon', value: 6, heal: 13, meal: '-1 incoming damage', desc: ['Heals 13 HP. Ward', 'against hits for 90s.'], lore: 'Teo uses the whole fish. Nothing on the coast goes to waste.' },
+    skewer: { name: 'Glow Eel Skewer', icon: 'skewer', type: 'CONSUMABLE', rarity: 'rare', value: 12, heal: 8, meal: '+1 damage', desc: ['Heals 8 HP. +1 damage', 'for 90 seconds.'], lore: 'The glow goes out over a stove. The taste stays.' },
+    antler: { name: 'Salt-Crown Antler', icon: 'antler', type: 'KEY ITEM', rarity: 'rare', value: 0, desc: ['A forging component.', 'Take it to Orrin.'], lore: 'There is a knot of gold wherever the stag broke an antler.' },
+    wellglass: { name: 'Keeper Glass', icon: 'wellglass', type: 'KEY ITEM', rarity: 'legend', value: 0, desc: ['Ione’s lantern glass.', 'It is still warm.'], lore: 'Melted, cast, and remelted for twelve years.' },
+    tideblade: { name: 'Tideglass Blade', icon: 'tideblade', type: 'WEAPON', rarity: 'legend', value: 0, bound: true, atk: 7, desc: ['ATK +7. Land 16 hits', 'to learn Undertow.'], lore: 'Orrin bent the antler around the steel before it could cool.' }
+  });
+  for (const k of ['saltfin', 'ghosteel', 'chowder', 'skewer', 'antler', 'wellglass', 'tideblade']) { inventory[k] = 0; ITEM_ORDER.push(k); }
+  WEAPONS.tideblade = { name: ITEM_DEFS.tideblade.name, atk: 7, icon: 'tideblade', arc: '119,248,209' };
+  KNIGHT_MOVES.undertow = { ...KNIGHT_MOVES.thrust, next: null, reach: 91, dmg: 5, stamina: 20, recover: .26 };
+  LORE.push(
+    { id: 'maramap', title: "Mara's Tide Chart", hint: 'Bring Mara a catch at Brinewick.', text: 'When the flats turn white, count the split posts east of the last house. The third hides the vault hatch. In the vault, dig beside the broken blue jar, before the hoard.' },
+    { id: 'wellnames', title: 'The Names Under Salt', hint: 'In the salt vault reliquary.', text: "Mirren. Asa. Ione. Do not close the lower sluice with someone still holding it. Name the watch, ring once, and pass the lantern from hand to hand. Nobody has to stay behind. - Lys" },
+    { id: 'tideEndingShutter', title: 'Epilogue: The Closed Sluice', hint: 'Bring Seren home through the Lower Well.', text: 'Rowan and Seren took the morning ferry. She kept waiting for the boat to turn back. It never did. They left a light for Ione in the window.' },
+    { id: 'tideEndingHome', title: 'Epilogue: The Homeward Bell', hint: 'Learn the names before opening the sluice.', text: 'At breakfast Ione asked if the big chair was taken. Aldric said it was his and moved to the little one. From the quay someone rang the bell, and no one had to answer.' }
+  );
+  BOARDS.push({ scene: 'village', x: 372 });
+  function tideNotice(text, sound = 'uiConfirm') { notice = text; noticeUntil = time + 2.7; sfx(sound); }
+  function tideGrant(k, n) {
+    if (inventory[k] === 0 && ITEM_DEFS[k]) newItems.add(k);
+    inventory[k] = (inventory[k] || 0) + n;
+  }
+  function tidePersist() { if (onSave) onSave(getSaveData()); }
+  function tideDefense() {
+    return (tide.coatTemper && tide.armorWear < 100 ? 2 : 0) + Number(tide.cowlOn) + Number(tide.bootsOn) + (tide.cowlOn && tide.bootsOn ? 2 : 0);
+  }
+  function tideMastered(w = currentWeapon()) { return (tide.mastery[w] || 0) >= (w === 'tideblade' ? 16 : 32); }
+  function tideWearBlade() {
+    const w = currentWeapon(), before = tideMastered(w);
+    tide.mastery[w] = Math.min(100, (tide.mastery[w] || 0) + 1);
+    if (tide.forge[w]) tide.wear[w] = Math.min(100, (tide.wear[w] || 0) + 2);
+    if (!before && tideMastered(w)) tideNotice('Undertow learned! On ground: DOWN + ATTACK.', 'magic');
+  }
+  function tideMounted() { return ['village', 'harbor'].includes(platformScene) && story.mountFound && !!tideRide && sidePlayer.onGround; }
+  let tideRide = false, tideDrift = false;
+  function tideSpeak(who, text, done) { startDialogue([{ who, text }], done); }
+  function talkMara() {
+    if (story.netReturned) {
+      const topic = story.tideCache ? "You found my father's jar? Oh, good. I didn't really want the money. Just needed to know the old story was true." : 'The old map is in your journal. Count three posts from the last stilt house.';
+      return tideSpeak('mara', topic);
+    }
+    if (!story.netQuest) return startDialogue([
+      { who: 'mara', text: "That rod is mine, technically. The pier's everybody's. Borrow it, and bring me one saltfin for the smokehouse." },
+      { who: 'mara', text: "Wait for the float to dip before you pull. My father taught me by letting me get it wrong." }
+    ], () => { story.netQuest = true; tidePersist(); });
+    if (!inventory.saltfin) return tideSpeak('mara', 'Cast at the far pier. If you see the float go under, pull.');
+    inventory.saltfin--; story.netReturned = true; addLore('maramap'); tideGrant('coins', 22);
+    tidePersist();
+    return tideSpeak('mara', 'A deal is a deal. Take the coins and my father’s tide chart. His vault story is probably true. The bit about the stag, I hope he made up.');
+  }
+  function updateTideFishing(dt) {
+    if (panel || dialogue || paused) return;
+    const f = tideFishing; f.t += dt;
+    if (platformScene !== 'village' || Math.abs(sidePlayer.x - TIDE_POINTS.pier) > 26 || !sidePlayer.onGround) tideFishing = null;
+    else if (f.t >= f.bite + .85) { tideFishing = null; tideNotice('The line went slack. Cast again.', 'uiBack'); }
+    else if (f.t >= f.bite && !f.signaled) { f.signaled = true; sfx('splash'); padRumble(.26, .48, 120); }
+  }
+  function tideFish() {
+    if (!tideFishing) {
+      tide.casts++; tideFishing = { t: 0, bite: 1.8 + Math.random() * 1.4, signaled: false };
+      tideNotice('Line out. Wait for the float to dip.', 'splash');
+    } else {
+      const landed = tideFishing.signaled;
+      tideFishing = null;
+      if (!landed) return tideNotice('Too soon. Watch the float.', 'uiBack');
+      tide.caught++;
+      const rare = tide.caught > 1 && (tide.caught % 4 === 0 || Math.random() < .14);
+      tideGrant(rare ? 'ghosteel' : 'saltfin', 1);
+      tideNotice(rare ? 'Rare catch: Ghost Eel!' : 'Caught a Saltfin.', rare ? 'magic' : 'coin');
+      tidePersist();
+    }
+  }
+  function tideOnKill(m) {
+    if (m.type === 'reever' && platformScene === 'vault' && !m.summoned) { story.reeverDown = true; tidePersist(); }
+  }
+  function tideArenaStart() {
+    if (tideArena) return;
+    tideArena = { wave: 0, mobs: [], delay: 1 };
+    tideNotice('Ready yourself. Three waves.', 'slam');
+  }
+  function updateTideWorld(dt) {
+    if (tideArena && platformScene === 'ring' && tideArena.mobs.every(m => m.dead)) {
+      tideArena.delay -= dt;
+      if (tideArena.delay <= 0) {
+        const a = tideArena;
+        if (a.wave === 3) {
+          tideArena = null; tide.arenaWins++; tideGrant('coins', tide.arenaWins === 1 ? 50 : 16); tideGrant('tonic', 1);
+          tideNotice('Breakwater cleared. Your purse is paid.', 'victory'); tidePersist();
+        } else {
+          const wave = [['hexer', 'hexer'], ['goblin', 'reever'], ['reever', 'hexer', 'hexer']][a.wave++];
+          a.mobs = wave.map((type, i) => {
+            const m = makeMob(type, sidePlayer.x < 355 ? 430 + 101 * i : 286 - 62 * i, 42, i);
+            m.arenaWave = true;
+            m.T = { ...m.T, chase: 650, coins: [0, 0], drops: [], xp: 0 };
+            return m;
+          });
+          sideMobs = a.mobs.slice();
+          a.delay = 1.8; tideNotice('WAVE ' + a.wave + ' / 3', 'slam');
+        }
+      }
+    }
+    kiteClock = Math.max(0, kiteClock - dt);
+    if (story.kiteFound && !region().peaceful && !bossFight?.intro && kiteClock <= 0 && sidePlayer.atk) {
+      const m = sideMobs.find(o => !o.dormant && !o.dead && Math.abs(o.x - sidePlayer.x) < 70);
+      if (m) {
+        kiteClock = 8;
+        spawnSparks(m.x, mobTop(m) + 6, sidePlayer.facing, 6, ['#89f9cf', '#ffdc96']);
+        damageMob(m, 2, sidePlayer.facing, 20, false, false, true);
+      }
+    }
+  }
+  function tideEnding(choice) {
+    if (tide.ending || !story.wellBossDone || (choice === 'homeward' && !story.pages.includes('wellnames'))) return;
+    panel = null;
+    const lines = choice === 'homeward' ? [
+      { who: 'rowan', text: 'Mirren. Asa. Ione. Here, take the lantern. Mum, your turn. I’ll hold it last.' },
+      { who: 'ione', text: 'Lys wrote those down? I thought no one remembered the other two.' },
+      { who: 'seren', text: 'I remember. Come with us, Ione. Let the door mind itself for once.' },
+      { who: 'rowan', text: 'Dad keeps a light in the window. I used to think it was for him.' }
+    ] : [
+      { who: 'seren', text: 'The latch on your side. Pull it all the way. Ione, last ferry leaves when the sun comes up.' },
+      { who: 'ione', text: 'I can’t leave the lower door. Shut it, or it will pull both of you back in.' },
+      { who: 'rowan', text: 'Mum. Take my coat. We can talk once we’re outside.' },
+      { who: 'seren', text: 'Let me look at you first. Just a second. You’ve got his ears.' }
+    ];
+    startDialogue(lines, () => {
+      tide.ending = choice;
+      addLore(choice === 'homeward' ? 'tideEndingHome' : 'tideEndingShutter');
+      tideGrant('coins', 45); gainXp(160); tidePersist();
+      openTide('epilogue');
+    });
+  }
+  function tideInteraction(x) {
+    const near = (at, n = 25) => Math.abs(x - at) < n;
+    const go = (label, scene, at = REGIONS[scene].entry, dir = 1) => ({ label, act: () => enterRegion(scene, at, dir) });
+    const use = (label, act) => ({ label, act });
+    if (bossFight) return null;
+    if (platformScene === 'harbor' && near(TIDE_POINTS.quay, 29)) return go('TAKE THE PATH TO BRINEWICK', 'village');
+    if (platformScene === 'court' && story.ch4Done && x > 783) return go('DESCEND TO THE LOWER WELL', 'well');
+    if (platformScene === 'village') {
+      if (x < 62) return go('BACK TO LANTERN QUAY', 'harbor', TIDE_POINTS.quay, -1);
+      if (near(TIDE_POINTS.smith)) return use('TALK TO ORRIN / FORGE', () => openTide('forge'));
+      if (near(TIDE_POINTS.cook)) return use('COOK WITH TEO', () => openTide('cook'));
+      if (tide.ending && near(561, 21)) return use('TALK TO SEREN', () =>
+        tideSpeak('seren', tide.ending === 'homeward' ? "Ione's gone to see the boats. Said she'd never watched one leave in daylight." : "They've put bread in the oven. Funny, I thought I'd forgotten what that smelled like."));
+      if (near(TIDE_POINTS.fisher)) return use('TALK TO MARA', talkMara);
+      if (near(TIDE_POINTS.pier)) return use(tideFishing ? (tideFishing.signaled ? 'REEL NOW!' : 'WAIT FOR A BITE') : 'CAST INTO THE TIDE', tideFish);
+      if (near(TIDE_POINTS.stable)) return use('VISIT THE STABLE', () => openTide('stable'));
+      if (tideDrift && near(1107, 22)) return use('FOLLOW THE DRIFT LIGHT', () => {
+        tideDrift = false;
+        startDialogue([
+          { who: 'rowan', text: 'Hello? I thought there was a boat down there.' },
+          { who: 'drift', text: 'When the next boat comes in, leave one lantern lit. We used to look for it from the flats.' }
+        ], () => { story.driftWitnessed = true; tideGrant('ghosteel', 1); tideNotice('A Ghost Eel washed into the shallows.', 'magic'); tidePersist(); });
+      });
+      if (near(TIDE_POINTS.ring)) return go('ENTER BREAKWATER RING', 'ring');
+      if (near(1320)) return use('CHECK THE REEVER CONTRACT', () => openTide('contract'));
+      if (near(TIDE_POINTS.hatch, 30)) return story.netReturned ? go('OPEN THE SALT VAULT', 'vault') : use('LOOK THROUGH THE REEDS', () => tideSpeak('rowan', 'The old posts go a long way into the water. I’d need a chart to make anything of them.'));
+    } else if (platformScene === 'vault') {
+      if (x < 62) return go('BACK TO BRINEWICK', 'village', TIDE_POINTS.hatch - 39, -1);
+      if (near(608, 27) && !story.tideCache) return use('DIG BESIDE THE BLUE JAR', () => {
+        story.tideCache = true; tideGrant('coins', 36); tideGrant('tonic', 1); tideNotice('Buried cache: 36 coins and a red tonic.', 'coin'); tidePersist();
+      });
+      if (story.saltBossDone && near(1960, 42)) return use('READ THE RELIQUARY', () => readLore(LORE.find(l => l.id === 'wellnames')));
+    } else if (platformScene === 'well') {
+      if (x < 57) return go('CLIMB TO THE PALE COURT', 'court', 797, -1);
+      if (story.wellBossDone && near(1928, 45)) return use(tide.ending ? 'REMEMBER THE CROSSING' : 'SPEAK TO SEREN', () => openTide(tide.ending ? 'epilogue' : 'ending'));
+    } else if (platformScene === 'ring') {
+      if (x < 61) return tideArena ? use('FORFEIT AND LEAVE', () => enterRegion('village', TIDE_POINTS.ring - 36, -1)) : go('BACK TO BRINEWICK', 'village', TIDE_POINTS.ring - 36, -1);
+      if (!tideArena && near(220, 33)) return use('RING THE CHALLENGE BELL', tideArenaStart);
+    }
+    return null;
+  }
+  const tideRows = () => {
+    const row = (title, sub, action, unavailable = false) => ({ title, sub, action, unavailable });
+    const save = (text, sound) => { tideMessage = text; if (!panel) tideNotice(text, sound); else sfx(sound || 'uiConfirm'); tidePersist(); };
+    const spend = (cost, material, qty, done) => {
+      if (inventory.coins < cost || (material && inventory[material] < qty)) return tideError('You’re short on the listed materials.');
+      inventory.coins -= cost; if (material) inventory[material] -= qty; done();
+    };
+    const w = currentWeapon(), rank = tide.forge[w] || 0, wear = tide.wear[w] || 0;
+    switch (tideService) {
+      case 'forge': return [
+        row('Repair gear · 8c', `Blade wear ${wear}% / coat wear ${tide.armorWear}%`, () => spend(8, null, 0, () => { tide.wear[w] = tide.armorWear = 0; save('Blade and coat repaired.', 'clash'); }), !wear && !tide.armorWear),
+        row(`Temper ${WEAPONS[w].name} · ${rank ? 28 : 16}c`, rank >= 2 ? 'Fully tempered' : `Rank ${rank}/2 · Uses 1 Living Ember`, () => spend(rank ? 28 : 16, 'ember', 1, () => { tide.forge[w] = rank + 1; tide.wear[w] = 0; save('The blade takes a new edge.', 'clash'); }), rank >= 2),
+        row('Reinforce Dad’s coat · 18c', tide.coatTemper ? 'Reinforced' : 'Uses 1 Bog Toad Hide · +2 defense until worn', () => spend(18, 'toadskin', 1, () => { tide.coatTemper = 1; tide.armorWear = 0; save('He stitched steel into the lining.', 'clash'); }), !!tide.coatTemper || !equipment.armor),
+        row('Forge Tideglass Blade · 32c', 'Uses the Salt Stag’s antler; one blade', () => spend(32, 'antler', 1, () => { tideGrant('tideblade', 1); equipment.weapon = 'tideblade'; save('Tideglass Blade crafted and equipped.', 'magic'); }), inventory.tideblade > 0),
+        row('Brineguard outfit & dyes', 'Equip two pieces for +2 bonus defense', () => openTide('outfit'))
+      ];
+      case 'outfit': {
+        const toggle = (slot, name, price) => {
+          const equipped = tide[slot + 'On'];
+          return row(`${tide[slot] ? equipped ? 'Remove ' : 'Equip ' : 'Buy & equip '}${name}${tide[slot] ? '' : ` · ${price}c`}`, '+1 defense · part of the Brineguard set', () => {
+            if (tide[slot]) { tide[slot + 'On'] = !equipped; save(equipped ? 'Piece removed.' : 'Piece equipped.', 'armor'); }
+            else spend(price, null, 0, () => { tide[slot] = tide[slot + 'On'] = true; save('New armor equipped.', 'armor'); });
+          });
+        };
+        return [toggle('cowl', 'Brineguard Cowl', 18), toggle('boots', 'Brineguard Boots', 16),
+          ...[['kelp', 'Kelp green'], ['coral', 'Coral red'], ['iron', 'Original steel']].map(([id, name]) =>
+            row(name + (id === 'iron' ? '' : ' · 5c'), tide.dye === id ? 'Current finish' : 'Dye the knight’s outer armor', () => spend(id === 'iron' ? 0 : 5, null, 0,
+              () => { tide.dye = id; save('Armor finish applied.', 'armor'); }), tide.dye === id)),
+          row('Back to the forge', 'Repairs, upgrades and crafting', () => openTide('forge'))];
+      }
+      case 'cook': return [
+        row('Saltfin Chowder · 1 Saltfin', `Bag: ${inventory.saltfin} · Heal 13 HP; ward for 90 seconds`, () => spend(0, 'saltfin', 1, () => { tideGrant('chowder', 1); save('Chowder packed in the bag.', 'eat'); })),
+        row('Glow Eel Skewer · 1 Ghost Eel', `Bag: ${inventory.ghosteel} · Heal 8 HP; +1 damage for 90s`, () => spend(0, 'ghosteel', 1, () => { tideGrant('skewer', 1); save('Skewer packed in the bag.', 'eat'); }))
+      ];
+      case 'stable': return [
+        row(story.mountFound ? tideRide ? 'Dismount the salt hound' : 'Ride the salt hound' : 'Sponsor a salt hound · 24c', 'Ride 55% faster along the coast', () => {
+          if (story.mountFound) { tideRide = !tideRide; save(tideRide ? 'Ready to ride.' : 'You dismount.'); }
+          else spend(24, null, 0, () => { story.mountFound = tideRide = true; save('The salt hound comes willingly.', 'armor'); });
+        }),
+        row(story.kiteFound ? 'The tidekite travels with you' : 'Feed the injured tidekite', 'Uses 1 Saltfin · helps in combat every 8 seconds', () => spend(0, 'saltfin', 1, () => { story.kiteFound = true; save('The tidekite follows you.', 'magic'); }), story.kiteFound)
+      ];
+      case 'contract': return [row(story.tidePaid ? 'Contract closed' : story.reeverDown ? 'Turn in the Reever contract · 45c' : 'Take the Reever contract',
+        'Last tracks: the eastern gallery of the hidden vault', () => {
+          if (story.reeverDown) { story.tidePaid = true; tideGrant('coins', 45); save('45 coins paid from the village levy.', 'coin'); }
+          else { story.tideBounty = true; save('Contract accepted. Search the Salt Vault.'); }
+        }, story.tidePaid || (story.tideBounty && !story.reeverDown))];
+      case 'ending': return [
+        row('Share the watch', story.pages.includes('wellnames') ? 'Speak the names Lys wrote down' : 'Locked: recover the names of the old watch', () => openTide('confirmHome'), !story.pages.includes('wellnames')),
+        row('Close the sluice', 'Leave the lantern with Ione', () => openTide('confirmShutter'))
+      ];
+      case 'confirmHome': case 'confirmShutter': return [
+        row(tideService === 'confirmHome' ? 'Ring the Homeward Bell' : 'Close the Lower Well', 'Confirm the saga ending for this save', () => tideEnding(tideService === 'confirmHome' ? 'homeward' : 'shutter')),
+        row('Not yet', 'Return to the choices', () => openTide('ending'))
+      ];
+      default: return [];
+    }
+  };
+  const TIDE_MENUS = {
+    forge: ['ORRIN’S FORGE', 'A blade holds an edge until it doesn’t.'], outfit: ['BRINEGUARD OUTFIT', 'Cowl + boots unlock the set bonus.'],
+    cook: ['TEO’S COOKFIRE', 'Use meals from your bag. Only one buff at a time.'], stable: ['SALT HOUND STABLE', 'It’s a slow road without decent company.'],
+    contract: ['REEVER CONTRACT', 'Missing gear. Broken locks. Silver for proof.'], ending: ['SEREN / THE LOWER WELL', 'The door waits. Your mother doesn’t move.'],
+    confirmHome: ['THE HOMEWARD BELL', 'Bring all three of you home.'], confirmShutter: ['THE CLOSED SLUICE', 'Take Seren out before the tide comes in.'],
+    epilogue: ['SAGA I COMPLETE', 'ROWAN AND THE FRACTURED MOON']
+  };
+  function openTide(id) { tideService = id; tideSel = 0; tideMessage = ''; openPanel('tide'); }
+  function tideError(text) { tideMessage = text; sfx('uiError'); }
+  function tideChoose(rows = tideRows()) {
+    const row = rows[tideSel]; if (!row) return;
+    if (row.unavailable) return tideError(row.sub);
+    row.action();
+  }
+  function tideKey(k) {
+    if (['escape', 'i', 'p', 'x', 'k'].includes(k)) return closeCurrentPanel();
+    const rows = tideRows();
+    if (['e', 'enter', ' '].includes(k)) {
+      if (!rows.length) closeCurrentPanel();
+      else tideChoose(rows);
+    } else if (rows.length && ['arrowup', 'arrowdown', 'w', 's'].includes(k)) {
+      tideSel = (tideSel + rows.length + (k === 'w' || k === 'arrowup' ? -1 : 1)) % rows.length;
+      tideMessage = ''; sfx('uiMove');
+    }
+  }
+  function tidePointer(p) {
+    if (p.x >= 267 && p.x <= 296 && p.y >= 34 && p.y <= 54 || tideService === 'epilogue' && p.y >= 195) return closeCurrentPanel();
+    const rows = tideRows(), r = Math.floor((p.y - 72) / 20);
+    if (r >= 0 && r < rows.length && p.x >= 31 && p.x <= 289) { tideSel = r; tideChoose(rows); }
+  }
+  function drawTidePanel() {
+    const [title, sub] = TIDE_MENUS[tideService];
+    const rows = tideRows();
+    ctx.save(); ctx.fillStyle = 'rgba(7,10,15,.77)'; ctx.fillRect(0, 0, 320, 240);
+    invBox(22, 32, 276, 183, '#101d25', '#607d77');
+    ctx.fillStyle = '#284343'; ctx.fillRect(23, 33, 274, 24);
+    ctx.fillStyle = '#e7b277'; ctx.fillRect(24, 55, 272, 1);
+    invText(title, 32, 48, '#fff0cf', 'bold 11px monospace');
+    invText('CLOSE ×', 290, 46, '#e2e8dc', 'bold 6px monospace', 'right');
+    invText(sub, 32, 66, '#accbc3', '6px monospace');
+    if (tideService === 'epilogue') {
+      const [label, id] = tide.ending === 'homeward' ? ['THE HOMEWARD BELL', 'tideEndingHome'] : ['THE CLOSED SLUICE', 'tideEndingShutter'];
+      invText(label, 160, 105, '#f3c997', 'bold 10px monospace', 'center');
+      wrapText(LORE.find(l => l.id === id).text, 220, '8px monospace').forEach((ln, i) => invText(ln, 160, 127 + i * 11, '#e2e8dc', '8px monospace', 'center'));
+      invText(K('E') + ' CONTINUE EXPLORING', 160, 204, '#e6c598', 'bold 7px monospace', 'center');
+    } else {
+      rows.forEach((r, i) => {
+        const y = 72 + i * 20;
+        invBox(31, y, 258, 19, i === tideSel ? '#2a4647' : i % 2 ? '#1d3038' : '#172831', i === tideSel ? '#c59d67' : '#263f43');
+        invText(r.title, 39, y + 8, r.unavailable ? '#a0aeb1' : '#fff1da', 'bold 7px monospace');
+        invText(r.sub, 39, y + 15, r.unavailable ? '#819394' : '#b7d0c6', '6px monospace');
+      });
+      invText(tideMessage || (inputMode === 'touch' ? 'TAP A ROW  /  USE SELECTED' : 'UP/DOWN SELECT  /  ' + K('E') + ' CONFIRM'), 32, 204, '#f3c997', '6px monospace');
+      invText(inventory.coins + 'c', 288, 204, '#f3c997', 'bold 7px monospace', 'right');
+    }
+    ctx.restore();
+  }
+  function tidePixel(c, x, y, w, h) { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), w, h); }
+  function tideShape(c, ...points) {
+    ctx.fillStyle = c; ctx.beginPath();
+    points.forEach(([x, y], i) => i ? ctx.lineTo(Math.round(x), Math.round(y)) : ctx.moveTo(Math.round(x), Math.round(y)));
+    ctx.closePath(); ctx.fill();
+  }
+  function tideGlow(x, y, r, rgb, a) {
+    const g = ctx.createRadialGradient(x, y, 1, x, y, r);
+    g.addColorStop(0, `rgba(${rgb},${a})`); g.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  function drawReever(m) {
+    const p = tidePixel, s = tideShape;
+    const stride = m.moving ? Math.round(Math.sin(m.walk) * 5) : 0;
+    const attack = m.attackTime > 0 ? 1 - m.attackTime / m.atkLen : 0;
+    ctx.save(); ctx.translate(Math.round(m.x), Math.round(m.y)); ctx.scale(m.dir, 1);
+    if (m.dead) { ctx.globalAlpha = Math.max(0, 1 - m.deadTime / .7); ctx.rotate(Math.min(1.45, m.deadTime * 2.3)); }
+    const dark = '#151b29', iron = '#42616b', shell = '#9d9a78', glint = m.flash > 0 ? '#fff' : '#ded0a0';
+    s('#392e47', [-7,-46],[-23,-43],[-29,-20],[-21,-26],[-17,-9],[-9,-15],[4,-35]);
+    p(dark,-10-stride,-19,8,17); p(dark,4+stride,-19,8,17);
+    p(iron,-9-stride,-17,5,12); p(iron,5+stride,-17,5,12);
+    p(shell,-12-stride,-6,10,5); p(shell,4+stride,-6,11,5);
+    s(dark,[-13,-43],[9,-44],[16,-31],[12,-18],[-10,-19],[-14,-28]);
+    s(iron,[-10,-41],[8,-41],[11,-34],[8,-24],[-8,-24],[-11,-32]);
+    p(shell,-9,-40,17,4); p(glint,-4,-39,8,1); p('#29343c',-9,-24,18,4);
+    s(dark,[-11,-47],[-8,-57],[4,-60],[14,-54],[16,-42],[-5,-41]);
+    s(shell,[-8,-48],[-5,-55],[4,-57],[11,-52],[13,-45],[-4,-43]);
+    s(glint,[-4,-55],[2,-61],[5,-55],[10,-54],[8,-51],[-6,-51]);
+    p(dark,2,-50,12,3); p('#fabc77',7,-49,5,1);
+    p('#735860',-13,-33,11,5); p(glint,-12,-33,5,2);
+    ctx.translate(12, -30); ctx.rotate(attack ? (attack < .53 ? -1.25 : .9) : .35);
+    p(dark,-2,-4,7,14); p(shell,1,-3,4,11); p('#c6a077',-4,6,12,3);
+    s(iron, [1,8],[7,7],[11,26],[7,31],[2,27]); s(glint,[5,8],[7,7],[11,26],[7,31],[7,23]);
+    ctx.restore();
+  }
+  function tideSprite(id, x, y, fw, fh, f, w, h) {
+    const img = tideArt[id]; if (imgReady(img)) ctx.drawImage(img, f * fw, 0, fw, fh, Math.round(x - w / 2), Math.round(y - h), w, h);
+  }
+  function drawTideKite(x, y) {
+    ctx.save(); ctx.translate(x - sidePlayer.facing * 32, 0); ctx.scale(sidePlayer.facing, 1);
+    tideSprite('kite', 0, y - 33 + Math.sin(time * 6) * 6, 32, 32, Math.floor(time * 15) % 7, 30, 30);
+    ctx.restore();
+  }
+  function drawTideSeren(x, y) {
+    const p = tidePixel, shape = tideShape;
+    shape('#243e43', [x-10,y],[x-9,y-23],[x-3,y-34],[x+6,y-34],[x+12,y-23],[x+13,y]);
+    shape('#508077', [x-6,y-2],[x-5,y-24],[x+2,y-34],[x+10,y-22],[x+13,y-2]);
+    shape('#aed5c6', [x-5,y-35],[x-2,y-45],[x+7,y-47],[x+11,y-41],[x+12,y-34],[x+4,y-33],[x-3,y-30]);
+    p('#b38372', x+1,y-41,8,10); p('#f3c6ab', x+3,y-42,7,8); p('#654f54',x+7,y-39,2,1);
+    p('#365651', x-5,y-25,13,11); p('#8db2a0', x-3,y-24,3,11); p('#f3c6ab',x+7,y-18,4,3);
+  }
+  function drawTideBuilding(x, w, h, tint, sign, open) {
+    const g = SIDE_GROUND_Y, p = tidePixel, s = tideShape, y = g - h;
+    for (const k of [5, w - 10]) { p('#221f26', x + k, y + 15, 6, h + 1); p('#613e3d', x + k + 1, y + 20, 2, h - 20); }
+    p('#372829', x, y + 7, w, h - 18); p('#70504a', x + 2, y + 7, w - 4, h - 23);
+    for (let j = y + 14; j < g - 15; j += 6) { p('#4d3838', x + 3, j, w - 6, 1); p('#997063', x + 8 + (j % 3) * 4, j + 1, w - 29, 1); }
+    s('#201f2a', [x-9,y+13],[x+10,y-12],[x+w*.52,y-25],[x+w-2,y-10],[x+w+12,y+12]);
+    s(tint, [x-6,y+9],[x+13,y-10],[x+w*.52,y-23],[x+w-5,y-8],[x+w+8,y+9]);
+    for (let i = 0; i < 5; i++) { const yy = y - 13 + i * 5; p('#322d36', x + 17 - i * 4, yy, w - 34 + i * 8, 1); }
+    p('#a07e65', x + 20, y + 10, w - 40, 2);
+    p('#34262a', x + 11, y + 22, 18, 16); p('#e4ae74', x + 13, y + 24, 14, 12);
+    p('#6e523c', x + 19, y + 24, 1, 12); p('#6e523c', x + 13, y + 29, 14, 1);
+    p('#2c2228', x + w - 29, y + 18, 22, h - 32);
+    if (open) tideGlow(x + w - 18, y + 28, 34, '255,177,101', .37);
+    p('#382b31', x - 6, g - 13, w + 12, 4); p('#a67e60', x - 3, g - 13, w + 7, 1);
+    if (sign) { p('#2a222a', x + w * .5 - 24, y + 13, 48, 11); invText(sign, x + w * .5, y + 21, '#f4cc92', 'bold 5px monospace', 'center'); }
+  }
+  function tidePost(x, y, color = '#ae7655') {
+    tidePixel('#212430', x - 2, y - 19, 5, 20); tidePixel(color, x - 1, y - 18, 2, 15); tidePixel('#d0a083', x - 2, y - 20, 5, 2);
+  }
+  function tideLantern(x, y, c = '255,175,105') {
+    tidePixel('#312935', x - 2, y - 7, 5, 2); tidePixel('#292735', x - 3, y - 5, 7, 9);
+    tidePixel('rgb(' + c + ')', x - 1, y - 4, 3, 6); tideGlow(x, y, 31 + Math.sin(time * 6 + x) * 3, c, .36);
+  }
+  function drawTide() {
+    const p = tidePixel, shape = tideShape, R = region(), g = SIDE_GROUND_Y, W = canvas.width;
+    const town = platformScene === 'village', ring = platformScene === 'ring', salt = platformScene === 'vault';
+    const land = town || ring, A = tideArt, cx = Math.round(sideCameraX);
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    p(land ? '#3a294f' : salt ? '#181528' : '#102841', 0, 0, W, 240);
+    if (land) {
+      drawLayer(A['village-sky'], .06, -37, 64, 239);
+      drawLayer(A['village-far'], .14, -18, 254, 193);
+      drawLayer(A['village-ridge'], .27, -3, 410, 191);
+      drawLayer(A['village-trees'], .4, 30, 345, 148);
+      p('#563b60', 0, 161, W, 32); p('#ba7880', 0, 161, W, 1);
+      for (let i = 0; i < 40; i++) p(i % 7 ? '#744e71' : '#d1948a', ((i * 59 - cx * .2 + time * 6) % 342 + 342) % 342 - 7, 162 + i * 13 % 27, 3 + i % 13, 1);
+    } else if (salt) {
+      drawLayer(A['salt-deep'], .10, 0, 193, 235); drawLayer(A['salt-wall'], .31, -29, 408, 231);
+      ctx.globalAlpha = .42; drawLayer(A['salt-gold'], .38, 129, 331, 60); ctx.globalAlpha = 1;
+    } else {
+      drawLayer(A['well-far'], .12, 12, 273, 188); p('rgba(9,34,47,.58)', 0, 0, W, 211);
+      drawLayer(A['well-sand'], .31, 22, 305, 195); drawLayer(A['well-reef'], .44, 9, 294, 199);
+      ctx.globalAlpha = .68; drawLayer(A['well-reeds'], .56, 20, 310, 189); ctx.globalAlpha = 1;
+      for (let i = 0; i < 8; i++) {
+        const x = ((i * 91 - cx * .17) % 372 + 372) % 372 - 26;
+        shape('rgba(136,234,247,.063)', [x,-4],[x+21,-4],[x-17,188],[x-54,188]);
+      }
+    }
+    worldShake();
+    if (town) {
+      drawTideBuilding(204, 120, 60, '#5e3b43', 'ORRIN', true);
+      drawTideBuilding(443, 103, 56, '#976049', 'COOKFIRE', true);
+      drawTideBuilding(588, 111, 71, '#4a5860', 'MARA', false);
+      drawTideBuilding(963, 120, 62, '#815e5a', 'STABLE', false);
+      drawTideBuilding(1265, 102, 55, '#5a4c64', 'REEVER', false);
+      for (let i = 0; i < 6; i++) {
+        const x = 720 + i * 17; p('#32262c', x, 161, 4, 43); p('#865e51', x + 1, 162, 2, 21); p('#5b3f4b', x, 165, 17, 1);
+        if (i % 2 === 0) p('#ead0a0', x - 1, 160, 5, 2);
+      }
+      shape('#453b53', [754,178],[800,178],[790,188],[765,188]); p('#b98b74', 754, 178, 46, 1);
+      p('#5c3e37', 252, 179, 20, 5); p('#9a9e9e', 246, 175, 20, 3); p('#6e838d', 255, 178, 9, 6);
+      for (let i = 0; i < 6; i++) {
+        const y = 175 - (i * 7 + time * 16) % 38;
+        p(i % 2 ? '#ca795e' : '#ffca89', 267 + Math.sin(i + time * 7) * (3 + (175 - y) / 6), y, i % 3 ? 1 : 2, 1);
+      }
+      for (const [xx, id] of [[TIDE_POINTS.smith,'smith'],[TIDE_POINTS.cook,'cook'],[TIDE_POINTS.fisher,'fisher']])
+        tideSprite(id, xx, g + 8, 32, 32, Math.floor(time * 2 + xx) % 4, 47, 47);
+      if (tide.ending) drawTideSeren(561, g);
+      for (const [x, yy, color] of [[137,171,'255,198,114'], [339,155,'255,158,101'],[572,169,'250,190,114'],[859,169,'255,179,113'],[1150,163,'255,200,141']]) {
+        tidePost(x, g); tideLantern(x, yy, color);
+      }
+      for (const x of [1380, 1414, 1448]) { tidePost(x, g, '#796c60'); p('#dcc994', x - 2, g - 12, 5, 1); }
+      if (story.netReturned) drawDepthGate(TIDE_POINTS.hatch, { name: 'SALT VAULT', color: '#e0b18a', unlock: () => true });
+      drawDepthGate(TIDE_POINTS.ring, { name: 'RING', color: '#ffc0a1', unlock: () => true });
+      const h = imgReady(A.mount);
+      if (h && !tideMounted()) tideSprite('mount', 1062, g + 2, 56, 32, 0, 67, 38);
+      if (!story.kiteFound) tideSprite('kite', 1002, g - 1, 32, 32, 1, 27, 27);
+      if (tideDrift) {
+        const y = 151 + Math.sin(time * 3) * 7;
+        tideGlow(1107, y, 28, '177,237,244', .5); p('#d8faf1', 1106, y - 3, 3, 6); p('#5e9eaa', 1104, y, 7, 1);
+      }
+    }
+    for (let i = Math.max(0, Math.floor((cx - 120) / 105)); i < (cx + W + 120) / 105; i++) {
+      const x = i * 105, y = 95 + i * 19 % 41;
+      if (!land) {
+        shape(salt ? '#302339' : '#22495c', [x-7,g],[x+1,y],[x+9,y-16],[x+20,y-10],[x+23,g]);
+        shape(salt ? '#523849' : '#326476', [x+7,y],[x+9,y-15],[x+16,y-10],[x+13,g],[x+8,g]);
+        if (i % 4 === 1) tideLantern(x + 11, y + 22, salt ? '255,163,99' : '116,251,222');
+      } else if (ring) {
+        p('#403045', x, g - 64, 5, 64); p('#95645e', x + 1, g - 63, 2, 58);
+        shape(i % 2 ? '#ad6261' : '#cb805f', [x+4,g-63],[x+36,g-55],[x+28,g-45],[x+4,g-46]);
+        p('#d5a080', x + 4, g - 62, 8, 1);
+      }
+    }
+    if (ring) {
+      p('#70545a', 180, 183, 86, 12); p('#d29f78', 183, 183, 79, 2);
+      p('#383145', 207, 135, 4, 48); p('#383145', 232, 135, 4, 48); p('#8b625b', 205, 135, 34, 4);
+      shape('#dfa275', [218,143],[225,143],[230,162],[213,162]); p('#ffcb9c', 218, 146, 2, 12); p('#513d4d', 219, 162, 5, 4);
+    } else if (salt) {
+      p('#1e3047', 605, 181, 11, 15); p('#577a9e', 607, 182, 7, 8); p('#a3bfd0', 608, 182, 5, 1); p('#6c5260', 616, 192, 5, 2);
+      if (!story.tideCache) p('#c6acd0', 619, 195, 2, 1);
+      for (let j = 0; j < 12; j++) { p('#4a3545', 1410 + j * 42, 181 + j % 5, 25, 15); p(j % 3 ? '#ac7d51' : '#eccd81', 1412 + j * 42, 181 + j % 5, 20, 3); }
+      p('#6d4e45', 1936, 162, 50, 34); p('#bf8f5f', 1933, 160, 56, 4); p('#ffe4a5', 1954, 155, 12, 4); tideGlow(1960, 153, 41, '255,201,124', .46);
+    } else if (!land) {
+      p('#0e2633', 1903, 101, 66, 95); p('#487475', 1901, 103, 3, 93); p('#487475', 1966, 103, 4, 93);
+      if (story.wellBossDone) {
+        if (!tide.ending) drawTideSeren(1931, g);
+        tideLantern(1908, 168, '133,255,221');
+      }
+    }
+    for (let x = Math.floor((cx - 32) / 16) * 16; x < cx + W + 32; x += 16) {
+      const j = Math.abs((x * 61) >> 4);
+      p(land ? '#4c3440' : salt ? '#382b42' : '#163948', x, g, 16, 46);
+      p(land ? '#ae7e69' : salt ? '#a28489' : '#73b4af', x, g, 15, 2);
+      p(land ? '#79574f' : salt ? '#69515e' : '#376d74', x, g + 3, 16, 2);
+      p(land ? '#2f2630' : salt ? '#261d31' : '#152d3b', x + j % 7, g + 10 + j % 15, 8, 2);
+      p(land ? '#986960' : salt ? '#886975' : '#4d7c81', x + j % 9, g + 6 + j % 11, 4, 1);
+    }
+    for (let i = 0; i < 54; i++) {
+      const x = cx - 20 + ((i * 71 + Math.sin(time + i) * 10 - cx) % 360 + 360) % 360;
+      const y = 34 + ((i * 9 - time * (2 + i % 4)) % 155 + 155) % 155;
+      p(land ? 'rgba(251,175,135,.28)' : salt ? 'rgba(244,205,156,.32)' : 'rgba(144,237,216,.39)', x, y, i % 5 ? 1 : 2, 1);
+    }
+    if (town) drawCampfire(TIDE_POINTS.camp);
+    if (tideFishing) {
+      const bite = tideFishing.signaled, bob = Math.round(Math.sin(time * 6) * 1.3);
+      p('#4c313a', 813, 177, 27, 1); p('#c7a691', 839, 178, 1, 10);
+      p(bite ? '#fff3b6' : '#e18475', 837, 189 + bob, 5, 2);
+      if (bite) { p('#fcebaa', 831, 191 + bob, 4, 1); p('#fcebaa', 845, 191 + bob, 4, 1); }
+    }
+    drawDepthsWorld(); drawSideMobs();
+    drawSidePlayer(); drawPlayerWaves(); drawCombatFx(); drawFortuneFx(); drawAmbient();
+    ctx.restore(); drawSideOverlays(R.name);
+    if (tideArena && !dialogue && !panel) invText(`WAVE ${tideArena.wave} / 3`, 306, 34, '#ffe2b3', 'bold 7px monospace', 'right');
+  }
   function enterRegion(scene, x, facing) {
     if (bossFight) endBossFight(false);
     const from = platformScene;
+    tideArena = null;
+    tideFishing = null;
     platformScene = scene; syncArena();
     sidePlayer.x = x; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true; sidePlayer.facing = facing || 1;
     sidePlayer.roll = null; sidePlayer.charge = null; sidePlayer.atk = null; sidePlayer.pray = null;
@@ -7764,6 +8385,7 @@ const Overworld = (() => {
     bloodDrops.length = 0;
     if (from !== scene) {
       bellCount = 0; bellFeedback = bellAnimation = null;
+      tideDrift = scene === 'village' && !story.driftWitnessed && Math.random() < .16;
       if (!region().peaceful) maybeBloodMoon(questChapter() > 1 || story.bossDefeated ? 0.12 : 0.06);
     }
     loadSceneMobs(scene);
@@ -7774,6 +8396,7 @@ const Overworld = (() => {
     keys.clear();
     if (scene === 'harbor') story.harborEntered = true;
     if (scene === 'court') story.courtEntered = true;
+    if (region().tide) story[scene + 'Visited'] = true;
     if (scene === 'hollow') story.hollowEntered = true;
     if (scene === 'hollow' && !story.hollowSeen) {
       story.hollowSeen = true;
@@ -7843,7 +8466,7 @@ const Overworld = (() => {
   }
   function restoreBossOutro() {
     const R = region();
-    if (!R.boss || !story[R.bossFlag]) return;
+    if (!R.boss || !story[R.bossFlag] || R.tide) return;
     const page = { mire: 'skarnend', barrow: 'mournend', cinder: 'ignarothend', archive: 'tidemawend' }[platformScene];
     const missing = R.side ? !story.pages.includes(page) :
       platformScene === 'hollow' ? !story.chapterDone : platformScene === 'pass' ? !story.ch2Done : !story.ch3Done;
@@ -8202,6 +8825,11 @@ const Overworld = (() => {
       fill('#b9a96f', 813, 117, 1, 74); aura(813, 159, '216,211,127', 18);
       fill('#556151', 795, 144, 36, 2); fill('#101d25', 793, 168, 39, 5);
     }
+    if (harbor) drawDepthGate(TIDE_POINTS.quay, { name: 'BRINEWICK', color: '#ffd396', unlock: () => true });
+    else if (story.ch4Done) {
+      aura(813, 169, '117,242,215', 27);
+      fill('#a2ead2', 811, 142, 5, 2);
+    }
     drawLoreSpots(); drawWren(); drawSidePlayer(); drawPlayerWaves(); drawCombatFx(); drawFortuneFx();
     ctx.restore();
     drawSideOverlays(region().name);
@@ -8211,7 +8839,7 @@ const Overworld = (() => {
         invText(bellFeedback.text, 160, 58, '#fff2d1', '7px monospace', 'center');
       } else if (!sceneTitle) {
         const goal = harbor ? (story.ferryOpened ? 'Board at the east dock' : 'Find the night ferry signal')
-          : (story.ch4Done ? 'The outer gallery is safe to explore' : "Follow Seren's voice");
+          : (story.ch4Done ? 'Lower Well: east door' : "Follow Seren's voice");
         invText(goal, 312, 31, '#fff0ce', 'bold 7px monospace', 'right');
       }
     }
@@ -8718,6 +9346,7 @@ const Overworld = (() => {
     else if (art === 'hollow') drawSideHollow();
     else if (art === 'pass') drawSidePass();
     else if (art === 'gloam') drawSideGloam();
+    else if (region().tide) drawTide();
     else if (region().peaceful) drawCoast();
     else drawSideForest();
     if (!(bossFight && bossFight.cine)) drawSideHUD();
@@ -8957,6 +9586,7 @@ const Overworld = (() => {
     if (panel === 'relic') { drawRelicReveal(); return; }
     if (panel === 'wheel') { drawWheel(); return; }
     if (panel === 'peddler') { drawPeddlerPanel(); return; }
+    if (panel === 'tide') { drawTidePanel(); return; }
     ctx.fillStyle = 'rgba(10, 12, 22, 0.94)';
     ctx.fillRect(43, 37, 234, 164);
     ctx.strokeStyle = '#d9b56b'; ctx.lineWidth = 2;
@@ -9066,7 +9696,7 @@ const Overworld = (() => {
     if (def.type === 'WEAPON') opts.push(equipment.weapon === key ? 'UNEQUIP' : 'EQUIP');
     if (def.heal) opts.push(quickSlot === key ? 'CLEAR QUICK' : 'SET QUICK');
     opts.push('INSPECT');
-    if (def.type !== 'KEY ITEM') opts.push('DROP');
+    if (def.type !== 'KEY ITEM' && !def.bound) opts.push('DROP');
     opts.push('CANCEL');
     return opts;
   }
@@ -9074,12 +9704,13 @@ const Overworld = (() => {
     const def = ITEM_DEFS[key];
     if (!def || !(inventory[key] > 0)) { sfx('uiError'); notice = 'Nothing in your quick slot.'; noticeUntil = time + 1.4; return false; }
     if (!def.heal) { notice = def.name + ' cannot be used right now.'; noticeUntil = time + 1.6; sfx('uiError'); invShake = time; return false; }
-    if (stats.health >= stats.maxHealth) { notice = 'You are already at full health.'; noticeUntil = time + 1.6; sfx('uiError'); invShake = time; return false; }
+    if (!def.meal && stats.health >= stats.maxHealth) { notice = 'You are already at full health.'; noticeUntil = time + 1.6; sfx('uiError'); invShake = time; return false; }
     const before = stats.health;
     stats.health = Math.min(stats.maxHealth, stats.health + def.heal);
     if (def.heal >= 999) stats.stamina = stats.maxStamina;
     inventory[key]--;
-    notice = 'Used ' + def.name + ' (+' + (stats.health - before) + ' HP)'; noticeUntil = time + 1.8;
+    if (def.meal) { tide.meal = key; tide.mealTime = 90; }
+    notice = def.meal ? def.name + ': ' + def.meal + ' for 90s' : 'Used ' + def.name + ' (+' + (stats.health - before) + ' HP)'; noticeUntil = time + 1.8;
     invUseFlash = time;
     sfx(key === 'tonic' ? 'use' : 'eat'); padRumble(0.1, 0.3, 80);
     if (fromQuick) {
@@ -9094,7 +9725,7 @@ const Overworld = (() => {
   function useQuickSlot() {
     if (panel || dialogue) return;
     if (!quickSlot || !(inventory[quickSlot] > 0)) {
-      const fallback = ['berries', 'bread', 'fish', 'tonic'].find(k => inventory[k] > 0);
+      const fallback = ['berries', 'bread', 'fish', 'tonic', 'chowder', 'skewer'].find(k => inventory[k] > 0);
       if (!fallback) { notice = 'No food or tonics left.'; noticeUntil = time + 1.4; sfx('uiError'); return; }
       quickSlot = fallback;
     }
@@ -9218,6 +9849,7 @@ const Overworld = (() => {
       return;
     }
     if (dialogue) { advanceDialogue(); e.preventDefault(); return; }
+    if (panel === 'tide') { tidePointer(p); e.preventDefault(); return; }
     if (panel === 'chapter') {
       if (time - invOpenTime > 1.5 && p.y >= 210) { panel = null; sfx('uiConfirm'); if (onSave) onSave(getSaveData()); }
       e.preventDefault(); return;
@@ -9257,7 +9889,7 @@ const Overworld = (() => {
       for (let j = 0; j < LORE_ROWS; j++) { const i = j + off; if (i < LORE.length && inside(120, 42 + j * 12, 182, 11)) { if (loreSel === i) useSelectedItem(); else { loreSel = i; sfx('uiMove'); } return; } }
     } else if (invTab === 5) {
       const fl = mapFires();
-      for (let i = 0; i < fl.length; i++) if (inside(120, 168 + i * 9, 182, 9)) { if (mapSel === i) mapConfirm(); else { mapSel = i; sfx('uiMove'); } return; }
+      for (let i = 0; i < fl.length; i++) if (inside(120, 166 + i * 8, 182, 8)) { if (mapSel === i) mapConfirm(); else { mapSel = i; sfx('uiMove'); } return; }
     } else if (invTab === 6) {
       for (let i = 0; i < RELIC_ORDER.length; i++) { const r = relicSlotRect(i); if (inside(r.x, r.y, r.w, r.h)) { if (relicSel === i) toggleRelic(); else { relicSel = i; sfx('uiMove'); } return; } }
     }
@@ -9564,10 +10196,10 @@ const Overworld = (() => {
     const on = equipment.armor;
     const Wp = WEAPONS[currentWeapon()];
     const slots = [
-      { label: 'HEAD', icon: 'helm', name: 'Steel Helm', stat: 'DEF +1' },
-      { label: 'BODY', icon: 'armor', name: "Dad's Armor" + (stats.defUp ? ' +' + stats.defUp : ''), stat: 'DEF +' + (2 + (stats.defUp || 0)) },
-      { label: 'LEGS', icon: 'legs', name: 'Iron Greaves', stat: 'SPD  -' },
-      { label: 'WEAPON', icon: Wp.icon, name: Wp.name + (stats.atkUp ? ' +' + stats.atkUp : ''), stat: 'ATK +' + (Wp.atk + (stats.atkUp || 0)) }
+      { label: 'HEAD', icon: 'helm', name: tide.cowlOn ? 'Brineguard Cowl' : 'Steel Helm', stat: tide.cowlOn ? 'DEF +2' : 'DEF +1' },
+      { label: 'BODY', icon: 'armor', name: "Dad's Armor" + (tide.coatTemper ? ' / Tempered' : ''), stat: 'DEF +' + (2 + (stats.defUp || 0) + (tide.coatTemper && tide.armorWear < 100 ? 2 : 0)) },
+      { label: 'LEGS', icon: 'legs', name: tide.bootsOn ? 'Brineguard Boots' : 'Iron Greaves', stat: tide.bootsOn ? 'DEF +1' : 'SPD  -' },
+      { label: 'WEAPON', icon: Wp.icon, name: Wp.name + (tide.forge[currentWeapon()] ? ' +' + tide.forge[currentWeapon()] : ''), stat: 'ATK +' + (Wp.atk + (stats.atkUp || 0) + (tide.forge[currentWeapon()] || 0)) }
     ];
     slots.forEach((s, i) => {
       const sy = y + 2 + i * 33;
@@ -9634,7 +10266,9 @@ const Overworld = (() => {
       ['Follow the east road to Lantern Quay', story.harborEntered],
       ['Ring the night signal for the ferry', story.ferryOpened],
       ['Cross to the Pale Court', story.courtEntered],
-      ["Find Seren's entry in the ledger", story.ch4Done]
+      ["Find Seren's entry in the ledger", story.ch4Done],
+      ['Defeat the Keeper beneath the Court', story.wellBossDone],
+      ['Bring Seren home', !!tide.ending]
     ];
     const inForest = outdoorScene() && !insideHouse;
     return [
@@ -9692,6 +10326,12 @@ const Overworld = (() => {
     { id: 'harbor', name: 'Lantern Quay', x: 159, y: 61, known: () => story.harborEntered },
     { id: 'court', name: 'Pale Court', x: 167, y: 16, known: () => story.courtEntered }
   ];
+  const TIDE_MAP = [
+    { id: 'well', name: 'Lower Well', x: 175, y: 28, from: [167, 16], show: () => story.ch4Done },
+    { id: 'village', name: 'Brinewick', x: 176, y: 76, from: [159, 61], show: () => story.harborEntered },
+    { id: 'ring', name: 'Arena', x: 135, y: 93, from: [176, 76], show: () => story.villageVisited },
+    { id: 'vault', name: 'Salt Vault', x: 176, y: 99, from: [176, 76], show: () => story.netReturned }
+  ];
   function mapFires() { return FIRES.filter(f => story.fires.includes(f.id)); }
   function mapNodeHere() {
     if (!platformMode || !outdoorScene()) return 'home';
@@ -9733,6 +10373,17 @@ const Overworld = (() => {
       }
     });
     drawDepthMapNodes(mx0, my0, here);
+    TIDE_MAP.forEach(n => {
+      if (!n.show()) return;
+      const px = mx0 + n.x, py = my0 + n.y, seen = story[n.id + 'Visited'], R = REGIONS[n.id];
+      ctx.setLineDash([1, 2]); ctx.strokeStyle = '#67564b'; ctx.beginPath(); ctx.moveTo(mx0 + n.from[0], my0 + n.from[1]); ctx.lineTo(px, py); ctx.stroke(); ctx.setLineDash([]);
+      tidePixel('#345253', px - 2, py - 2, 5, 5);
+      tidePixel(seen ? (R.bossFlag && story[R.bossFlag] ? '#9be086' : R.color) : '#a7a98b', px - 1, py - 1, 3, 3);
+      const label = n.id === 'vault' && !seen ? '?' : n.name;
+      invText(label, n.id === 'well' || n.id === 'village' ? px - 5 : px + 3, n.id === 'well' || n.id === 'village' ? py + 2 : py + 8, '#34474a', 'bold 5px monospace', 'right');
+      if (n.id === 'village' && story.fires.includes('brine')) tidePixel('#ee794b', px + 3, py - 6, 2, 4);
+      if (here === n.id) { ctx.strokeStyle = '#b43b3b'; ctx.beginPath(); ctx.arc(px, py, 4 + Math.sin(time * 5), 0, Math.PI * 2); ctx.stroke(); }
+    });
     invText('N', mx0 + 8, my0 + 12, '#5a3e22', 'bold 6px monospace', 'center');
     ctx.fillStyle = '#5a3e22'; ctx.fillRect(mx0 + 7, my0 + 14, 3, 1); ctx.fillRect(mx0 + 8, my0 + 13, 1, 6);
     // fast travel list
@@ -9743,7 +10394,7 @@ const Overworld = (() => {
     invText(at ? 'Fast travel ready' : 'Rest at a fire to travel', x + w - 8, y + 123, at ? '#9be37a' : '#8f8478', '5px monospace', 'right');
     if (!fl.length) invText('No campfires discovered yet.', x + w / 2, y + 145, '#8f8478', '6px monospace', 'center');
     fl.forEach((f, i) => {
-      const ry = y + 128 + i * 9, sel = i === mapSel;
+      const ry = y + 126 + i * 8, sel = i === mapSel;
       ctx.fillStyle = sel ? '#2c2433' : '#231d2a'; ctx.fillRect(x + 4, ry, w - 8, 8);
       ctx.fillStyle = '#e8542e'; ctx.fillRect(x + 8, ry + 2, 3, 5); ctx.fillStyle = '#ffd36a'; ctx.fillRect(x + 9, ry + 4, 1, 2);
       invText(f.name, x + 16, ry + 7, sel ? '#ffe3a1' : '#f3e7c9', (sel ? 'bold ' : '') + '6px monospace');
@@ -9998,7 +10649,7 @@ const Overworld = (() => {
 
   function getSaveData() {
     return {
-      version: 6,
+      version: 7,
       equipment: { ...equipment },
       armorQuestActive,
       armorTutorialPending,
@@ -10027,7 +10678,8 @@ const Overworld = (() => {
       loreSeen: Array.from(loreSeen),
       relics: { owned: fortune.owned.slice(), equipped: fortune.equipped.slice(), slots: fortune.slots },
       pendingPerks,
-      depths: depthsSave()
+      depths: depthsSave(),
+      tide: tideSave()
     };
   }
 
@@ -10045,6 +10697,7 @@ const Overworld = (() => {
     Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0, xp: 0, kills: 0, goblinKills: 0, atkUp: 0, defUp: 0, perkAtk: 0, perkDef: 0, critUp: 0, luck: 0, thirst: 0, chargeUp: 0, elites: 0, chests: 0 });
     fortune.owned = []; fortune.equipped = []; fortune.slots = 2; fortune.phoenixUsed = false; pendingPerks = 0; perkOffer = null; relicReveal = null; wheel = null;
     bloodMoon = false; witchUntil = 0; Object.keys(chestRolls).forEach(k => delete chestRolls[k]); fortuneFx.length = 0; depthsReset();
+    tideLoad(saveData?.tide);
     stepDistance = 0;
     worldClock = 0.28;
     // A genuinely new slot begins in the kid's bedroom.
@@ -10141,6 +10794,7 @@ const Overworld = (() => {
       e.preventDefault(); e.stopPropagation(); return;
     }
     if (fortunePanel() && !paused) { if (!e.repeat) fortuneKey(k); e.preventDefault(); e.stopPropagation(); return; }
+    if (panel === 'tide' && !paused) { if (!e.repeat) tideKey(k); e.preventDefault(); e.stopPropagation(); return; }
     if (panel === 'shop') { if (!e.repeat || k.startsWith('arrow')) shopKey(k); e.preventDefault(); e.stopPropagation(); return; }
     if (panel === 'chapter') {
       if (!e.repeat && ['e', 'enter', ' ', 'escape', 'x'].includes(k) && time - invOpenTime > 1.5) { panel = null; sfx('uiConfirm'); if (onSave) onSave(getSaveData()); }
@@ -10301,6 +10955,7 @@ const Overworld = (() => {
     bloodDrops.length = 0; bloodBurst = 0;
     setBloodEffects(typeof settings === 'undefined' || settings.blood !== false);
     loadSceneMobs(REGIONS[platformScene] ? platformScene : 'forest');
+    if (region().tide) story[platformScene + 'Visited'] = true;
     placeNpcs();
     sidePlayer.roll = null; sidePlayer.charge = null; sidePlayer.pray = null; sidePlayer.drink = null; sidePlayer.rollCooldown = 0;
     attackHeld = false; sideRollQueued = false; sideUpperQueued = false;
@@ -10309,7 +10964,7 @@ const Overworld = (() => {
     dialogue = null; bossWaves.length = 0;
     restoreBossOutro();
     sceneTitle = null;
-    sideCameraX = Math.max(0, sidePlayer.x - canvas.width * 0.43);
+    sideCameraX = clamp(sidePlayer.x - canvas.width * 0.43, 0, Math.max(0, sideWorldWidth() - canvas.width));
     insideHouse = platformScene === 'house';
     introActive = !saveData || typeof saveData !== 'object';
     introTime = 0; introSoundChar = 0; introTextSegment = ''; introLastReveal = 0;
@@ -10356,6 +11011,11 @@ const Overworld = (() => {
     if (bossFight && bossFight.cine && !paused) { if (action === 'primary' || action === 'attack' || action === 'back') skipBossCine(); return; }
     if (dialogue && !paused) { if (action === 'primary' || action === 'attack' || action === 'back') advanceDialogue(); return; }
     if (fortunePanel() && !paused) { fortunePad(action); return; }
+    if (panel === 'tide' && !paused) {
+      if (action === 'primary') tideKey('e');
+      else if (action === 'back' || action === 'inventory' || action === 'pause') tideKey('escape');
+      return;
+    }
     if (panel === 'shop' && !paused) {
       if (action === 'primary') buyShopItem(shopSel);
       else if (action === 'back' || action === 'inventory') { closeCurrentPanel(); sfx('uiClose'); }

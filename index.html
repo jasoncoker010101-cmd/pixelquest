@@ -806,7 +806,17 @@ function recolor(img, ramp, flip) {
   const g = c.getContext('2d');
   if (flip) { g.translate(c.width, 0); g.scale(-1, 1); }
   g.drawImage(img, 0, 0);
-  const d = g.getImageData(0, 0, c.width, c.height), p = d.data, cols = ramp.map(hexRgb);
+  let d;
+  try { d = g.getImageData(0, 0, c.width, c.height); }
+  catch (err) {
+    if (err.name !== 'SecurityError') throw err;
+    // Sandboxed previews can draw the art, but cannot read its source pixels.
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = 'source-atop'; g.globalAlpha = .83;
+    g.fillStyle = ramp[Math.floor(ramp.length / 2)]; g.fillRect(0, 0, c.width, c.height);
+    return c;
+  }
+  const p = d.data, cols = ramp.map(hexRgb);
   let lo = 1, hi = 0;
   for (let i = 0; i < p.length; i += 4) if (p[i + 3] > 20) { const l = (p[i] * 0.3 + p[i + 1] * 0.59 + p[i + 2] * 0.11) / 255; lo = Math.min(lo, l); hi = Math.max(hi, l); }
   for (let i = 0; i < p.length; i += 4) {
@@ -826,7 +836,13 @@ function menuArtReady(k) {
   if (k === 'moonTex') {
     const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
     const g = c.getContext('2d'); g.drawImage(im, 0, 0);
-    const d = g.getImageData(0, 0, c.width, c.height).data, lum = new Float32Array(c.width * c.height);
+    let d;
+    try { d = g.getImageData(0, 0, c.width, c.height).data; }
+    catch (err) {
+      if (err.name !== 'SecurityError') throw err;
+      return; // Keep the cracked moon's untextured render in opaque origins.
+    }
+    const lum = new Float32Array(c.width * c.height);
     for (let i = 0; i < lum.length; i++) lum[i] = (d[i * 4] + d[i * 4 + 1] + d[i * 4 + 2]) / 765;
     MENU_ART.moonTex = { w: c.width, h: c.height, lum };
   }

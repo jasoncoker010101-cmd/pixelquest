@@ -1,5 +1,15 @@
 Pixel Quest asset credits
 
+Salt Coast expansion (assets/tide):
+- Luis Zuno (Ansimuz), Legacy Collection: https://ansimuz.itch.io/gothicvania-patreon-collection
+- The public-license.pdf inside this project's bundled copy licenses its assets CC0.
+  Used: Mountain Dusk parallax layers; Caverns and Treasure Hoard layers; Underwater
+  Fantasy layers; four Gothicvania wolf frames; seven flying-creature frames;
+  cropped TinyRPG villager frames; TinyRPG witch and centaur strips. The centaur
+  strip has an adapted color variant for the Salt Stag's second phase.
+- Original Pixel Quest art: Ione's two lantern forms, the Reever, item sprites,
+  stilt-houses, scenery props and settlement signs.
+
 Regional scenery (assets/scenery):
 - Ansimuz Legacy Collection: https://ansimuz.itch.io/gothicvania-patreon-collection
 - Four in-game props from the project's existing Legacy archive: woods, pillars, crystal and plant.
