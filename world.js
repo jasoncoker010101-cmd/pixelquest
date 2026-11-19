@@ -51,9 +51,9 @@ const Overworld = (() => {
     { x: 3370, y: 154, w: 140, h: 10 },
     { x: 3670, y: 136, w: 126, h: 10 }
   ];
-  const sideWolves = [
-    { x: 1370, home: 1370, min: 1280, max: 1470, dir: -1, runUntil: 0, phase: 0, red: false, hp: 3, maxHp: 3, attackCooldown: 0, attackTime: 0, attackHit: false, hurtTime: 0, deadTime: 0, dead: false, respawn: 0 },
-    { x: 2760, home: 2760, min: 2660, max: 2860, dir: 1, runUntil: 0, phase: 2.7, red: true, hp: 3, maxHp: 3, attackCooldown: 0, attackTime: 0, attackHit: false, hurtTime: 0, deadTime: 0, dead: false, respawn: 0 }
+  const sideGoblins = [
+    { x: 1370, home: 1370, min: 1280, max: 1470, dir: -1, runUntil: 0, phase: 0, hp: 3, maxHp: 3, attackCooldown: 0, attackTime: 0, attackHit: false, hurtTime: 0, deadTime: 0, dead: false, respawn: 0, moving: false },
+    { x: 2760, home: 2760, min: 2660, max: 2860, dir: 1, runUntil: 0, phase: 2.7, hp: 3, maxHp: 3, attackCooldown: 0, attackTime: 0, attackHit: false, hurtTime: 0, deadTime: 0, dead: false, respawn: 0, moving: false }
   ];
 
   // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
@@ -262,17 +262,20 @@ const Overworld = (() => {
             introWolfFindPath(startTwoX, startTwoY, 376, 376)
           ];
         }
-        const rawProgress = Math.max(0, Math.min(1, (introTime - fleeStart) / 3.25));
+        const routeDuration = 2.35;
+        const rawProgress = Math.max(0, Math.min(1, (introTime - fleeStart) / routeDuration));
         const travelProgress = rawProgress * rawProgress;
-        const one = introWolfPathPoint(introWolfFleePaths[0], travelProgress);
-        const two = introWolfPathPoint(introWolfFleePaths[1], travelProgress);
+        // After crossing the scripted route, keep their last running direction
+        // so they leave the scene instead of stopping on a visible run frame.
+        const extraDistance = Math.max(0, introTime - fleeStart - routeDuration) * 190;
+        const one = introWolfPathEscapePoint(introWolfFleePaths[0], travelProgress, extraDistance);
+        const two = introWolfPathEscapePoint(introWolfFleePaths[1], travelProgress, extraDistance);
         if (one) wolfOne = one;
         if (two) wolfTwo = two;
       }
 
-      // Keep the walk loop moving before the howl; start running at frame zero,
-      // then hold the final run frame after reaching the clear destination.
-      const runMoving = running && introTime < fleeStart + 3.25;
+      // The run cycle continues until the wolves have moved beyond the camera.
+      const runMoving = running;
       drawIntroWolf(wolfOne.x, wolfOne.y, false, wolfOne.vx, running ? 'run' : 'walk', walking || runMoving, running ? introTime - fleeStart : routeTime - 15);
       drawIntroWolf(wolfTwo.x, wolfTwo.y, true, wolfTwo.vx, running ? 'run' : 'walk', walking || runMoving, running ? introTime - fleeStart : routeTime - 15);
       if (introTime >= 21.4 && introTime < 24.8) {
@@ -467,6 +470,23 @@ const Overworld = (() => {
     return { x: path[path.length - 1].x, y: path[path.length - 1].y, vx: lastHorizontalDirection, vy: 0 };
   }
 
+  function introWolfPathEscapePoint(path, progress, extraDistance) {
+    const point = introWolfPathPoint(path, progress);
+    if (!point || !path || path.length < 2 || extraDistance <= 0) return point;
+    const previous = path[path.length - 2];
+    const last = path[path.length - 1];
+    const dx = last.x - previous.x, dy = last.y - previous.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 0.001) return point;
+    return {
+      ...point,
+      x: point.x + dx / length * extraDistance,
+      y: point.y + dy / length * extraDistance,
+      vx: dx,
+      vy: dy
+    };
+  }
+
   function drawIntroWolf(x, y, isRed, vx, animation, moving, animationTime) {
     const px = Math.round(x), groundY = Math.round(y);
     const running = animation === 'run';
@@ -624,15 +644,19 @@ const Overworld = (() => {
     image.src = pqAsset('./assets/knight/' + name + '.png');
     knightSprites[name.toLowerCase()] = image;
   });
-  const wolfCombatSprites = [
-    { attack: new Image(), hurt: new Image(), dead: new Image() },
-    { attack: new Image(), hurt: new Image(), dead: new Image() }
-  ];
-  ['Black_Werewolf','Red_Werewolf'].forEach((folder, i) => {
-    wolfCombatSprites[i].attack.src = pqAsset('./assets/werewolves/' + folder + '/Attack_1.png');
-    wolfCombatSprites[i].hurt.src = pqAsset('./assets/werewolves/' + folder + '/Hurt.png');
-    wolfCombatSprites[i].dead.src = pqAsset('./assets/werewolves/' + folder + '/Dead.png');
-  });
+  // Goblin Scout sheet: five horizontal animation rows, each made of
+  // 600x500 cells. The werewolf sheets remain reserved for the intro.
+  const goblinScoutSheet = new Image();
+  goblinScoutSheet.src = pqAsset('./assets/goblinpack/GoblinScout-Sheet.png');
+  const GOBLIN_FRAME_WIDTH = 600;
+  const GOBLIN_FRAME_HEIGHT = 500;
+  const GOBLIN_ANIMATIONS = {
+    idle: { row: 0, frames: 9 },
+    attack: { row: 1, frames: 6 },
+    hit: { row: 2, frames: 4 },
+    walk: { row: 3, frames: 6 },
+    death: { row: 4, frames: 9 }
+  };
 
   // Forest pack artwork: separate terrain tiles and large transparent decorations.
   const forestTilesSheet = new Image();
@@ -1901,56 +1925,64 @@ const Overworld = (() => {
     // The player's swing has a short active window; the hitbox follows facing direction.
     if (sidePlayer.attackTime > 0.12 && sidePlayer.attackTime < 0.27) {
       const hitX = sidePlayer.x + sidePlayer.facing * 39;
-      for (const wolf of sideWolves) {
-        if (wolf.dead || wolf.hurtTime > 0.1) continue;
-        const dx = wolf.x - hitX;
+      for (const goblin of sideGoblins) {
+        if (goblin.dead || goblin.hurtTime > 0.1) continue;
+        const dx = goblin.x - hitX;
         const dy = Math.abs((SIDE_GROUND_Y - 23) - playerCenterY);
-        if (Math.abs(dx) < 37 && dy < 36 && Math.sign(wolf.x - sidePlayer.x) === sidePlayer.facing) {
-          wolf.hp = Math.max(0, wolf.hp - 1);
-          wolf.hurtTime = 0.28;
-          if (wolf.hp <= 0) { wolf.dead = true; wolf.deadTime = 0; wolf.respawn = 7; wolf.attackTime = 0; }
+        if (Math.abs(dx) < 37 && dy < 36 && Math.sign(goblin.x - sidePlayer.x) === sidePlayer.facing) {
+          goblin.hp = Math.max(0, goblin.hp - 1);
+          goblin.hurtTime = 0.28;
+          goblin.moving = false;
+          if (goblin.hp <= 0) { goblin.dead = true; goblin.deadTime = 0; goblin.respawn = 7; goblin.attackTime = 0; }
         }
       }
     }
-    for (const wolf of sideWolves) {
-      if (wolf.dead) {
-        wolf.deadTime += dt; wolf.respawn -= dt;
-        if (wolf.respawn <= 0) { wolf.dead = false; wolf.deadTime = 0; wolf.hp = wolf.maxHp; wolf.x = wolf.home; wolf.attackCooldown = 1.2; }
+    for (const goblin of sideGoblins) {
+      if (goblin.dead) {
+        goblin.deadTime += dt; goblin.respawn -= dt;
+        if (goblin.respawn <= 0) {
+          goblin.dead = false; goblin.deadTime = 0; goblin.hp = goblin.maxHp;
+          goblin.x = goblin.home; goblin.attackCooldown = 1.2; goblin.moving = false;
+        }
         continue;
       }
-      wolf.attackCooldown = Math.max(0, wolf.attackCooldown - dt);
-      wolf.attackTime = Math.max(0, wolf.attackTime - dt);
-      wolf.hurtTime = Math.max(0, wolf.hurtTime - dt);
-      const dx = sidePlayer.x - wolf.x;
+      goblin.attackCooldown = Math.max(0, goblin.attackCooldown - dt);
+      goblin.attackTime = Math.max(0, goblin.attackTime - dt);
+      goblin.hurtTime = Math.max(0, goblin.hurtTime - dt);
+      const dx = sidePlayer.x - goblin.x;
       const distance = Math.abs(dx);
-      wolf.dir = dx < 0 ? -1 : 1;
-      if (wolf.hurtTime <= 0 && distance < 230) {
-        wolf.runUntil = Math.max(wolf.runUntil, time + 0.25);
-        if (distance > 43) wolf.x += wolf.dir * 76 * dt;
-        else if (wolf.attackCooldown <= 0 && wolf.attackTime <= 0) {
-          wolf.attackTime = 0.56; wolf.attackCooldown = 1.35; wolf.attackHit = false;
+      goblin.dir = dx < 0 ? -1 : 1;
+      goblin.moving = false;
+      if (goblin.hurtTime <= 0 && distance < 230) {
+        goblin.runUntil = Math.max(goblin.runUntil, time + 0.25);
+        if (distance > 43) {
+          goblin.x += goblin.dir * 76 * dt;
+          goblin.moving = true;
+        } else if (goblin.attackCooldown <= 0 && goblin.attackTime <= 0) {
+          goblin.attackTime = 0.56; goblin.attackCooldown = 1.35; goblin.attackHit = false;
         }
-      } else if (wolf.hurtTime <= 0) {
-        const speed = time < wolf.runUntil ? 90 : 18;
-        wolf.x += wolf.dir * speed * dt;
-        if (wolf.x < wolf.min) { wolf.x = wolf.min; wolf.dir = 1; }
-        if (wolf.x > wolf.max) { wolf.x = wolf.max; wolf.dir = -1; }
+      } else if (goblin.hurtTime <= 0) {
+        const speed = time < goblin.runUntil ? 90 : 18;
+        goblin.x += goblin.dir * speed * dt;
+        goblin.moving = true;
+        if (goblin.x < goblin.min) { goblin.x = goblin.min; goblin.dir = 1; }
+        if (goblin.x > goblin.max) { goblin.x = goblin.max; goblin.dir = -1; }
       }
-      // Wolf bite hitbox activates once near the middle of its attack animation.
-      if (wolf.attackTime > 0.22 && wolf.attackTime < 0.34 && !wolf.attackHit) {
-        wolf.attackHit = true;
+      // The scout's contact hit activates once near the middle of its attack animation.
+      if (goblin.attackTime > 0.22 && goblin.attackTime < 0.34 && !goblin.attackHit) {
+        goblin.attackHit = true;
         if (distance < 58 && sidePlayer.invulnTime <= 0 && sidePlayer.deadTime <= 0) {
           stats.health = Math.max(0, stats.health - Math.max(1, 3 - stats.defense));
           sidePlayer.hurtTime = 0.28; sidePlayer.invulnTime = 0.9;
-          sidePlayer.vx = -wolf.dir * 78;
+          sidePlayer.vx = -goblin.dir * 78;
           if (stats.health <= 0) { sidePlayer.deadTime = 0.95; sidePlayer.attackTime = 0; notice = 'You were overwhelmed. Returning to the trail...'; noticeUntil = time + 2; }
-          else { notice = 'A wolf hit you!'; noticeUntil = time + 1.2; }
+          else { notice = 'A goblin hit you!'; noticeUntil = time + 1.2; }
         }
       }
-      // Keep the player from walking through a living wolf; the attack hitbox is separate.
-      const bodyGap = sidePlayer.x - wolf.x;
+      // Keep the player from walking through a living scout; the attack hitbox is separate.
+      const bodyGap = sidePlayer.x - goblin.x;
       if (Math.abs(bodyGap) < 22 && Math.abs(sidePlayer.y - SIDE_GROUND_Y) < 8) {
-        sidePlayer.x = wolf.x + (bodyGap < 0 ? -22 : 22);
+        sidePlayer.x = goblin.x + (bodyGap < 0 ? -22 : 22);
         sidePlayer.vx = 0;
       }
     }
@@ -2191,41 +2223,47 @@ const Overworld = (() => {
     // the separate raised platforms here; keep the continuous ground invisible.
     FOREST_SIDE_PLATFORMS.slice(1).forEach(drawSidePlatform);
 
-    // The supplied werewolf walk/run/attack/hurt/death sheets drive the forest combatants.
-    const creatures = [
-      { x: 1370, walk: introBlackWalk, run: introBlackRun, phase: 0, framesWalk: 11, framesRun: 9 },
-      { x: 2760, walk: introRedWalk, run: introRedRun, phase: 2.7, framesWalk: 11, framesRun: 9 }
-    ];
-    creatures.forEach((creature, i) => {
-      const wolfState = sideWolves[i];
-      if (wolfState.dead) {
-        const deadSheet = wolfCombatSprites[i].dead;
-        if (deadSheet.complete && deadSheet.naturalWidth) {
-          const frame = Math.min(1, Math.floor(wolfState.deadTime * 4));
-          ctx.drawImage(deadSheet, frame * 128, 0, 128, 128, wolfState.x - 36, SIDE_GROUND_Y - 68, 72, 72);
+    // Use the uploaded Goblin Scout sheet for every forest enemy. Its rows are
+    // idle, attack, hit, walk, and death, with the original frame spacing intact.
+    if (goblinScoutSheet.complete && goblinScoutSheet.naturalWidth >= GOBLIN_FRAME_WIDTH * 9) {
+      sideGoblins.forEach(goblin => {
+        let animation = GOBLIN_ANIMATIONS.idle;
+        let frame = Math.floor(time * 2 + goblin.phase) % animation.frames;
+        if (goblin.dead) {
+          animation = GOBLIN_ANIMATIONS.death;
+          frame = Math.min(animation.frames - 1, Math.floor(goblin.deadTime * 7));
+        } else if (goblin.hurtTime > 0) {
+          animation = GOBLIN_ANIMATIONS.hit;
+          frame = Math.min(animation.frames - 1, Math.floor((0.28 - goblin.hurtTime) / 0.28 * animation.frames));
+        } else if (goblin.attackTime > 0) {
+          animation = GOBLIN_ANIMATIONS.attack;
+          frame = Math.min(animation.frames - 1, Math.floor((0.56 - goblin.attackTime) / 0.56 * animation.frames));
+        } else if (goblin.moving) {
+          animation = GOBLIN_ANIMATIONS.walk;
+          const chasing = Math.abs(sidePlayer.x - goblin.x) < 230;
+          frame = Math.floor(time * (chasing ? 9 : 5) + goblin.phase) % animation.frames;
         }
-        return;
-      }
-      const combat = wolfCombatSprites[i];
-      const running = time < wolfState.runUntil;
-      const sheet = wolfState.attackTime > 0 && combat.attack.complete ? combat.attack : wolfState.hurtTime > 0 && combat.hurt.complete ? combat.hurt : (running ? creature.run : creature.walk);
-      if (!sheet || !sheet.complete || !sheet.naturalWidth) return;
-      const frames = sheet === combat.attack ? 6 : sheet === combat.hurt ? 2 : running ? creature.framesRun : creature.framesWalk;
-      const frame = sheet === combat.attack ? Math.min(5, Math.floor((0.56 - wolfState.attackTime) / 0.56 * 6)) : sheet === combat.hurt ? Math.min(1, Math.floor(time * 8)) : Math.floor(time * (running ? 10 : 6) + creature.phase) % frames;
-      const w = 72, h = 72;
-      ctx.save();
-      if (wolfState.dir < 0) {
-        ctx.translate(wolfState.x + w / 2, 0); ctx.scale(-1, 1);
-        ctx.drawImage(sheet, frame * 128, 0, 128, 128, 0, SIDE_GROUND_Y - h + 4, w, h);
-      } else {
-        ctx.drawImage(sheet, frame * 128, 0, 128, 128, wolfState.x - w / 2, SIDE_GROUND_Y - h + 4, w, h);
-      }
-      ctx.restore();
-      if (!wolfState.dead) {
-        ctx.fillStyle = 'rgba(10,10,18,.78)'; ctx.fillRect(wolfState.x - 20, SIDE_GROUND_Y - 75, 40, 5);
-        ctx.fillStyle = '#d65b57'; ctx.fillRect(wolfState.x - 19, SIDE_GROUND_Y - 74, 38 * (wolfState.hp / wolfState.maxHp), 3);
-      }
-    });
+
+        const sourceX = frame * GOBLIN_FRAME_WIDTH + 50;
+        const sourceY = animation.row * GOBLIN_FRAME_HEIGHT;
+        const drawSize = 72;
+        ctx.save();
+        ctx.translate(goblin.x, 0);
+        ctx.scale(goblin.dir < 0 ? -1 : 1, 1);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(
+          goblinScoutSheet,
+          sourceX, sourceY, 500, GOBLIN_FRAME_HEIGHT,
+          -drawSize / 2, SIDE_GROUND_Y - drawSize, drawSize, drawSize
+        );
+        ctx.restore();
+
+        if (!goblin.dead) {
+          ctx.fillStyle = 'rgba(10,10,18,.78)'; ctx.fillRect(goblin.x - 20, SIDE_GROUND_Y - 75, 40, 5);
+          ctx.fillStyle = '#d65b57'; ctx.fillRect(goblin.x - 19, SIDE_GROUND_Y - 74, 38 * (goblin.hp / goblin.maxHp), 3);
+        }
+      });
+    }
 
     // A quiet trail marker signals the far side without abruptly ending the level.
     ctx.fillStyle = '#4c443b'; ctx.fillRect(3852, 126, 7, 70);
@@ -2969,7 +3007,7 @@ const Overworld = (() => {
     sidePlayer.facing = 1; sidePlayer.moving = false; sidePlayer.walk = 0;
     dadNoteRead = !!(saveData && saveData.sideNoteRead);
     sideJumpQueued = false; sideAttackQueued = false; sidePlayer.attackTime = 0; sidePlayer.attackCooldown = 0; sidePlayer.hurtTime = 0; sidePlayer.invulnTime = 0; sidePlayer.deadTime = 0;
-    sideWolves.forEach((wolf, i) => { wolf.x = wolf.home; wolf.hp = wolf.maxHp; wolf.dead = false; wolf.deadTime = 0; wolf.respawn = 0; wolf.attackTime = 0; wolf.attackCooldown = 0.7 + i * 0.4; wolf.hurtTime = 0; wolf.attackHit = false; });
+    sideGoblins.forEach((goblin, i) => { goblin.x = goblin.home; goblin.hp = goblin.maxHp; goblin.dead = false; goblin.deadTime = 0; goblin.respawn = 0; goblin.attackTime = 0; goblin.attackCooldown = 0.7 + i * 0.4; goblin.hurtTime = 0; goblin.attackHit = false; goblin.moving = false; });
     sideCameraX = Math.max(0, sidePlayer.x - canvas.width * 0.43);
     insideHouse = platformScene === 'house';
     introActive = !saveData || typeof saveData !== 'object';
