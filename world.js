@@ -6849,7 +6849,7 @@ const Overworld = (() => {
       if (l.scene === platformScene && Math.abs(x - l.x) < 24) return { label: story.pages.includes(l.id) ? 'READ AGAIN' : 'READ', act: () => readLore(l) };
     }
     const fire = fireHere();
-    if (fire) return { label: 'REST BY THE FIRE', act: () => restAtFire(fire) };
+    if (fire) return { label: 'REST / FAST TRAVEL', act: () => restAtFire(fire) };
     const tideSpot = tideInteraction(x);
     if (tideSpot) return tideSpot;
     const chest = nearChest();
@@ -6981,6 +6981,7 @@ const Overworld = (() => {
     sfx('rest'); padRumble(0.1, 0.2, 200);
     restFlash = time;
     if (onSave) onSave(getSaveData());
+    if (fire && mapFires().length > 1) openFastTravelMap();
   }
   let restFlash = -10;
   const REGION_SUBS = { forest: 'Edge of the woodland', hollow: 'Where the moon fell', pass: 'Chapter 2 - The road of embers', gloam: 'Chapter 3 - The drowned city',
@@ -8441,7 +8442,7 @@ const Overworld = (() => {
   function fastTravel(fire) {
     closeCurrentPanel();
     fadeIn = time;
-    enterRegion(fire.scene, fire.x - 30, 1);
+    enterRegion(fire.scene, fire.x - 12, 1);
     notice = 'You travel to ' + fire.name + '.'; noticeUntil = time + 2;
   }
   let fadeIn = -10;
@@ -9676,6 +9677,7 @@ const Overworld = (() => {
     else if (name === 'inventory') { panel = 'inventory'; if (typeof tab === 'number') invTab = tab; invMenu = null; invInspect = null; sfx('uiOpen'); }
     else panel = name;
     invOpenTime = time;
+    mapFeedback = '';
     keys.clear();
     sidePlayer.atk = null; sideAttackQueued = false;
   }
@@ -9842,8 +9844,8 @@ const Overworld = (() => {
     const p = canvasPoint(e);
     const inside = (x, y, w, h) => p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + h;
     if (paused) {
-      const row = Math.floor((p.y - 104) / 22);
-      if (row >= 0 && row < 3 && inside(78, 104 + row * 22, 164, 18)) {
+      const row = Math.floor((p.y - PAUSE_ROW_Y) / PAUSE_ROW_H);
+      if (row >= 0 && row < PAUSE_COUNT && inside(78, PAUSE_ROW_Y + row * PAUSE_ROW_H, 164, PAUSE_ROW_H - 1)) {
         pauseSelection = row; choosePauseOption(); e.preventDefault();
       }
       return;
@@ -10316,6 +10318,7 @@ const Overworld = (() => {
 
   // ---- MAP tab: the known world and fast travel between campfires ----
   let mapSel = 0;
+  let mapFeedback = '';
   const MAP_NODES = [
     { id: 'home', name: 'Home', x: 14, y: 84, known: () => true },
     { id: 'wood', name: 'Woodland', x: 44, y: 70, known: () => equipment.armor },
@@ -10333,6 +10336,16 @@ const Overworld = (() => {
     { id: 'vault', name: 'Salt Vault', x: 176, y: 99, from: [176, 76], show: () => story.netReturned }
   ];
   function mapFires() { return FIRES.filter(f => story.fires.includes(f.id)); }
+  function travelOrigin() {
+    if (!platformMode || !outdoorScene() || bossFight || tideArena || bossOutro || sidePlayer.deadTime > 0) return null;
+    const fire = fireHere();
+    return fire && story.fires.includes(fire.id) ? fire : null;
+  }
+  function openFastTravelMap() {
+    const at = travelOrigin();
+    mapSel = at ? Math.max(0, mapFires().findIndex(fire => fire.id !== at.id)) : 0;
+    openPanel('inventory', 5);
+  }
   function mapNodeHere() {
     if (!platformMode || !outdoorScene()) return 'home';
     if (platformScene === 'forest') return sidePlayer.x > CAMP.start - 200 ? 'camp' : 'wood';
@@ -10387,11 +10400,11 @@ const Overworld = (() => {
     invText('N', mx0 + 8, my0 + 12, '#5a3e22', 'bold 6px monospace', 'center');
     ctx.fillStyle = '#5a3e22'; ctx.fillRect(mx0 + 7, my0 + 14, 3, 1); ctx.fillRect(mx0 + 8, my0 + 13, 1, 6);
     // fast travel list
-    const fl = mapFires(), at = fireHere();
+    const fl = mapFires(), at = travelOrigin();
     mapSel = clamp(mapSel, 0, Math.max(0, fl.length - 1));
     invBox(x + 2, y + 114, w - 4, 52, '#201a26', '#4b3d35');
     invText('CAMPFIRES', x + 8, y + 123, '#d6b477', 'bold 6px monospace');
-    invText(at ? 'Fast travel ready' : 'Rest at a fire to travel', x + w - 8, y + 123, at ? '#9be37a' : '#8f8478', '5px monospace', 'right');
+    invText(mapFeedback || (at ? 'Choose a destination' : 'Rest at a fire to travel'), x + w - 8, y + 123, mapFeedback ? '#ffcb94' : at ? '#9be37a' : '#a99d8f', '5px monospace', 'right');
     if (!fl.length) invText('No campfires discovered yet.', x + w / 2, y + 145, '#8f8478', '6px monospace', 'center');
     fl.forEach((f, i) => {
       const ry = y + 126 + i * 8, sel = i === mapSel;
@@ -10404,10 +10417,10 @@ const Overworld = (() => {
     });
   }
   function mapConfirm() {
-    const fl = mapFires(), f = fl[mapSel], at = fireHere();
+    const fl = mapFires(), f = fl[mapSel], at = travelOrigin();
     if (!f) { sfx('uiError'); return; }
-    if (!at) { notice = 'Rest at a campfire to fast travel.'; noticeUntil = time + 1.8; sfx('uiError'); invShake = time; return; }
-    if (at.id === f.id) { notice = 'You are already here.'; noticeUntil = time + 1.4; sfx('uiError'); return; }
+    if (!at) { mapFeedback = 'Rest at a campfire first'; sfx('uiError'); invShake = time; return; }
+    if (at.id === f.id) { mapFeedback = 'You are already here'; sfx('uiError'); return; }
     sfx('magic'); fastTravel(f);
   }
   const LORE_ROWS = 7;
@@ -10436,14 +10449,16 @@ const Overworld = (() => {
     if (lines.length > 7) invText('... ' + (inputMode === 'pad' ? '✕' : 'E') + ' READ ALL', x + w - 8, by + 72, '#ffe3a1', 'bold 5px monospace', 'right');
   }
 
+  const PAUSE_COUNT = 4, PAUSE_ROW_Y = 99, PAUSE_ROW_H = 19;
   function choosePauseOption() {
-    if (pauseSelection === 1) {
+    if (pauseSelection === 2) {
       if (typeof toggleBloodEffects === 'function') toggleBloodEffects();
       else setBloodEffects(!bloodEffects);
       sfx('uiConfirm'); return;
     }
-    const exit = pauseSelection === 2;
+    const exit = pauseSelection === 3, map = pauseSelection === 1;
     paused = false; pauseSelection = 0; keys.clear();
+    if (map) { openFastTravelMap(); return; }
     if (exit) {
       const saveData = getSaveData();
       stop();
@@ -10478,15 +10493,15 @@ const Overworld = (() => {
     ctx.font = '7px monospace';
     ctx.fillText('THE WOODS CAN WAIT', 160, 96);
 
-    const options = ['RESUME', 'BLOOD EFFECTS: ' + (bloodEffects ? 'ON' : 'OFF'), 'SAVE & EXIT TO TITLE'];
+    const options = ['RESUME', 'MAP / FAST TRAVEL', 'BLOOD EFFECTS: ' + (bloodEffects ? 'ON' : 'OFF'), 'SAVE & EXIT TO TITLE'];
     options.forEach((label, i) => {
-      const y = 104 + i * 22;
+      const y = PAUSE_ROW_Y + i * PAUSE_ROW_H;
       const selected = i === pauseSelection;
       ctx.fillStyle = selected ? '#d3a56b' : '#302a35';
-      ctx.fillRect(78, y, 164, 19);
+      ctx.fillRect(78, y, 164, PAUSE_ROW_H - 2);
       ctx.strokeStyle = selected ? '#fff0bf' : '#80604a';
       ctx.lineWidth = 1;
-      ctx.strokeRect(78.5, y + 0.5, 163, 18);
+      ctx.strokeRect(78.5, y + 0.5, 163, PAUSE_ROW_H - 3);
       ctx.font = selected ? 'bold 9px monospace' : '9px monospace';
       ctx.fillStyle = selected ? '#241a25' : '#ead9bb';
       ctx.fillText((selected ? '> ' : '') + label, 160, y + 13);
@@ -10494,7 +10509,7 @@ const Overworld = (() => {
 
     ctx.fillStyle = '#b7b3ad';
     ctx.font = '6px monospace';
-    ctx.fillText(inputMode === 'pad' ? '↑ / ↓ SELECT     ✕ CHOOSE' : '↑ / ↓ SELECT     ENTER CHOOSE', 160, 174);
+    ctx.fillText(inputMode === 'pad' ? '↑ / ↓ SELECT     ✕ CHOOSE' : '↑ / ↓ SELECT     ENTER CHOOSE', 160, 179);
     ctx.restore();
   }
 
@@ -10807,9 +10822,9 @@ const Overworld = (() => {
         pauseSelection = 0;
         keys.clear();
       } else if (k === 'arrowup' || k === 'w') {
-        pauseSelection = (pauseSelection + 2) % 3;
+        pauseSelection = (pauseSelection + PAUSE_COUNT - 1) % PAUSE_COUNT;
       } else if (k === 'arrowdown' || k === 's') {
-        pauseSelection = (pauseSelection + 1) % 3;
+        pauseSelection = (pauseSelection + 1) % PAUSE_COUNT;
       } else if (k === 'enter' || k === ' ' || k === 'e') {
         choosePauseOption();
       }
@@ -10884,6 +10899,11 @@ const Overworld = (() => {
       if (e.repeat) return;
       if (k === 'i' && panel === 'dad-note') { closeCurrentPanel(); e.preventDefault(); return; }
       togglePanel(k === 'i' ? 'inventory' : 'stats');
+      e.preventDefault();
+      return;
+    }
+    if (k === 'm' && !panel) {
+      if (!e.repeat) openFastTravelMap();
       e.preventDefault();
       return;
     }

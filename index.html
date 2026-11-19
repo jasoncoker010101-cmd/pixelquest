@@ -166,6 +166,7 @@
     <label id="account-name-row">Player name<input id="account-name" type="text" minlength="3" maxlength="24" autocomplete="nickname"></label>
     <p id="account-feedback" role="status" aria-live="polite"></p>
     <button id="account-submit" type="submit">Continue</button>
+    <button id="account-resend" type="button" hidden>Resend confirmation</button>
     <button id="account-close" type="button">Back</button>
   </form>
 </dialog>
@@ -176,6 +177,7 @@
     const input = document.getElementById("code").value;
     if (input === SECRET_CODE) {
       document.getElementById("lock").remove();
+      document.dispatchEvent(new Event('pixelquest-unlocked'));
     } else {
       document.getElementById("error").textContent = "Wrong code, try again.";
     }
@@ -294,6 +296,7 @@ const SAVE_KEY = 'pixelquest-save-';
 const CLOUD_URL = 'https://nvqurbmopxohbcjxuogy.supabase.co';
 const CLOUD_KEY = 'sb_publishable_xLrZKJZnifoDQFvBXFbgug_5DmzsypK';
 const AUTH_KEY = 'pixelquest-auth-session';
+const AUTH_RETURN_URL = 'https://clever.is-local.org/';
 let cloudSession = null;
 let cloudProfile = null;
 let refreshInFlight = null;
@@ -307,12 +310,37 @@ const accountPassword = document.querySelector('#account-password');
 const accountName = document.querySelector('#account-name');
 const accountFeedback = document.querySelector('#account-feedback');
 const accountSubmit = document.querySelector('#account-submit');
+const accountResend = document.querySelector('#account-resend');
 const accountClose = document.querySelector('#account-close');
 const slotWrites = new Map();
 const memorySlots = new Map();
 const sessionUser = () => cloudSession?.user?.id || null;
 try { cloudSession = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch { cloudSession = null; }
 if (!sessionUser() || !cloudSession.access_token) cloudSession = null;
+
+function readEmailReturn() {
+  const url = new URL(location.href), fragment = new URLSearchParams(url.hash.slice(1));
+  const type = fragment.get('type') || url.searchParams.get('type');
+  const error = fragment.get('error_code') || url.searchParams.get('error_code') ||
+    fragment.get('error') || url.searchParams.get('error');
+  if (!error && !fragment.has('access_token')) return '';
+  url.hash = '';
+  for (const key of ['type', 'error', 'error_code', 'error_description']) url.searchParams.delete(key);
+  try { history.replaceState(null, '', url.pathname + url.search); } catch {}
+  // Do not sign in with tokens from a link. The player signs in with their password.
+  if (error) return 'This confirmation link couldn’t be used. Try signing in first; if your email is still unconfirmed, resend the email and use the newest link.';
+  return type === 'signup' || type === 'email' ? 'Email confirmed. Sign in with the password you chose.' : '';
+}
+const emailReturnNotice = readEmailReturn();
+if (emailReturnNotice) {
+  document.querySelector('#lock p').textContent = emailReturnNotice + ' Unlock the game to continue.';
+  document.addEventListener('pixelquest-unlocked', () => {
+    if (!sessionUser()) {
+      openAccountForm('signin');
+      accountFeedback.textContent = emailReturnNotice;
+    }
+  }, { once: true });
+}
 
 function storeSession(session) {
   cloudSession = session;
@@ -322,14 +350,20 @@ function storeSession(session) {
   } catch {}
 }
 
-async function authRequest(path, body) {
-  const response = await fetch(CLOUD_URL + '/auth/v1/' + path, {
+async function authRequest(path, body, redirectTo) {
+  const url = new URL(CLOUD_URL + '/auth/v1/' + path);
+  if (redirectTo) url.searchParams.set('redirect_to', redirectTo);
+  const response = await fetch(url, {
     method: 'POST',
     headers: { apikey: CLOUD_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify(body), signal: AbortSignal.timeout(12000)
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.msg || data.message || data.error_description || data.error || 'Account request failed.');
+  if (!response.ok) {
+    const error = new Error(data.msg || data.message || data.error_description || data.error || 'Account request failed.');
+    error.code = data.code || data.error_code;
+    throw error;
+  }
   return data;
 }
 
@@ -421,18 +455,37 @@ function openAccountForm(mode) {
   accountPassword.autocomplete = signup ? 'new-password' : 'current-password';
   accountName.value = profile ? (cloudProfile?.username || '') : '';
   accountSubmit.textContent = profile ? 'Save name' : signup ? 'Create account' : 'Sign in';
+  accountSubmit.disabled = accountResend.disabled = false;
+  accountResend.hidden = profile;
   accountDialog.showModal();
   (profile ? accountName : accountEmail).focus();
 }
 accountClose.addEventListener('click', () => { if (!accountBusy) accountDialog.close(); });
 accountDialog.addEventListener('cancel', e => { if (accountBusy) e.preventDefault(); });
 accountDialog.addEventListener('close', () => { if (!accountDialog.open) accountPassword.value = ''; });
+function setAccountBusy(busy) {
+  accountBusy = accountSubmit.disabled = accountClose.disabled = accountResend.disabled = busy;
+}
+accountResend.addEventListener('click', async () => {
+  if (accountBusy || accountMode === 'profile' || !accountEmail.reportValidity()) return;
+  setAccountBusy(true);
+  accountFeedback.textContent = 'Requesting a new confirmation email…';
+  try {
+    await authRequest('resend', { type: 'signup', email: accountEmail.value.trim() }, AUTH_RETURN_URL);
+    accountFeedback.textContent = 'If this address is waiting for confirmation, check your inbox and spam. Use only the newest link. If you already confirmed, sign in.';
+  } catch (error) {
+    accountFeedback.textContent = error.code === 'over_email_send_rate_limit'
+      ? 'Please wait a minute before asking for another email.'
+      : error instanceof TypeError || error.name === 'TimeoutError'
+        ? 'Could not reach the account service. Try again.' : error.message;
+  } finally { setAccountBusy(false); }
+});
 accountForm.addEventListener('submit', async e => {
   e.preventDefault();
   if (accountBusy) return;
   const mode = accountMode, name = accountName.value.trim();
   if (mode !== 'signin' && name.length < 3) { accountFeedback.textContent = 'Enter at least 3 characters for your player name.'; return; }
-  accountBusy = accountSubmit.disabled = accountClose.disabled = true;
+  setAccountBusy(true);
   accountFeedback.textContent = mode === 'signup' ? 'Creating account…' : mode === 'profile' ? 'Saving name…' : 'Signing in…';
   try {
     if (mode === 'profile') {
@@ -440,7 +493,8 @@ accountForm.addEventListener('submit', async e => {
     }
     const payload = { email: accountEmail.value.trim(), password: accountPassword.value };
     if (mode === 'signup') payload.data = { player_name: name };
-    const data = await authRequest(mode === 'signup' ? 'signup' : 'token?grant_type=password', payload);
+    const data = await authRequest(mode === 'signup' ? 'signup' : 'token?grant_type=password', payload,
+      mode === 'signup' ? AUTH_RETURN_URL : undefined);
     if (!data.access_token) {
       if (mode !== 'signup') throw new Error('Could not sign in. Try again.');
       accountPassword.value = '';
@@ -463,10 +517,12 @@ accountForm.addEventListener('submit', async e => {
       accountFeedback.textContent = 'You’re signed in, but your profile could not load. Close this form to continue.';
     }
   } catch (error) {
-    accountFeedback.textContent = error instanceof TypeError || error.name === 'TimeoutError' ?
+    accountFeedback.textContent = error.code === 'email_not_confirmed' ?
+      'Your email isn’t confirmed yet. Open the newest confirmation email or select Resend confirmation.' :
+      error instanceof TypeError || error.name === 'TimeoutError' ?
       'Could not reach the account service. Try again, or play as a guest.' : error.message;
   } finally {
-    accountBusy = accountSubmit.disabled = accountClose.disabled = false;
+    setAccountBusy(false);
     if (sessionUser() && mode !== 'profile' && accountDialog.open) accountSubmit.disabled = true;
   }
 });

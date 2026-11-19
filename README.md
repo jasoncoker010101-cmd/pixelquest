@@ -11,6 +11,11 @@ Brinewick has a campfire, pier, smith, kitchen, stable, and three-wave arena.
 Cast at the pier, watch the float, and interact again when it dips. Give your
 first Saltfin to Mara to learn how to find the hidden vault.
 
+Rest at a campfire to unlock it. Once you have two campfires, resting opens the
+fast-travel map. You can also open it with **M** or **Pause → Map / Fast Travel**.
+Pick a destination while standing at an unlocked campfire. Travel is free, and
+you arrive close enough to travel again without taking another step.
+
 Orrin works on the blade you have equipped. Tempered blades and reinforced
 coats wear in combat and can be repaired; base gear never breaks. Equip both
 Brineguard pieces for a defense bonus. Land hits with a blade to unlock
@@ -33,8 +38,9 @@ own epilogue. Existing Chapter 4 saves keep their original ledger progress.
 - All seven bosses now reveal a second form at half health. The short cutscene can be skipped with the same controls as the first entrance; combat resumes with a brief grace period.
 - Skarn, Mourn and Tidemaw use their own pixel art. Both opening moon shots show the fracture, and each outdoor region has its own set of scenery and lighting accents. See `assets/ASSET-CREDITS.txt` for the scenery source.
 - Blood particles are optional. Switch them off in either the title settings or the in-game pause menu.
-- Choose **Account → Create Account**, enter an email, password and player name, then follow the email confirmation link before signing in. Guest saves are separate from account saves. Existing cloud saves are read from the same Supabase project.
+- Choose **Account → Create Account**, enter an email, password and player name, then follow the email confirmation link before signing in. If an old link failed, try signing in first, then use **Resend confirmation** if your email is still unconfirmed. Guest saves are separate from account saves. Existing cloud saves are read from the same Supabase project.
 - If the cloud service cannot load a slot, retry or sign out to play as a guest. The game does not silently replace a cloud slot with a guest save.
+- Deployment setup: in the Supabase project's **Authentication → URL Configuration**, set the Site URL and allowed redirect URL to `https://clever.is-local.org/`. The default confirmation email should link to `{{ .ConfirmationURL }}`. Previously sent links retain their original settings.
 
 ## Features
 
