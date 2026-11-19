@@ -1541,8 +1541,14 @@ function drawBolt() {
 function drawCrows() {
   const im = MENU_IMG.crow; if (!im.complete || !im.naturalWidth) return;
   crows.forEach(cr => {
-    const f = Math.floor(t * 8 + cr.ph * 3) % 2, s = cr.s;
-    ctx.drawImage(im, f * 48, 0, 48, 48, Math.round(cr.x), Math.round(cr.y), Math.round(48 * s), Math.round(48 * s));
+    const f = Math.floor(t * 8 + cr.ph * 3) % 2, size = Math.round(48 * cr.s);
+    // The source frames face left; mirror them for rightward flight.
+    const rightward = cr.v > 0;
+    ctx.save();
+    ctx.translate(Math.round(cr.x) + (rightward ? size : 0), Math.round(cr.y));
+    if (rightward) ctx.scale(-1, 1);
+    ctx.drawImage(im, f * 48, 0, 48, 48, 0, 0, size, size);
+    ctx.restore();
   });
 }
 

@@ -186,7 +186,54 @@ const Overworld = (() => {
 
   // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
   let introActive = false, introTime = 0, introAudio = null, introSoundChar = 0, introTextSegment = '', introLastReveal = 0, introWolfHowlOne = false, introWolfHowlTwo = false, introWolfHowlEcho = false;
-  const INTRO_DURATION = 45.5;
+  const INTRO_SPACE_END = 8.5;
+  const INTRO_LORE = [
+    { id: 'long-winter', title: 'THE LONG WINTER', seconds: 7.4,
+      text: "Twenty winters ago, the moon stayed dark for nine nights. Morwen's daughter Lys did not wake." },
+    { id: 'morwens-vow', title: "MORWEN'S VOW", seconds: 6.4,
+      text: 'That spring, Morwen tried to pull down the moon. She wanted one that would never wane.' },
+    { id: 'moonfall', title: 'THE MOONFALL', seconds: 6.7,
+      text: 'The Silver Watch stopped her, but the moon broke. Burning shards scattered across the land.' },
+    { id: 'hollow-seal', title: 'THE HOLLOW', seconds: 5.4,
+      text: 'The greatest shard fell in the Hollow. It was later buried beneath a seal.' }
+  ];
+  const INTRO_LORE_LENGTH = INTRO_LORE.reduce((n, scene) => n + scene.seconds, 0);
+  const INTRO_DURATION = 45.5 + INTRO_LORE_LENGTH;
+  // The MP3 includes silent gaps for the scene cuts and countryside sound effects.
+  // Follow the visual clock after a slow frame, a seek, or a background-tab pause.
+  let introNarrator = null, introNarratorBlocked = false, introNarratorPlaying = false;
+  function syncIntroNarration() {
+    const a = introNarrator;
+    if (!a || introNarratorBlocked) return;
+    if (a.error) { introNarratorBlocked = true; return; }
+    if (!introActive || document.hidden || (typeof settings !== 'undefined' && settings.sound === false)) {
+      a.pause(); introNarratorPlaying = false; return;
+    }
+    if (a.readyState >= 1 && introTime >= a.duration) { a.pause(); return; }
+    if (a.readyState >= 1 && !a.seeking && Math.abs(a.currentTime - introTime) > .60) a.currentTime = introTime;
+    if (a.paused && !introNarratorPlaying && !a.ended) {
+      introNarratorPlaying = true;
+      a.play()?.catch(error => {
+        if (introNarrator !== a) return;
+        introNarratorPlaying = false;
+        if (error.name !== 'AbortError') introNarratorBlocked = true;
+      });
+    }
+  }
+  function stopIntroNarration() {
+    document.removeEventListener('visibilitychange', syncIntroNarration);
+    if (introNarrator) { introNarrator.pause(); introNarrator.currentTime = 0; introNarrator = null; }
+    introNarratorPlaying = false;
+  }
+  function introLoreAt(t) {
+    t -= INTRO_SPACE_END;
+    if (t < 0) return null;
+    for (const scene of INTRO_LORE) {
+      if (t < scene.seconds) return { scene, t };
+      t -= scene.seconds;
+    }
+    return null;
+  }
   let inputMode = 'keyboard';
   function setInputMode(mode) { inputMode = mode === 'pad' || mode === 'touch' ? mode : 'keyboard'; }
   const PAD_LABELS = { E: '✕', ENTER: '✕', SPACE: '✕', J: '□', I: '△', C: 'TOUCHPAD', ESC: '○', P: 'OPTIONS' };
@@ -201,6 +248,7 @@ const Overworld = (() => {
   function finishIntro() {
     introActive = false;
     introTime = INTRO_DURATION;
+    stopIntroNarration();
     [introWolfHowlAudioOne, introWolfHowlAudioTwo].forEach(a => { a.pause(); a.currentTime = 0; });
     insideHouse = true;
     interiorPlayer.x = KID_SPAWN.x;
@@ -249,10 +297,11 @@ const Overworld = (() => {
   function introTextBox(lines, reveal, segment) {
     if (introTextSegment !== segment) { introTextSegment = segment; introLastReveal = 0; }
     const full = lines.join(' ');
-    const targetReveal = Math.min(full.length, Math.max(0, Math.floor(reveal)));
+    const spoken = !!introNarrator && !introNarratorBlocked && settings.sound !== false;
+    const targetReveal = spoken ? full.length : Math.min(full.length, Math.max(0, Math.floor(reveal)));
     // Play exactly once for each newly revealed letter or number. Spaces and punctuation stay silent.
     for (let i = introLastReveal; i < targetReveal; i++) {
-      if (/[A-Za-z0-9]/.test(full[i])) introBlip();
+      if (!spoken && /[A-Za-z0-9]/.test(full[i])) introBlip();
     }
     introLastReveal = Math.max(introLastReveal, targetReveal);
     const shown = full.slice(0, targetReveal);
@@ -1219,13 +1268,135 @@ const Overworld = (() => {
     drawIntroVignette(0.75 + sky.night * 0.25);
   }
 
+  function loreShape(color, points) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    points.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+    ctx.closePath(); ctx.fill();
+  }
+
+  function drawLoreMorwen(x, y, raised) {
+    ctx.save(); ctx.translate(x, y);
+    loreShape('#372a52', [[-8,-61],[4,-65],[14,-57],[15,-42],[23,-12],[26,0],[-26,0],[-24,-12],[-15,-35],[-15,-49]]);
+    loreShape('#63497c', [[-8,-60],[4,-63],[10,-54],[5,-44],[-6,-44],[-16,-22],[-21,-3],[-24,-3],[-20,-22],[-13,-43],[-13,-51]]);
+    loreShape('#1c192f', [[-7,-52],[3,-56],[10,-53],[10,-44],[4,-39],[-6,-42]]);
+    loreShape('#bd989e', [[5,-53],[10,-52],[10,-47],[13,-46],[10,-44],[7,-44],[5,-47]]);
+    if (raised) {
+      loreShape('#77578d', [[0,-36],[11,-41],[26,-54],[31,-67],[35,-65],[34,-54],[23,-40],[9,-28]]);
+      loreShape('#dbb8b6', [[31,-67],[33,-75],[35,-74],[35,-70],[39,-73],[40,-71],[35,-64]]);
+    } else {
+      loreShape('#604979', [[3,-35],[13,-25],[28,-21],[28,-17],[12,-17],[-1,-27]]);
+      ctx.fillStyle = '#bd989e'; ctx.fillRect(28, -21, 5, 4);
+    }
+    ctx.restore();
+  }
+
+  function drawIntroLore({ scene, t }) {
+    const motion = prefersReducedMotion() ? 0 : t;
+    const sky = ctx.createLinearGradient(0, 12, 0, 182);
+    sky.addColorStop(0, scene.id === 'long-winter' ? '#111427' : '#14122c');
+    sky.addColorStop(1, scene.id === 'hollow-seal' ? '#32243b' : '#394364');
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, 320, 240);
+
+    if (scene.id === 'long-winter') {
+      ctx.fillStyle = '#12131f'; ctx.fillRect(0, 136, 320, 58);
+      for (let i = 0; i < 5; i++) {
+        ctx.fillStyle = '#222335'; ctx.fillRect(0, 29 + i * 22, 320, 1);
+        ctx.fillStyle = '#201e2a'; ctx.fillRect(0, 145 + i * 10, 320, 1);
+      }
+      ctx.fillStyle = '#362d41'; ctx.fillRect(38, 36, 91, 92);
+      ctx.fillStyle = '#141b33'; ctx.fillRect(44, 42, 79, 80);
+      for (let i = 0; i < 34; i++) {
+        ctx.fillStyle = i % 5 === 0 ? '#deeaf4' : '#798fb4';
+        ctx.fillRect(46 + Math.floor((introHash(i * 7.7) * 74 + motion * (5 + i % 4)) % 74),
+          44 + Math.floor((introHash(i * 9.1) * 76 + motion * (13 + i % 6)) % 76), i % 4 === 0 ? 2 : 1, 1);
+      }
+      loreShape('#becbdf', [[44,116],[59,112],[76,116],[107,111],[123,116],[123,122],[44,122]]);
+      ctx.fillStyle = '#55445b'; ctx.fillRect(80, 42, 5, 80); ctx.fillRect(44, 80, 79, 4);
+      ctx.fillStyle = '#66576b'; ctx.fillRect(34, 123, 99, 5);
+      loreShape('#212a44', [[84,128],[120,128],[176,182],[37,182]]);
+      drawLoreMorwen(132, 169, false);
+      ctx.fillStyle = '#513e50'; ctx.fillRect(175, 131, 103, 24); ctx.fillRect(178, 154, 5, 17); ctx.fillRect(269, 154, 5, 17);
+      ctx.fillStyle = '#a19aba'; ctx.fillRect(180, 131, 26, 8);
+      loreShape('#76668f', [[200,134],[212,129],[236,134],[269,135],[269,148],[195,148]]);
+      ctx.fillStyle = '#9e88ae'; ctx.fillRect(201, 135, 42, 2);
+      ctx.fillStyle = '#b08c94'; ctx.fillRect(190, 131, 9, 4);
+      ctx.fillStyle = '#2b202d'; ctx.fillRect(188, 129, 8, 2);
+      ctx.fillStyle = '#cfb385'; ctx.fillRect(260, 119, 3, 11);
+      ctx.fillStyle = '#f9d49b'; ctx.fillRect(261, 115 - Math.round(Math.sin(motion * 7)), 1, 4);
+    } else if (scene.id === 'hollow-seal') {
+      loreShape('#100e1c', [[0,26],[38,23],[57,52],[77,53],[92,82],[116,89],[120,106],[193,106],[203,82],[227,70],[242,50],[275,34],[320,26],[320,194],[0,194]]);
+      loreShape('#30253d', [[0,141],[48,126],[72,131],[94,109],[128,116],[165,98],[189,114],[227,108],[261,126],[320,121],[320,186],[0,186]]);
+      loreShape('#4b3a58', [[63,168],[91,147],[121,141],[145,147],[171,130],[188,143],[216,146],[252,168],[225,180],[91,180]]);
+      const ward = smooth01((t - 2.3) / 1.4);
+      const light = ctx.createRadialGradient(161, 127, 4, 161, 127, 72);
+      light.addColorStop(0, `rgba(184,133,251,${.55 - ward * .29})`); light.addColorStop(1, 'rgba(184,133,251,0)');
+      ctx.fillStyle = light; ctx.fillRect(89, 55, 144, 130);
+      loreShape('#a887dc', [[138,148],[148,105],[169,78],[183,104],[173,138],[160,153]]);
+      loreShape('#f1e6ff', [[148,105],[169,78],[167,112],[155,134],[152,118]]);
+      loreShape('#625387', [[167,112],[169,78],[183,104],[173,138],[160,153]]);
+      loreShape('#2a2334', [[124,158],[153,154],[176,155],[193,160],[199,175],[117,175]]);
+      ctx.save(); ctx.globalAlpha = ward;
+      ctx.strokeStyle = '#e6ca98'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(158, 161, 55, 15, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#f4db9e';
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4;
+        const x = Math.round(158 + Math.cos(a) * 61), y = Math.round(161 + Math.sin(a) * 17);
+        ctx.fillRect(x - 2, y, 5, 1); ctx.fillRect(x, y - 2, 1, 5);
+      }
+      ctx.restore();
+    } else {
+      drawIntroBrightStars(0, 0, .6, motion);
+      loreShape('#2a2b4c', [[0,127],[32,118],[51,102],[65,111],[90,83],[109,112],[129,117],[160,110],[185,124],[211,115],[233,88],[252,113],[270,102],[298,117],[320,108],[320,185],[0,185]]);
+      loreShape('#191b32', [[0,146],[62,151],[105,133],[147,144],[186,132],[221,149],[260,138],[304,145],[320,135],[320,187],[0,187]]);
+      const fractured = scene.id === 'moonfall' && t > 1.15;
+      const y = scene.id === 'morwens-vow' ? 58 + Math.round(smooth01(t / 5) * 13) : 71;
+      if (fractured) {
+        drawFracturedMoon(206, y, 19, getIntroSkyMoon(), motion, 1);
+        const fall = prefersReducedMotion() ? .6 : smooth01((t - 1.15) / 4.2);
+        for (let i = 0; i < 7; i++) {
+          const dx = (i - 2.8) * 19, x = Math.round(206 + fall * dx), sy = Math.round(y + fall * (34 + i * 9));
+          loreShape(i === 4 ? '#f4dfb9' : '#c196e0', [[x, sy],[x - Math.sign(dx) * 9, sy - 18],[x + 3, sy - 6]]);
+        }
+      } else {
+        const moon = getIntroSkyMoon();
+        if (moon) ctx.drawImage(moon, 186, y - 20);
+        else { ctx.fillStyle = '#e2ddf2'; ctx.beginPath(); ctx.arc(206, y, 19, 0, Math.PI * 2); ctx.fill(); }
+        ctx.strokeStyle = '#b7a3dc'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(133, 92); ctx.quadraticCurveTo(171, 105 + Math.sin(motion * 1.3) * 6, 194, y + 17); ctx.stroke();
+      }
+      if (scene.id === 'moonfall') {
+        for (let i = 0; i < 3; i++) {
+          const x = 37 + i * 26, y = 141 + i * 6;
+          loreShape('#242338', [[x - 8,y],[x + 3,y - 9],[x + 10,y - 7],[x + 14,y + 31],[x - 11,y + 31]]);
+          ctx.fillStyle = '#9594aa'; ctx.fillRect(x, y - 14, 9, 9);
+          ctx.fillStyle = '#171927'; ctx.fillRect(x + 4, y - 11, 6, 2);
+          ctx.fillStyle = '#726b8e'; ctx.fillRect(x - 5, y + 3, 13, 2);
+          ctx.fillStyle = '#bbb0c7'; ctx.fillRect(x + 12, y - 5, 1, 27);
+        }
+      }
+      drawLoreMorwen(98, 173, scene.id === 'morwens-vow' || !fractured);
+    }
+    drawIntroVignette(.6);
+    drawIntroLetterbox();
+    ctx.font = 'bold 7px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#e0c99c';
+    ctx.fillText(scene.title, 17, 24);
+    introTextBox([scene.text], (t - .3) * 21, scene.id);
+    const shade = Math.max(0, 1 - t / .55, 1 - (scene.seconds - t) / .45);
+    if (shade > 0) { ctx.fillStyle = `rgba(0,0,0,${shade})`; ctx.fillRect(0, 0, 320, 240); }
+  }
+
   function drawIntro() {
-    const t = introTime;
+    const lore = introLoreAt(introTime);
+    const t = introTime < INTRO_SPACE_END ? introTime : introTime - INTRO_LORE_LENGTH;
     ctx.fillStyle = '#03050d'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    if (t < 8.5) {
+    if (lore) {
+      drawIntroLore(lore);
+    } else if (introTime < INTRO_SPACE_END) {
       drawIntroSpace(t);
       drawIntroLetterbox();
-      if (t > 1.6) introTextBox(['EARTH. A familiar world of oceans, forests, and endless skies.'], (t - 1.6) * 17, 'earth');
+      if (t > 1.6) introTextBox(['Earth. A world of oceans, forests, and endless skies.'], (t - 1.6) * 17, 'earth');
       const fadeIn = 1 - Math.min(1, t / 1.2);
       const fadeOut = Math.max(0, Math.min(1, (t - 6.6) / 1.9));
       const a = Math.max(fadeIn, fadeOut);
@@ -1234,15 +1405,15 @@ const Overworld = (() => {
       drawIntroNight(t);
       drawIntroLetterbox();
       if (t > 9.0 && t < 14.3) {
-        introTextBox(['Long ago, people built quiet homes between fields and forests, under a gentle moon.'], (t - 9.0) * 17, 'settled-world');
+        introTextBox(['Years passed. Quiet homes still stand beneath the scarred moon.'], (t - 9.0) * 19, 'settled-world');
       } else if (t >= 14.8 && t < 20.0) {
-        introTextBox(['Twenty winters ago the moon cracked, and burning shards fell into forgotten places.'], (t - 14.8) * 17, 'awakening');
+        introTextBox(['But the land remembers what fell from the sky.'], (t - 14.8) * 17, 'awakening');
       } else if (t >= 20.5 && t < 25.7) {
-        introTextBox(['Where they landed the wilds changed. Beasts grew wrong. The dead stopped resting.'], (t - 20.5) * 17, 'creatures');
+        introTextBox(['Where the shards fell, beasts changed. The dead stopped resting.'], (t - 20.5) * 17, 'creatures');
       } else if (t >= 26.2 && t < 32.0) {
-        introTextBox(['Now the moon hangs too close. On certain nights the wolves in the hills walk upright.'], (t - 26.2) * 17, 'nightfall');
+        introTextBox(['On certain nights, the wolves in the hills walk upright.'], (t - 26.2) * 17, 'nightfall');
       } else if (t >= 32.2 && t < 37.4) {
-        introTextBox(['Still, people make a life here, guarded once by the knights of the Silver Watch.'], (t - 32.2) * 17, 'frontier');
+        introTextBox(['Still, people make a life here, once guarded by the Silver Watch.'], (t - 32.2) * 17, 'frontier');
       }
       const fadeIn = 1 - Math.min(1, (t - 8.5) / 1.4);
       const fadeOut = Math.max(0, Math.min(1, (t - 36.8) / 1.7));
@@ -1257,14 +1428,14 @@ const Overworld = (() => {
       const fadeIn = 1 - Math.min(1, (t - 38.5) / 0.9);
       if (fadeIn > 0) { ctx.fillStyle = 'rgba(0,0,0,' + fadeIn + ')'; ctx.fillRect(0, 0, 320, 240); }
       if (t < 44.4) {
-        introTextBox(['And here, at the edge of the wilderness, a new day begins...'], (t - 39.0) * 17, 'new-day');
+        if (t >= 39.0) introTextBox(['Here, at the edge of the wilderness, a new day begins.'], (t - 39.0) * 17, 'new-day');
       }
       const fade = Math.max(0, Math.min(1, (t - 44.5) / 1));
       if (fade > 0) { ctx.fillStyle = 'rgba(0,0,0,' + fade + ')'; ctx.fillRect(0, 0, 320, 240); }
     }
-    if (t < INTRO_DURATION - 1) {
+    if (introTime < INTRO_DURATION - 1) {
       ctx.fillStyle = 'rgba(235,229,211,.55)'; ctx.font = '6px monospace'; ctx.textAlign = 'right';
-      ctx.fillText('PRESS ANY BUTTON TO SKIP', 306, 236);
+      ctx.fillText(inputMode === 'touch' ? 'TAP TO SKIP' : 'PRESS ANY BUTTON TO SKIP', 306, 236);
     }
   }
   let worldClock = 0.28, wolfSpawned = false, wolfNoticeCooldown = 0;
@@ -10379,10 +10550,13 @@ const Overworld = (() => {
     updateMusic(dt);
     if (paused) return;
     if (introActive) {
+      if (document.hidden) return;
       introTime += dt;
-      if (introTime >= 17.2 && !introWolfHowlOne) { introWolfHowlOne = true; introWolfHowlAudioOne.pause(); introWolfHowlAudioOne.currentTime = 0; }
+      syncIntroNarration();
+      const countryTime = introTime - INTRO_LORE_LENGTH;
+      if (countryTime >= 17.2 && !introWolfHowlOne) { introWolfHowlOne = true; introWolfHowlAudioOne.pause(); introWolfHowlAudioOne.currentTime = 0; }
       // This recording is an environmental howl from beyond the visible wolves, not from the wolf on the right.
-      if (introTime >= 21.4 && !introWolfHowlTwo) { introWolfHowlTwo = true; playIntroWolfAudio(introWolfHowlAudioTwo, 0.18, 0.92); }
+      if (countryTime >= 21.4 && !introWolfHowlTwo) { introWolfHowlTwo = true; playIntroWolfAudio(introWolfHowlAudioTwo, introNarrator && !introNarratorBlocked ? .09 : .18, .92); }
       if (introTime >= INTRO_DURATION) finishIntro();
       return;
     }
@@ -10767,7 +10941,7 @@ const Overworld = (() => {
     return { x: (e.clientX - r.left) * canvas.width / r.width, y: (e.clientY - r.top) * canvas.height / r.height };
   }
   function onCanvasPointer(e) {
-    if (introActive) return;
+    if (introActive) { finishIntro(); e.preventDefault(); return; }
     if (nickScene) { e.preventDefault(); return; }
     const p = canvasPoint(e);
     const inside = (x, y, w, h) => p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + h;
@@ -11966,10 +12140,15 @@ const Overworld = (() => {
     insideHouse = platformScene === 'house';
     introActive = !saveData || typeof saveData !== 'object';
     introTime = 0; introSoundChar = 0; introTextSegment = ''; introLastReveal = 0;
+    stopIntroNarration(); introNarratorBlocked = false;
     introWolfFleePaths = null;
     introWolfHowlOne = false; introWolfHowlTwo = false; introWolfHowlEcho = false;
     if (introActive && (typeof settings === 'undefined' || settings.sound !== false)) {
       try { audioCtx(); } catch (_) {}
+      introNarrator = new Audio('./assets/audio/intro-narrator.mp3');
+      introNarrator.volume = .85;
+      introNarrator.preload = 'auto';
+      document.addEventListener('visibilitychange', syncIntroNarration);
     }
     if (introActive) { insideHouse = true; interiorPlayer.x = KID_SPAWN.x; interiorPlayer.y = KID_SPAWN.y; interiorPlayer.facing = KID_SPAWN.facing; }
     window.addEventListener('keydown', onKeyDown, true);
@@ -11983,6 +12162,7 @@ const Overworld = (() => {
   }
 
   function stop() {
+    stopIntroNarration();
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp);
     window.removeEventListener('blur', clearHeldInput);
@@ -12095,6 +12275,8 @@ const Overworld = (() => {
       phase: introActive ? 'intro' : paused ? 'paused' : nickScene ? 'nick-ambush' : panel || 'play',
       ambushTime: nickScene?.t ?? null, ambushBeat: nickScene ? nickScene.awake ? 'wake' : nickScene.struck ? 'impact' : nickScene.t >= NICK_CHARGE ? 'charge' : 'reveal' : null,
       introTime: introActive ? introTime : null,
+      introBeat: introActive ? introLoreAt(introTime)?.scene.id ||
+        (introTime < INTRO_SPACE_END ? 'earth' : introTime < 38.5 + INTRO_LORE_LENGTH ? 'countryside' : 'bedroom') : null,
       player: { x: Math.round(insideHouse ? interiorPlayer.x : sidePlayer.x), y: Math.round(insideHouse ? interiorPlayer.y : sidePlayer.y),
         health: stats.health, stamina: Math.round(stats.stamina), level: stats.level, xp: stats.xp, armor: equipment.armor, weapon: currentWeapon() },
       dialogue: dialogue?.lines[dialogue.i]?.who ?? null, interaction: !insideHouse && nearbyInteraction()?.label || null,
