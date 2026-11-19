@@ -2132,10 +2132,10 @@ const Overworld = (() => {
     drawSidePlayer();
     ctx.restore();
 
-    ctx.fillStyle = 'rgba(10,10,18,.72)';
-    ctx.fillRect(218, 4, 98, 17);
+    ctx.fillStyle = 'rgba(10,10,18,.82)';
+    ctx.fillRect(178, 4, 138, 17);
     ctx.fillStyle = '#f5e6c8'; ctx.font = '7px monospace'; ctx.textAlign = 'right';
-    ctx.fillText('HOME / NOTE', 311, 15);
+    ctx.fillText(sidePlayer.x > 225 && !dadNoteRead ? "DAD'S ROOM  ←" : 'HOME / NOTE', 311, 15);
     ctx.fillStyle = 'rgba(8,9,16,.72)';
     ctx.fillRect(0, 226, canvas.width, 14);
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
