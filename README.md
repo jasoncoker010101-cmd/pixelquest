@@ -19,12 +19,26 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
   - Chapter 1, The Hollow King: follow Dad's trail through the forest to Bram's camp and into the Hollow, collect journal pages and lore stones, defeat Grukk, and find Dad.
   - Chapter 2, The Ashen Pass: Dad tells you about the Pale Court and Morwen. Cross the burning mountain road with Wren and face Ashmane, the Pale Mare.
   - Chapter 3, The Moon-Eater: reach Gloamhold, a drowned city in the rain, and fight Vael in the castle quarter. The chapter ends with a tease for Chapter 4, The Pale Court.
-- **Lore:** about 19 lore entries on stones, letters, and logs across every area, all readable in the LORE tab.
+- **Lore:** about 32 lore entries on stones, letters, and logs across every area, all readable in the LORE tab. The story follows one timeline:
+  - Twenty winters ago, the moon-mage Morwen lost her daughter Lys in the Long Winter. She tried to pull the moon down to make one that never wanes, and the moon cracked. The biggest shard fell in the Hollow (the Moonfall), and Aldric's Silver Watch sealed it away.
+  - Twelve winters ago, in the fever winter, the Black Tide drowned Gloamhold. The Pale Court took the city's moon-readers alive, including Rowan's mother Seren.
+  - A week before the game starts, goblins led by Grukk dug up the Hollow shard and sold it to the Pale Court's riders. Without the barrow bell to quiet the shard, the wolves in the hills began to walk upright.
+- **Side areas (Depths):** four optional areas, each with its own champion boss, intro cinematic, lore, and weapon reward.
+  - The Witchmire, off the Woodland: Skarn, the Mire Chief.
+  - The Watch Barrows, off the Hollow: Mourn, the Barrow Warden.
+  - Cinder Deep, off the Ashen Pass: Ignaroth, the Cinder Wyrm.
+  - The Sunken Archive, off Gloamhold: Tidemaw, the Drowned Bell.
+- **Things to do along the road:**
+  - **Moon shrines:** pray for a random two-minute blessing (speed, damage, defense, luck, or healing). Sometimes the moon sends a trial of elites instead. Shrines rekindle when you rest.
+  - **Hunt boards:** at each campfire. Take a random bounty and come back to claim coins and a prize.
+  - **Moon moths:** 24 to find, with rewards at 6, 12, 18, and 24.
+  - **Tess the peddler:** sometimes found on the road, selling relics, tonics, charms, and mystery bundles.
+  - **Ambushes:** sometimes spring on the road and leave a chest behind when you win.
 - **Areas:** the house, the forest, Bram's camp (campfire rest point and shop), the Hollow, the Ashen Pass, and Gloamhold. Each area has its own music, weather and particles (fireflies, embers, rain), and boss arena.
 - **Boss entrances:** each boss gets a cinematic. Letterbox bars slide in and the camera swings to the boss. Grukk smashes the ground and roars, Ashmane gallops in on a trail of blue fire and rears up in a ring of flame, and Vael drops out of the sky and breathes moonfire. Then the boss's name and title burn in above its head. Press E / ✕ to skip.
 - **Boss music:** a dramatic entrance theme plays during the cinematic, and each boss has its own battle theme.
 - **World map and fast travel:** the MAP tab shows every region and your position. While resting at a campfire, you can pick another fire you have visited to travel there.
-- **Enemies:** goblins, mushrooms, and flying eyes in the forest. Skeletons (they block with a shield) and ghosts in the Hollow. A two-phase ogre boss that sends out shockwaves and calls ghosts when below half HP.
+- **Enemies:** goblins, goblin brutes and cutthroats, rot shrooms (they leave spore clouds), and flying eyes in the forest. Pale acolytes cast moonfire and barrow shades blink around the Hollow. Ember fiends breathe fire in the pass. Drowned and gazers haunt Gloamhold. Skeletons (they block with a shield) and ghosts in the Hollow. A two-phase ogre boss that sends out shockwaves and calls ghosts when below half HP.
 - **Inventory:** full-screen bag with ITEMS / GEAR / STATS / QUEST / LORE / MAP tabs. Each item has an action menu (use, set as quick item, inspect, equip, drop), plus rarity colors, NEW tags, and a rotating inspect view with item lore. Mouse/touch clicks work too.
 - **Quick item:** set food or a tonic as the quick item and use it mid-fight without opening the bag.
 - **Combat:** tap attack for a 3-hit combo (slash, slash, heavy finisher), attack while sprinting for a dash thrust, or attack in the air for a plunge that slams to the ground with a shockwave. Hold down and attack in the air for a down slash: hitting an enemy or a fireball below you bounces you back up (a Hollow Knight-style pogo), and you can chain bounces. The plunge only triggers when you are well above the ground. Hold attack to charge the Moonblade, a blue power slash that sends out a crescent wave. Use the upper slash to hit enemies above you, and the dodge roll to pass through attacks. A roll timed just before a hit is a perfect dodge. Weapons (Ember Edge, Moonsilver) can be equipped from the bag. Hits have hit-pause, knockback, sparks, damage numbers, and XP/level-ups.

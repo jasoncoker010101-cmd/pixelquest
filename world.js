@@ -1179,15 +1179,15 @@ const Overworld = (() => {
       drawIntroNight(t);
       drawIntroLetterbox();
       if (t > 9.0 && t < 14.3) {
-        introTextBox(['Long ago, people built quiet homes and villages between the fields and forests.'], (t - 9.0) * 17, 'settled-world');
+        introTextBox(['Long ago, people built quiet homes between the fields and forests, under a gentle moon.'], (t - 9.0) * 17, 'settled-world');
       } else if (t >= 14.8 && t < 20.0) {
-        introTextBox(['Then strange energy stirred in forgotten places, and the wilderness began to change.'], (t - 14.8) * 17, 'awakening');
+        introTextBox(['Twenty winters ago the moon cracked, and burning shards fell into forgotten places.'], (t - 14.8) * 17, 'awakening');
       } else if (t >= 20.5 && t < 25.7) {
-        introTextBox(['Unfamiliar creatures appeared. Some were gentle. Others became fierce and territorial.'], (t - 20.5) * 17, 'creatures');
+        introTextBox(['Where they landed the wilds changed. Beasts grew wrong. The dead stopped resting.'], (t - 20.5) * 17, 'creatures');
       } else if (t >= 26.2 && t < 32.0) {
-        introTextBox(['At night, the wilds grow restless. Even a familiar path can become dangerous.'], (t - 26.2) * 17, 'nightfall');
+        introTextBox(['Now the moon hangs too close. On certain nights the wolves in the hills walk upright.'], (t - 26.2) * 17, 'nightfall');
       } else if (t >= 32.2 && t < 37.4) {
-        introTextBox(['Still, people make a life here, one small home at the edge of a much bigger world.'], (t - 32.2) * 17, 'frontier');
+        introTextBox(['Still, people make a life here, guarded once by the knights of the Silver Watch.'], (t - 32.2) * 17, 'frontier');
       }
       const fadeIn = 1 - Math.min(1, (t - 8.5) / 1.4);
       const fadeOut = Math.max(0, Math.min(1, (t - 36.8) / 1.7));
@@ -2624,6 +2624,7 @@ const Overworld = (() => {
 
 
   function sidePlatforms() {
+    if (REGIONS[platformScene] && REGIONS[platformScene].plats) return REGIONS[platformScene].plats;
     return platformScene === 'house' ? HOUSE_SIDE_PLATFORMS : platformScene === 'hollow' ? HOLLOW_SIDE_PLATFORMS
       : platformScene === 'pass' ? PASS_SIDE_PLATFORMS : platformScene === 'gloam' ? GLOAM_SIDE_PLATFORMS : FOREST_SIDE_PLATFORMS;
   }
@@ -3334,13 +3335,14 @@ const Overworld = (() => {
     mobVoice(m, 'death');
     if (!T.anims.death && !T.boss) spawnSparks(m.x, m.y - T.bodyH * 0.5, f, 10, ['#5a5060', '#8a8090', '#2a2430', T.light ? '#ffb347' : '#c8324a']);
     const dropY = m.y - T.bodyH * 0.6;
-    const coinMul = (hasRelic('giltooth') ? 1.6 : 1) * (m.elite ? (m.elite.gold ? 4 : 2) : 1) * (bloodMoon ? 1.5 : 1);
+    const coinMul = (hasRelic('giltooth') ? 1.6 : 1) * (m.elite ? (m.elite.gold ? 4 : 2) : 1) * (bloodMoon ? 1.5 : 1) * blessCoins();
     const coins = Math.round((T.coins[0] + Math.floor(Math.random() * (T.coins[1] - T.coins[0] + 1))) * coinMul);
     for (let i = 0; i < coins; i++) pickups.push({ type: 'coin', amount: 1, x: m.x, y: dropY, vx: (Math.random() - 0.5) * 140, vy: -150 - Math.random() * 90, age: 0 });
     T.drops.forEach(([item, chance], k) => {
       if (Math.random() < chance) pickups.push({ type: item, amount: 1, x: m.x, y: dropY, vx: (k % 2 ? -1 : 1) * f * 60, vy: -190 - k * 20, age: 0 });
     });
     fortuneOnKill(m, dropY);
+    depthsOnKill(m);
     gainXp(Math.round(T.xp * (m.elite ? 2.5 : 1) * (bloodMoon ? 2 : 1)));
     if (T.boss) onBossDefeated(m);
   }
@@ -3933,6 +3935,7 @@ const Overworld = (() => {
     sidePlayer.rollCooldown = Math.max(0, (sidePlayer.rollCooldown || 0) - dt);
     updateCombatFx(dt);
     updateFortune(dt);
+    updateDepths(dt);
     updatePlayerWaves(dt);
     updateAmbient(dt);
     if (sidePlayer.deadTime > 0) {
@@ -4008,7 +4011,7 @@ const Overworld = (() => {
       if (keys.has('arrowleft') || keys.has('a')) direction -= 1;
       if (keys.has('arrowright') || keys.has('d')) direction += 1;
       const sprinting = direction !== 0 && keys.has('shift') && stats.stamina > 0;
-      const targetSpeed = direction * (sprinting ? 154 : 112);
+      const targetSpeed = direction * (sprinting ? 154 : 112) * blessSpeed();
       const response = Math.min(1, dt * (direction ? 12 : 15));
       sidePlayer.vx += (targetSpeed - sidePlayer.vx) * response;
       if (direction) sidePlayer.facing = direction < 0 ? -1 : 1;
@@ -4245,6 +4248,12 @@ const Overworld = (() => {
             spawnDust(m.x + m.dir * 60, SIDE_GROUND_Y, 10);
             bossWaves.push({ x: m.x + m.dir * 58, dir: m.dir, life: enraged ? 2.6 : 1.9, hit: false });
             if (enraged) bossWaves.push({ x: m.x - m.dir * 30, dir: -m.dir, life: 1.6, hit: false });
+            if (T.volley) {
+              const n = T.volley + (enraged ? 2 : 0), sx = m.x + m.dir * 24, sy = m.y - T.bodyH * 0.6;
+              const base = Math.atan2(sidePlayer.y - 22 - sy, sidePlayer.x - sx);
+              for (let k = 0; k < n; k++) { const a = base + (k - (n - 1) / 2) * 0.2; mobShots.push({ x: sx, y: sy, vx: Math.cos(a) * 125, vy: Math.sin(a) * 125, life: 3, dmg: Math.max(2, T.dmg - 3), who: T.short, kind: T.shot || 'fire' }); }
+              sfx(T.shot === 'moon' ? 'magic' : 'fire', 0.8);
+            }
           }
           const facing = Math.sign(dx) === m.dir || distance < 12;
           if (T.ranged) {
@@ -4252,8 +4261,8 @@ const Overworld = (() => {
               m.waveDone = true; m.attackHit = true;
               const sx = m.x + m.dir * 10, sy = m.y - T.bodyH * 0.5;
               const tx = sidePlayer.x, ty = sidePlayer.y - 20, d = Math.max(1, Math.hypot(tx - sx, ty - sy));
-              mobShots.push({ x: sx, y: sy, vx: (tx - sx) / d * 120, vy: (ty - sy) / d * 120, life: 2.6, dmg: T.dmg + eliteDmg(m), who: 'A fireball', kind: 'fire' });
-              sfx('skull');
+              mobShots.push({ x: sx, y: sy, vx: (tx - sx) / d * 120, vy: (ty - sy) / d * 120, life: 2.6, dmg: T.dmg + eliteDmg(m), who: T.shot === 'moon' ? 'Moonfire' : 'A fireball', kind: T.shot || 'fire' });
+              sfx(T.shot === 'moon' ? 'magic' : 'skull', 0.7);
             }
           } else if (distance < T.reach + 4 && facing && playerBodyOverlaps(m.y - T.bodyH - 6, m.y + 4) && playerAlive && canHitPlayer()) {
             m.attackHit = true;
@@ -4488,8 +4497,9 @@ const Overworld = (() => {
   function drawMob(m) {
     const T = m.T;
     const [anim, frame] = mobFrame(m);
-    const img = mobSheet(T, anim);
-    if (!imgReady(img)) return;
+    const img0 = mobSheet(T, anim);
+    if (!imgReady(img0)) return;
+    const img = T.tint ? tintedSheet(img0, T.tint) : img0;
     let alpha = T.alpha || 1;
     if (m.dead) {
       const fadeStart = T.boss ? 1.6 : T.anims.death ? (anim[1] / (T.anims.death[2] || 9) + 0.5) : 0.12;
@@ -4874,12 +4884,13 @@ const Overworld = (() => {
     ctx.translate(-sideCameraX + shakeX, shakeY);
     // The supplied background already contains the forest floor. Only draw
     // the separate raised platforms here; keep the continuous ground invisible.
-    FOREST_SIDE_PLATFORMS.slice(1).forEach(drawSidePlatform);
+    sidePlatforms().slice(1).forEach(drawSidePlatform);
 
+    drawDepthsWorld();
     drawChests();
     drawSideMobs();
 
-    drawCamp();
+    if (platformScene === 'forest') drawCamp();
     drawLoreSpots();
     drawSidePlayer();
     drawPlayerWaves();
@@ -4887,7 +4898,7 @@ const Overworld = (() => {
     drawFortuneFx();
     drawAmbient();
     ctx.restore();
-    drawSideOverlays(sidePlayer.x > CAMP.start ? "BRAM'S CAMP" : 'WOODLAND');
+    drawSideOverlays(platformScene !== 'forest' ? region().name : sidePlayer.x > CAMP.start ? "BRAM'S CAMP" : 'WOODLAND');
   }
 
   // ===========================================================================
@@ -4895,26 +4906,26 @@ const Overworld = (() => {
   // ===========================================================================
   const LORE = [
     { id: 'watch', kind: 'stone', scene: 'forest', x: 600, title: 'The Silver Watch', where: 'Rune stone, forest trail', hint: 'A stone near the start of the trail.',
-      text: 'HERE STOOD THE SILVER WATCH. Sworn to guard the seal over the Hollow, where the moon fell forty winters ago. We hold the line so the village may sleep.', sign: '- Captain Aldric' },
+      text: 'HERE STOOD THE SILVER WATCH. Sworn to guard the seal over the Hollow, where the moon fell twenty winters ago. We hold the line so the village may sleep.', sign: '- Captain Aldric' },
     { id: 'page1', kind: 'page', scene: 'forest', x: 1600, title: 'Journal: Day 1', where: "Dad's journal, deep forest", hint: 'Somewhere in the middle of the forest.',
       text: "Day 1. The goblins aren't raiding. They're running. Their camps are empty and the fires still warm. Something in the Hollow is driving them out of the deep woods, toward the village. Toward home.", sign: '- A.' },
     { id: 'page2', kind: 'page', scene: 'forest', x: 3738, title: 'Journal: Day 3', where: "Dad's journal, Bram's camp", hint: 'At the camp on the far side of the forest.',
       text: "Day 3. Old Bram has kept this camp since the Moonfall. He says the seal is cracking and the dead walk again. I'm going in. Rowan, if you're reading this, go home. ...You never listen. Then rest by the fire first.", sign: '- A.' },
     { id: 'moonfall', kind: 'stone', scene: 'hollow', x: 700, title: 'The Moonfall', where: 'Rune stone, the Hollow', hint: 'A stone near the mouth of the Hollow.',
-      text: 'THE MOON WEPT A SHARD OF ITSELF AND IT FELL HERE. Where it struck, the dead do not rest and the wild things grow wrong. Take nothing the moon has dropped.' },
+      text: 'MORWEN BROKE THE MOON, AND THE GREATEST SHARD OF IT FELL HERE. Where it struck, the dead do not rest and the wild things grow wrong. Take nothing the moon has dropped.' },
     { id: 'page3', kind: 'page', scene: 'hollow', x: 1800, title: 'Journal: Day 5', where: "Dad's journal, the Hollow", hint: 'Deep inside the Hollow.',
-      text: "Day 5. I found the one behind it all. A goblin chief grown huge on the shard's light. He calls himself Grukk, the Hollow King, and wears the shard in his crown. I can't beat him alone. I'll hide past his throne and wait.", sign: '- A.' },
+      text: "Day 5. I found the one behind it all. A goblin chief grown huge on the shard's light. He calls himself Grukk, the Hollow King. He dug up the shard and sold it to pale riders heading east. All he kept was a splinter for his crown. I can't beat him alone. I'll hide past his throne and wait.", sign: '- A.' },
     { id: 'aldric', kind: 'page', scene: null, x: 0, title: "Aldric's Story", where: 'Told by Dad, after the battle', hint: 'Find Dad.',
-      text: "The Silver Watch didn't fall to monsters. We fell to the shard. It whispers. Half my brothers took it up and became the skeletons you fought. I buried it under a seal and never told you. Grukk dug it up. His crown is broken now, but the shard itself is gone. Deeper." },
+      text: "The Silver Watch didn't fall to monsters. We fell to the shard. It whispers. Half my brothers took it up and became the skeletons you fought. I buried it under a seal and never told you. Grukk dug it up and sold it to the Pale Court for a splinter to wear in his crown. The real shard rode east a week ago." },
     { id: 'oath', kind: 'page', scene: null, x: 0, title: 'The Broken Moon', where: 'Told by Dad, in the Hollow', hint: 'Talk to Dad after Chapter 1.',
-      text: "Forty winters ago the moon-mage Morwen tried to drink the moon's light. The Watch stopped her, but the moon cracked and bled shards across the land. Morwen fled east with the knights who loved her. They are the Pale Court now, and she calls herself their Queen. If she gathers the shards, she can remake the moon in her own image." },
+      text: "Twenty winters ago the moon-mage Morwen lost her daughter in the Long Winter, when the moon waned and did not come back for nine nights. She tried to pull the moon down and make one that never wanes. The Watch stopped her, but the moon cracked and bled shards across the land. Morwen fled east with the knights who loved her. They are the Pale Court now, and she calls herself their Queen. If she gathers the shards, she can remake the moon in her own image." },
     // ---- Chapter 2: the Ashen Pass ----
     { id: 'riders', kind: 'stone', scene: 'pass', x: 700, title: 'Warning Stone', where: 'Rune stone, Ashen Pass', hint: 'Near the mouth of the pass.',
       text: 'TURN BACK. THE PALE COURT RIDES THIS ROAD. THEIR HORSES BURN AND LEAVE NO TRACKS BUT FIRE. THEY TAKE THE LIGHT FROM LAMPS, AND THE SONG FROM THOSE WHO CAN HEAR THE MOON.' },
     { id: 'wrenlog', kind: 'page', scene: 'pass', x: 1400, title: "Wren's Scout Log", where: 'Scout log, Ashen Pass', hint: 'Halfway to the lookout fire.',
       text: "Day 31. Seven riders, pale armor, eyes like candle flames. They carried a glowing thing wrapped in black cloth. They left the mare behind to guard the road. She paces the far end of the pass and screams at night. Mother would know what to do. Mother is not here." , sign: '- W.' },
     { id: 'ashroad', kind: 'stone', scene: 'pass', x: 2450, title: 'The Ember Road', where: 'Mile stone, Ashen Pass', hint: 'Past the lookout fire.',
-      text: 'GLOAMHOLD 9 LEAGUES. In the age of lamps, Silver Watch caravans carried moonsilver along this road. The red rock still holds the heat of the night the Pale Court burned it, when the caravans stopped and the city beyond went dark.' },
+      text: 'GLOAMHOLD 9 LEAGUES. In the age of lamps, Silver Watch caravans carried moonsilver along this road. The red rock still holds the heat of the night the Pale Court burned it, twelve winters ago in the fever winter, when the Black Tide rose and the city beyond went dark.' },
     { id: 'letter', kind: 'page', scene: 'pass', x: 3150, title: 'Unsent Letter', where: 'A dead soldier\'s letter', hint: 'Near the end of the pass.',
       text: "My love. They say the Queen does not kill the moon-readers. She keeps them. She makes them sing to the shards until the shards remember being the moon. I would rather die on this road than hear that song. Kiss the little one for me. Tell her the lamps will come back." },
     { id: 'ashmane', kind: 'page', scene: null, x: 0, title: 'Ashmane', where: 'Told by Wren, after the battle', hint: 'Defeat the guardian of the pass.',
@@ -4927,7 +4938,7 @@ const Overworld = (() => {
     { id: 'lamps', kind: 'stone', scene: 'gloam', x: 1960, title: 'The Lamplighters', where: 'Rune stone, old town', hint: 'Before the city gate.',
       text: 'WE WERE THE LAMPLIGHTERS. WE STILL ARE. When the Tide took our light we kept walking the streets, lamps in hand. We do not remember why. If you meet us, knight, forgive us. And put us to rest.' },
     { id: 'captain', kind: 'page', scene: 'gloam', x: 2330, title: "Captain Ysolde's Log", where: 'Log at the city gate', hint: 'At the gate fire.',
-      text: "Last entry. The Queen has the moon-readers. She has Seren of the Hollow, Aldric's wife, the finest moon-reader the Watch ever trained. I sent my daughter Wren away with the scouts. If anyone finds this: the Court's fortress lies beyond the eastern sea. The Pale Court. Do not go alone." , sign: '- Captain Ysolde' },
+      text: "Last entry. The Queen has the moon-readers. Even the visiting reader from the Hollow villages, the finest the Watch ever trained. They took her alive. I sent my daughter Wren away with the scouts. If anyone finds this: the Court's fortress lies beyond the eastern sea. The Pale Court. Do not go alone." , sign: '- Captain Ysolde' },
     { id: 'moonwell', kind: 'stone', scene: 'gloam', x: 3240, title: 'The Moonwell', where: 'Rune stone, castle quarter', hint: 'Inside the castle quarter.',
       text: 'BENEATH THIS HALL LIES THE MOONWELL, WHERE THE MOON\'S REFLECTION NEVER FADES. Something sleeps in it now, fat on stolen light. The skulls that burn in these halls are the faces of those it has eaten.' },
     { id: 'queen', kind: 'page', scene: 'gloam', x: 3760, title: 'Of the Pale Queen', where: 'A torn scholar\'s page', hint: 'Deep in the castle quarter.',
@@ -5004,8 +5015,19 @@ const Overworld = (() => {
       ctx.fillStyle = '#d9a77a'; ctx.fillRect(x + 14, y + 16, 12, 8);
       ctx.fillStyle = '#1c1410'; ctx.fillRect(x + 16, y + 18, 2, 2); ctx.fillRect(x + 22, y + 18, 2, 2);
       ctx.fillStyle = '#cfcac0'; ctx.fillRect(x + 13, y + 22, 14, 12); ctx.fillRect(x + 16, y + 34, 8, 3);
+    } else if (SPEAKERS[who] && SPEAKERS[who].mob) {
+      const T = MOB_TYPES[SPEAKERS[who].mob], img0 = mobSheet(T, T.anims.idle);
+      if (imgReady(img0)) {
+        const img = T.tint ? tintedSheet(img0, T.tint) : img0, sc = Math.min(2.2, 46 / Math.min(T.fh, T.bodyH / T.scale * 1.3));
+        ctx.translate(x + 20, y + 40 + (T.fh - T.ay) * sc * 0.2); if (T.faceLeft) ctx.scale(-1, 1);
+        ctx.drawImage(img, 0, 0, T.fw, T.fh, -T.ax * sc, -T.ay * sc * 0.82, T.fw * sc, T.fh * sc);
+      }
+    } else if (who === 'tess') {
+      ctx.fillStyle = '#2a1e3a'; ctx.fillRect(x + 6, y + 4, 28, 36); ctx.fillStyle = '#3a2a50'; ctx.fillRect(x + 9, y + 7, 22, 33);
+      ctx.fillStyle = '#e0b890'; ctx.fillRect(x + 13, y + 14, 14, 12); ctx.fillStyle = '#1a1020'; ctx.fillRect(x + 16, y + 18, 2, 2); ctx.fillRect(x + 22, y + 18, 2, 2);
+      ctx.fillStyle = '#b86a6a'; ctx.fillRect(x + 18, y + 23, 4, 1); ctx.fillStyle = '#c8a0ff'; ctx.fillRect(x + 9, y + 6, 3, 3);
     } else {
-      drawItemIcon(who === 'stone' ? 'whetstone' : 'page', x + 8, y + 8, 2);
+      drawItemIcon(who === 'stone' || who === 'shrine' ? 'whetstone' : 'page', x + 8, y + 8, 2);
     }
     ctx.restore();
   }
@@ -5106,20 +5128,20 @@ const Overworld = (() => {
   let bloodMoon = false, bloodMoonAt = -10, witchUntil = 0;
 
   function hasRelic(id) { return fortune.equipped.includes(id); }
-  function luckValue() { return (stats.luck || 0) * 0.12 + (hasRelic('clover') ? 0.4 : 0) + (bloodMoon ? 0.3 : 0); }
+  function luckValue() { return (stats.luck || 0) * 0.12 + (hasRelic('clover') ? 0.4 : 0) + (bloodMoon ? 0.3 : 0) + blessLuck(); }
   function critChance() { return 0.1 + (stats.critUp || 0) * 0.05 + (hasRelic('wolftooth') ? 0.1 : 0); }
   function chargeTime() { return CHARGE_TIME * (hasRelic('moonshard') ? 0.5 : 1) * Math.pow(0.8, stats.chargeUp || 0); }
   function eliteDmg(m) { return m.elite && m.elite.dmg ? m.elite.dmg : 0; }
   function fortuneDamage(dmg) {
     if (hasRelic('glasssaint')) dmg += 3;
     if (hasRelic('bloodidol') && stats.health <= stats.maxHealth * 0.35) dmg = Math.ceil(dmg * 1.6);
-    return dmg;
+    return blessDamage(dmg);
   }
   function fortuneHurt(amount) {
     if (hasRelic('glasssaint')) amount += 2;
     if (hasRelic('ironbark')) amount -= 1;
     if (bloodMoon) amount += 1;
-    return Math.max(1, amount);
+    return Math.max(1, blessHurt(amount));
   }
   function rollRarity(bonus = 0, floor = 'common') {
     const L = luckValue() + bonus;
@@ -5335,6 +5357,7 @@ const Overworld = (() => {
   function nearChest() { return sceneChests().find(c => !c.open && Math.abs(sidePlayer.x - c.x) < 22); }
   function openChest(c) {
     c.open = true; c.t = time;
+    if (!c.mimic) depthsOnChest();
     if (c.mimic) {
       sfx('roar', 0.8, 1.5); sfx('squish', 0.8); screenShake = 5; padRumble(0.8, 0.8, 300); hitStop = 0.12;
       notice = 'MIMIC! The chest was hungry.'; noticeUntil = time + 2.4;
@@ -5772,8 +5795,9 @@ const Overworld = (() => {
   }
 
   // ---- Panel input for the fortune screens ----
-  function fortunePanel() { return panel === 'perk' || panel === 'relic' || panel === 'wheel'; }
+  function fortunePanel() { return panel === 'perk' || panel === 'relic' || panel === 'wheel' || panel === 'peddler'; }
   function fortuneInput(act) {
+    if (panel === 'peddler') { peddlerInput(act); return; }
     if (panel === 'perk') {
       const o = perkOffer; if (!o || o.picked >= 0) return;
       if (act === 'left') { o.sel = (o.sel + 2) % 3; sfx('uiMove'); }
@@ -5787,7 +5811,9 @@ const Overworld = (() => {
     }
   }
   function fortuneKey(k) {
-    if (k === 'arrowleft' || k === 'a') fortuneInput('left');
+    if (k === 'arrowup' || k === 'w') fortuneInput('up');
+    else if (k === 'arrowdown' || k === 's') fortuneInput('down');
+    else if (k === 'arrowleft' || k === 'a') fortuneInput('left');
     else if (k === 'arrowright' || k === 'd') fortuneInput('right');
     else if (k === 'e' || k === 'enter' || k === ' ' || k === 'j') fortuneInput('ok');
     else if (k === 'escape' || k === 'x' || k === 'backspace' || k === 'i') fortuneInput('back');
@@ -5999,11 +6025,11 @@ const Overworld = (() => {
   function talkToDad() {
     if (story.chapterDone && !story.ch2Started) {
       startDialogue([
-        { who: 'aldric', text: "Sit. You've earned the truth. Forty winters ago the moon cracked. Not by chance. Someone broke it." },
-        { who: 'aldric', text: "Her name was Morwen. A moon-mage of the Silver Watch. She wanted to drink the moon's light and live forever." },
+        { who: 'aldric', text: "Sit. You've earned the truth. Twenty winters ago the moon cracked. Not by chance. Someone broke it." },
+        { who: 'aldric', text: "Her name was Morwen. A moon-mage of the Silver Watch. Her daughter died in the Long Winter, when the moon waned and stayed dark. Morwen swore she'd pull it down and make a moon that never wanes." },
         { who: 'aldric', text: "The Watch stopped her, but the moon bled. Shards fell across the land. The biggest one fell here. The Moonfall." },
         { who: 'aldric', text: "Morwen didn't die. She fled east with the knights who loved her. They call themselves the Pale Court now. She calls herself a queen." },
-        { who: 'aldric', text: "The riders that took the shard from Grukk's crown... those were hers. If she gathers enough shards, she can remake the moon. Her moon." },
+        { who: 'aldric', text: "The pale riders who bought the shard from Grukk... those were hers. If she gathers enough shards, she can remake the moon. Her moon." },
         { who: 'rowan', text: 'Then someone has to stop her riders. Where did they go?' },
         { who: 'aldric', text: "East. Past my throne-room hiding spot is the Ashen Pass. A Watch scout still keeps a lookout fire there. Find her." },
         { who: 'aldric', text: "I'll hold the Hollow seal so nothing else crawls out. Go, Rowan. And... your mother would have gone too." }
@@ -6162,6 +6188,7 @@ const Overworld = (() => {
       }
       if (c.ev.breath && boss.attackTime <= 0 && boss.st === 'breath') boss.st = 'stalk';
     }
+    if (!['ogre', 'mare', 'demon'].includes(boss.type)) depthsCine(c, boss, dt, th);
     // Ember motes that drift around the name card.
     if (t > th.nameAt && t < CINE_END - 0.4 && Math.random() < dt * 14) {
       cineFx.push({ kind: 'mote', x: sideCameraX + 160 + (Math.random() - 0.5) * 220, y: 60 + Math.random() * 40, vx: (Math.random() - 0.5) * 10, vy: -8 - Math.random() * 10, g: 0, life: 1.6, max: 1.6, size: 1, color: th.glow });
@@ -6375,6 +6402,7 @@ const Overworld = (() => {
     if (!bossOutro) return;
     bossOutro.t += dt;
     if (bossOutro.t > 0.9 && !bossOutro.jingle) { bossOutro.jingle = true; sfx('victory'); }
+    if (REGIONS[bossOutro.scene] && REGIONS[bossOutro.scene].side) { if (bossOutro.t > 2.2) depthsOutro(); return; }
     if (bossOutro.scene === 'hollow' && bossOutro.t > 2.6 && !dad) {
       const side = sidePlayer.x > 3150 ? -1 : 1;
       dad = { x: Math.min(HOLLOW_SIDE_WIDTH - 10, sideCameraX + canvas.width + 30), dir: -1, state: 'run', t: 0, target: sidePlayer.x + side * 34, slashOnArrive: false };
@@ -6384,7 +6412,7 @@ const Overworld = (() => {
           { who: 'aldric', text: 'Rowan? ...Rowan! By the moon, you actually came.' },
           { who: 'rowan', text: 'You left me a note and a suit of armor. What did you think I would do?' },
           { who: 'aldric', text: "Ha. Your mother's stubbornness. I was hiding behind that throne for two days, waiting for an opening." },
-          { who: 'aldric', text: "Grukk was only the start. The moon shard in his crown... it's gone. Something took it deeper into the Hollow." },
+          { who: 'aldric', text: "Grukk was only the start. His crown only holds a splinter. He sold the real shard to pale riders. They rode east a week ago." },
           { who: 'aldric', text: "There's a lot I never told you about the Silver Watch. Catch your breath, then talk to me. I'll tell you everything." }
         ], () => {
           story.dadFound = true; story.chapterDone = true;
@@ -6401,7 +6429,7 @@ const Overworld = (() => {
       wren.onArrive = () => {
         sidePlayer.facing = -1;
         startDialogue([
-          { who: 'wren', text: "You actually killed her. Ashmane. The Pale Queen's own mare. I've been hiding from that thing for a month." },
+          { who: 'wren', text: "You actually killed her. Ashmane. The Pale Queen's own mare. I've been hiding from that thing for a week." },
           { who: 'rowan', text: 'She said her Queen rode on. Where?' },
           { who: 'wren', text: "East, through the pass. To Gloamhold. The old Watch city, the one that drowned in the Black Tide." },
           { who: 'wren', text: "The riders carried the Hollow shard there. Whatever the Pale Court is building, it's under that city." },
@@ -6445,6 +6473,8 @@ const Overworld = (() => {
     if (fire) return { label: 'REST BY THE FIRE', act: () => restAtFire(fire) };
     const chest = nearChest();
     if (chest) return { label: 'OPEN ' + RARITY[chest.rarity].name + ' CHEST', act: () => openChest(chest) };
+    const dep = depthsInteraction(x);
+    if (dep) return dep;
     if (platformScene === 'forest') {
       if (x < 100) return { label: 'RETURN HOME', act: 'home' };
       if (Math.abs(x - CAMP.bram) < 28) return { label: 'TRADE WITH BRAM', act: openShop };
@@ -6476,6 +6506,7 @@ const Overworld = (() => {
   }
   const CAMP = { start: 3590, tent: 3625, fire: 3700, log: 3738, bram: 3800, cart: 3842, sign: 3912 };
   function restAtFire(fire) {
+    depthsOnRest();
     stats.health = stats.maxHealth; stats.stamina = stats.maxStamina;
     story.rested = true;
     if (fire) {
@@ -6494,6 +6525,767 @@ const Overworld = (() => {
   }
   let restFlash = -10;
   const REGION_SUBS = { forest: 'Edge of the woodland', hollow: 'Where the moon fell', pass: 'Chapter 2 - The road of embers', gloam: 'Chapter 3 - The drowned city' };
+  // ===========================================================================
+  // DEPTHS & WILDS: optional side areas off every chapter, each with its own
+  // champion, plus things to do along the road: moon shrines, hunt bounties,
+  // moon moths, a wandering peddler and random ambushes.
+  // ===========================================================================
+  // ---- New monsters (Ansimuz Legacy Collection, CC0) and tinted variants ----
+  Object.assign(MOB_TYPES, {
+    brute:    { name: 'Goblin Brute', src: 'mobs/goblin/', anims: MOB_TYPES.goblin.anims, tint: '150,40,20,.38',
+                fw: 150, fh: 150, ax: 75, ay: 101, scale: 1.45, bodyH: 52, width: 26, hp: 15, speed: 58, chase: 220, reach: 58, dmg: 6,
+                atkTime: 0.95, hit: [0.7, 0.92], cd: [1.6, 2.2], xp: 28, coins: [4, 8], drops: [['fang', 0.8], ['bread', 0.2]], voice: 'goblin', kind: 'goblin' },
+    sneak:    { name: 'Goblin Cutthroat', src: 'mobs/goblin/', anims: MOB_TYPES.goblin.anims, tint: '20,30,70,.45',
+                fw: 150, fh: 150, ax: 75, ay: 101, scale: 0.95, bodyH: 36, width: 18, hp: 4, speed: 138, chase: 260, reach: 42, dmg: 3,
+                atkTime: 0.55, hit: [0.65, 0.9], cd: [0.9, 1.4], xp: 14, coins: [3, 6], drops: [['fang', 0.4], ['tonic', 0.1]], voice: 'goblin', kind: 'goblin' },
+    rotshroom:{ name: 'Rot Shroom', src: 'mobs/mushroom/', anims: MOB_TYPES.mushroom.anims, tint: '70,150,40,.42', spores: true,
+                fw: 150, fh: 150, ax: 75, ay: 101, scale: 1.1, bodyH: 38, width: 20, hp: 9, speed: 44, chase: 180, reach: 40, dmg: 4,
+                atkTime: 0.85, hit: [0.72, 0.92], cd: [1.5, 2.1], xp: 18, coins: [2, 5], drops: [['spore', 0.8]], voice: 'squish' },
+    acolyte:  { name: 'Pale Acolyte', src: 'depths/', anims: { idle: ['acolyte-walk', 6, 5], move: ['acolyte-walk', 6, 9], attack: ['acolyte-walk', 6], hurt: null, death: null },
+                fw: 32, fh: 48, ax: 16, ay: 48, scale: 1.25, bodyH: 40, width: 18, ranged: true, shot: 'moon', hp: 8, speed: 42, chase: 230, reach: 140, dmg: 4,
+                atkTime: 0.9, hit: [0.5, 0.6], cd: [2.0, 2.8], xp: 22, coins: [3, 7], drops: [['wisp', 0.4], ['tonic', 0.12]], voice: 'ghost', light: '170,210,255' },
+    shade:    { name: 'Barrow Shade', src: 'depths/', anims: { idle: ['shade', 6, 8], move: ['shade', 6, 11], attack: ['shade', 6], hurt: null, death: null },
+                fw: 64, fh: 64, ax: 32, ay: 52, faceLeft: true, scale: 1.0, bodyH: 34, width: 18, fly: 22, alpha: 0.85, blink: true, hp: 6, speed: 70, chase: 260, reach: 40, dmg: 4,
+                atkTime: 0.7, hit: [0.45, 0.85], cd: [1.4, 2.0], xp: 18, coins: [2, 5], drops: [['wisp', 0.6]], voice: 'ghost' },
+    fiend:    { name: 'Ember Fiend', src: 'depths/', anims: { idle: ['fiend-idle', 6, 8], move: ['fiend-idle', 6, 10], attack: ['fiend-breath', 4], hurt: null, death: null },
+                fw: 80, fh: 72, ax: 40, ay: 72, faceLeft: true, scale: 0.9, bodyH: 50, width: 26, ranged: true, shot: 'fire', hp: 13, speed: 40, chase: 240, reach: 150, dmg: 5,
+                atkTime: 1.0, hit: [0.55, 0.7], cd: [2.0, 2.8], xp: 30, coins: [4, 8], drops: [['ember', 0.7]], voice: 'skull', light: '255,110,40' },
+    drowned:  { name: 'Drowned', src: 'depths/', anims: { idle: ['drowned', 2, 3], move: ['drowned', 2, 6], attack: ['drowned', 2], hurt: null, death: null },
+                fw: 27, fh: 32, ax: 14, ay: 32, faceLeft: true, scale: 1.55, bodyH: 46, width: 22, hp: 12, speed: 52, chase: 220, reach: 46, dmg: 5,
+                atkTime: 0.8, hit: [0.5, 0.85], cd: [1.4, 2.0], xp: 26, coins: [3, 7], drops: [['toadskin', 0.3], ['fish', 0.4]], voice: 'squish' },
+    gazer:    { name: 'Gazer', src: 'depths/', anims: { idle: ['eyedemon', 8, 12], move: ['eyedemon', 8, 15], attack: ['eyedemon', 8], hurt: null, death: null },
+                fw: 48, fh: 48, ax: 24, ay: 34, scale: 1.0, bodyH: 26, width: 20, fly: 56, dive: true, hp: 6, speed: 100, chase: 250, reach: 40, dmg: 4,
+                atkTime: 0.7, hit: [0.4, 0.8], cd: [1.3, 1.9], xp: 18, coins: [2, 5], drops: [['eye', 0.5]], voice: 'eye' },
+    // ---- Champions: one waits at the end of each side area ----
+    skarn:    { name: 'Skarn, the Mire Chief', boss: true, champion: true, src: 'mobs/goblin/', anims: MOB_TYPES.goblin.anims, tint: '190,60,20,.35',
+                fw: 150, fh: 150, ax: 75, ay: 101, scale: 1.95, bodyH: 70, width: 34, hp: 70, speed: 72, chase: 700, reach: 74, dmg: 7,
+                atkTime: 1.0, hit: [0.7, 0.92], cd: [1.1, 1.6], xp: 160, coins: [30, 40], drops: [['cleaver', 1], ['tonic', 1]], voice: 'goblin', armor: true, short: 'Skarn',
+                enrageText: 'Skarn whistles. Cutthroats drop from the trees...', summon: 'sneak' },
+    mourn:    { name: 'Mourn, the Barrow Warden', boss: true, champion: true, src: 'depths/', anims: { idle: ['acolyte-walk', 6, 5], move: ['acolyte-walk', 6, 8], attack: ['acolyte-walk', 6], hurt: null, death: null }, tint: '120,150,255,.28',
+                fw: 32, fh: 48, ax: 16, ay: 48, scale: 2.3, bodyH: 92, width: 34, hp: 85, speed: 48, chase: 700, reach: 70, dmg: 7, volley: 3, shot: 'moon',
+                atkTime: 1.2, hit: [0.55, 0.75], cd: [1.2, 1.8], xp: 200, coins: [35, 45], drops: [['wardenblade', 1], ['tonic', 1]], voice: 'ghost', armor: true, short: 'Mourn', light: '150,190,255',
+                enrageText: 'Mourn rings the grave-bell. The shades wake...', summon: 'shade' },
+    wyrm:     { name: 'Ignaroth, the Cinder Wyrm', boss: true, champion: true, src: 'depths/', anims: { idle: ['wyrm-idle', 6, 7], move: ['wyrm-idle', 6, 10], attack: ['wyrm-breath', 7], hurt: null, death: null },
+                fw: 144, fh: 64, ax: 96, ay: 64, faceLeft: true, scale: 1.75, bodyH: 70, width: 70, hp: 120, speed: 50, chase: 900, reach: 84, dmg: 8, volley: 5, shot: 'fire',
+                atkTime: 1.3, hit: [0.55, 0.8], cd: [1.1, 1.6], xp: 300, coins: [45, 60], drops: [['wyrmfang', 1], ['tonic', 1]], voice: 'ogre', armor: true, short: 'Ignaroth', light: '255,120,40',
+                enrageText: 'Ignaroth beats his wings. Hounds pour out of the vents...', summon: 'hound' },
+    tidemaw:  { name: 'Tidemaw, the Drowned Bell', boss: true, champion: true, src: 'depths/', anims: { idle: ['drowned', 2, 3], move: ['drowned', 2, 5], attack: ['drowned', 2], hurt: null, death: null }, tint: '20,80,110,.35',
+                fw: 27, fh: 32, ax: 14, ay: 32, faceLeft: true, scale: 3.0, bodyH: 90, width: 50, hp: 150, speed: 46, chase: 900, reach: 80, dmg: 9, volley: 4, shot: 'moon',
+                atkTime: 1.2, hit: [0.5, 0.8], cd: [1.0, 1.5], xp: 380, coins: [55, 70], drops: [['tidecaller', 1], ['tonic', 1]], voice: 'ogre', armor: true, short: 'Tidemaw', light: '120,220,255',
+                enrageText: 'Tidemaw tolls. The drowned rise from the black water...', summon: 'drowned' }
+  });
+  // Champion weapons.
+  Object.assign(WEAPONS, {
+    cleaver: { name: "Skarn's Cleaver", atk: 3, icon: 'boneblade', arc: '220,200,150' },
+    wardenblade: { name: "Warden's Oath", atk: 5, icon: 'sword', arc: '180,200,255' },
+    wyrmfang: { name: 'Wyrmfang', atk: 6, icon: 'emberedge', arc: '255,140,60' },
+    tidecaller: { name: 'Tidecaller', atk: 7, icon: 'moonsilver', arc: '110,230,230' }
+  });
+  Object.assign(ITEM_DEFS, {
+    cleaver:     { name: "Skarn's Cleaver", type: 'WEAPON', rarity: 'rare', value: 30, icon: 'boneblade', atk: 3, desc: ['A chipped goblin', 'cleaver. ATK +3.'], lore: 'Skarn took it off a Watch quartermaster. The quartermaster did not want it back.' },
+    wardenblade: { name: "Warden's Oath", type: 'WEAPON', rarity: 'rare', value: 45, icon: 'sword', atk: 5, desc: ['A Watch greatsword', 'from the barrows. ATK +5.'], lore: 'The oath is engraved on the blade: I hold the line so the village may sleep.' },
+    wyrmfang:    { name: 'Wyrmfang', type: 'WEAPON', rarity: 'legend', value: 60, icon: 'emberedge', atk: 6, desc: ['A fang still glowing', 'from within. ATK +6.'], lore: 'Ignaroth swallowed a moon shard. The heat never left his teeth.' },
+    tidecaller:  { name: 'Tidecaller', type: 'WEAPON', rarity: 'legend', value: 80, icon: 'moonsilver', atk: 7, desc: ['A bell-steel blade', 'that hums. ATK +7.'], lore: 'Forged from the archive bell. When it rings, the drowned remember their names.' },
+    mothlamp:    { name: 'Moth Lantern', type: 'KEY ITEM', rarity: 'rare', value: 0, icon: 'lampglass', desc: ['Holds the moon moths', 'you have found.'], lore: 'Moon moths carry slivers of the broken moon. Gather enough and they shine like it used to.' }
+  });
+  // Tinted copies of a sprite sheet so one sheet can be several monsters.
+  const tintCache = {};
+  function tintedSheet(img, tint) {
+    const key = img.src + '|' + tint;
+    if (tintCache[key]) return tintCache[key];
+    const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+    g.globalCompositeOperation = 'source-atop'; g.fillStyle = 'rgba(' + tint + ')'; g.fillRect(0, 0, c.width, c.height);
+    tintCache[key] = c; return c;
+  }
+
+  // ---- The four side areas ----
+  const DEPTH_FLAGS = { mireChamp: false, mireStarted: false, barrowChamp: false, barrowStarted: false, cinderChamp: false, cinderStarted: false, archiveChamp: false, archiveStarted: false, peddlerMet: false };
+  Object.assign(STORY_DEFAULTS, DEPTH_FLAGS); Object.keys(DEPTH_FLAGS).forEach(k => { if (!(k in story)) story[k] = false; });
+  const DEPTH_W = 2400, DEPTH_ARENA = { left: 1800, right: 2360, trigger: 1860 };
+  Object.assign(REGIONS, {
+    mire:    { name: 'THE WITCHMIRE', width: DEPTH_W, entry: 90, color: '#9be37a', side: true, art: 'forest', ambient: 'forest', parent: 'forest', parentX: 1950,
+               gradeTop: 'rgba(30,70,30,.30)', gradeBot: 'rgba(10,40,20,.45)', fog: '140,210,120', arena: { ...DEPTH_ARENA }, boss: 'skarn', bossX: 2200, bossFlag: 'mireChamp', unlock: () => true,
+               plats: [{ x: 360, y: 150, w: 110, h: 10 }, { x: 560, y: 124, w: 96, h: 10 }, { x: 980, y: 140, w: 120, h: 10 }, { x: 1200, y: 112, w: 90, h: 10 }, { x: 1440, y: 146, w: 120, h: 10 }, { x: 1620, y: 120, w: 90, h: 10 }] },
+    barrow:  { name: 'THE WATCH BARROWS', width: DEPTH_W, entry: 90, color: '#a8c4ff', side: true, art: 'hollow', ambient: 'hollow', parent: 'hollow', parentX: 1640,
+               gradeTop: 'rgba(20,40,90,.22)', gradeBot: 'rgba(10,10,40,.30)', fog: '150,170,230', arena: { ...DEPTH_ARENA }, boss: 'mourn', bossX: 2200, bossFlag: 'barrowChamp', unlock: () => story.hollowEntered,
+               plats: [{ x: 320, y: 156, w: 120, h: 10 }, { x: 600, y: 128, w: 100, h: 10 }, { x: 900, y: 150, w: 130, h: 10 }, { x: 1160, y: 120, w: 100, h: 10 }, { x: 1420, y: 150, w: 120, h: 10 }, { x: 1640, y: 126, w: 90, h: 10 }] },
+    cinder:  { name: 'CINDER DEEP', width: DEPTH_W, entry: 90, color: '#ff9a5a', side: true, art: 'pass', ambient: 'pass', parent: 'pass', parentX: 2950,
+               gradeTop: 'rgba(24,2,0,.62)', gradeBot: 'rgba(70,14,0,.45)', fog: '255,120,60', arena: { ...DEPTH_ARENA }, boss: 'wyrm', bossX: 2220, bossFlag: 'cinderChamp', unlock: () => story.passEntered,
+               plats: [{ x: 380, y: 156, w: 96, h: 12 }, { x: 580, y: 128, w: 80, h: 12 }, { x: 940, y: 150, w: 112, h: 12 }, { x: 1150, y: 120, w: 96, h: 12 }, { x: 1400, y: 100, w: 80, h: 12 }, { x: 1600, y: 140, w: 112, h: 12 }] },
+    archive: { name: 'THE SUNKEN ARCHIVE', width: DEPTH_W, entry: 90, color: '#7fe0e0', side: true, art: 'gloam', ambient: 'hollow', parent: 'gloam', parentX: 1520,
+               gradeTop: 'rgba(0,40,60,.32)', gradeBot: 'rgba(0,20,40,.45)', fog: '120,220,230', arena: { ...DEPTH_ARENA }, boss: 'tidemaw', bossX: 2200, bossFlag: 'archiveChamp', unlock: () => story.gloamEntered,
+               plats: [{ x: 360, y: 158, w: 128, h: 12 }, { x: 600, y: 130, w: 96, h: 12 }, { x: 880, y: 106, w: 64, h: 12 }, { x: 1100, y: 150, w: 128, h: 12 }, { x: 1380, y: 126, w: 96, h: 12 }, { x: 1600, y: 150, w: 96, h: 12 }] }
+  });
+  const DEPTH_IDS = ['mire', 'barrow', 'cinder', 'archive'];
+  DEPTH_IDS.forEach(id => REGIONS[id].plats.unshift({ x: 0, y: SIDE_GROUND_Y, w: DEPTH_W, h: 44 }));
+  ['cleaver', 'wardenblade', 'wyrmfang', 'tidecaller', 'mothlamp'].forEach(k => { if (!(k in inventory)) inventory[k] = 0; });
+  Object.assign(REGION_SUBS, { mire: 'Chapter 1 - Where the goblins hide', barrow: 'Chapter 1 - Graves of the Silver Watch', cinder: 'Chapter 2 - Beneath the burning road', archive: 'Chapter 3 - Where the moon-readers studied' });
+  Object.assign(SCENE_MOBS, {
+    mire:    [['rotshroom', 420, 70], ['sneak', 620, 100], ['toad', 840, 70], ['rotshroom', 1020, 80], ['brute', 1200, 90], ['eye', 1320, 110], ['sneak', 1460, 100], ['toad', 1580, 60], ['rotshroom', 1700, 50]],
+    barrow:  [['skeleton', 420, 80], ['shade', 620, 120], ['acolyte', 820, 60], ['skeleton', 1000, 90], ['ghost', 1160, 120], ['acolyte', 1320, 60], ['shade', 1460, 120], ['skeleton', 1600, 80], ['acolyte', 1720, 40]],
+    cinder:  [['fiend', 460, 60], ['hound', 660, 100], ['skull', 840, 90], ['fiend', 1020, 60], ['hound', 1160, 100], ['crow', 1300, 120], ['fiend', 1440, 60], ['skull', 1580, 90], ['hound', 1700, 60]],
+    archive: [['drowned', 420, 80], ['gazer', 620, 110], ['lamp', 800, 70], ['drowned', 960, 90], ['acolyte', 1120, 60], ['gazer', 1260, 110], ['drowned', 1420, 90], ['skeleton', 1560, 80], ['drowned', 1700, 50]]
+  });
+  // More monsters on the main roads, too.
+  SCENE_MOBS.forest.push(['sneak', 1150, 120], ['brute', 2300, 80], ['rotshroom', 2780, 70], ['sneak', 3250, 100]);
+  SCENE_MOBS.hollow.push(['acolyte', 1250, 60], ['shade', 1700, 120], ['acolyte', 2300, 60]);
+  SCENE_MOBS.pass.push(['fiend', 1000, 60], ['gazer', 2500, 100], ['fiend', 3200, 60]);
+  SCENE_MOBS.gloam.push(['drowned', 860, 80], ['gazer', 1420, 110], ['drowned', 2720, 80], ['acolyte', 3400, 60], ['drowned', 3660, 70]);
+  Object.assign(CHEST_SPOTS, { mire: [520, 1100, 1640], barrow: [520, 1080, 1560], cinder: [560, 1080, 1620], archive: [540, 1050, 1620] });
+  Object.assign(SPEAKERS, {
+    skarn: { name: 'SKARN', color: '#ff9a5a', mob: 'skarn' }, mourn: { name: 'MOURN', color: '#a8c4ff', mob: 'mourn' },
+    ignaroth: { name: 'IGNAROTH', color: '#ffb347', mob: 'wyrm' }, tidemaw: { name: 'TIDEMAW', color: '#7fe0e0', mob: 'tidemaw' },
+    tess: { name: 'TESS THE PEDDLER', color: '#d7b6ff' }, shrine: { name: 'MOON SHRINE', color: '#cfe6ff' }, board: { name: 'HUNT BOARD', color: '#e8d2a0' }
+  });
+  Object.assign(BOSS_LINES, {
+    skarn: { first: [
+        { who: 'skarn', text: 'A shiny tin knight in MY mire. The Hollow King is dead? Good. More forest for Skarn.' },
+        { who: 'rowan', text: 'Your goblins are raiding the village roads.' },
+        { who: 'skarn', text: 'Raiding? We RUN, tin-head. The moon is coming down. Skarn takes what Skarn can carry.' },
+        { who: 'skarn', text: 'And today Skarn carries your helmet.' }],
+      retry: [{ who: 'skarn', text: 'Back for more mud?' }], tip: 'His cleaver sends shockwaves. Jump them!', flag: 'mireStarted' },
+    mourn: { first: [
+        { who: 'mourn', text: 'Who walks the barrows of the Watch? The dead are counted. The dead are kept.' },
+        { who: 'rowan', text: "I'm Aldric's son. These were his brothers." },
+        { who: 'mourn', text: 'Aldric... the one who buried the shard and left us beside it. We heard it whisper for twenty winters.' },
+        { who: 'mourn', text: 'Stay, then. Be counted.' }],
+      retry: [{ who: 'mourn', text: 'You return to your grave. Good.' }], tip: 'Swing at his moonfire to break it!', flag: 'barrowStarted' },
+    wyrm: { first: [
+        { who: 'ignaroth', text: '(The heat itself speaks.) A morsel of the Silver Watch. Your caravans fed me well, once.' },
+        { who: 'ignaroth', text: 'I swallowed a star that fell from the moon. Now I am the only sun this deep.' },
+        { who: 'rowan', text: "Then I'll cut it out of you." }],
+      retry: [{ who: 'ignaroth', text: 'Still not ash? Let me help.' }], tip: 'Roll through the fire, strike after his breath.', flag: 'cinderStarted' },
+    tidemaw: { first: [
+        { who: 'tidemaw', text: '(A bell tolls under the water.) ...readers... we kept the readers... we wrote their names...' },
+        { who: 'tidemaw', text: 'The Queen took the singers and left us the ink. Now we drown in it.' },
+        { who: 'rowan', text: "One of those names is my mother's. Let me pass." },
+        { who: 'tidemaw', text: '...no one... leaves... the archive...' }],
+      retry: [{ who: 'tidemaw', text: '...toll... toll...' }], tip: 'Break his moonfire with your sword, punish him up close.', flag: 'archiveStarted' }
+  });
+  Object.assign(BOSS_CINE, {
+    skarn:   { nameAt: 1.9, main: '#ffcf8a', hot: '#fff3c8', deep: '#8a3a10', glow: '255,150,60', crest: 'skull' },
+    mourn:   { nameAt: 2.0, main: '#c8d8ff', hot: '#ffffff', deep: '#2a3a8a', glow: '150,180,255', crest: 'moon' },
+    wyrm:    { nameAt: 2.0, main: '#ffb36a', hot: '#fff0c8', deep: '#a82a10', glow: '255,110,40', crest: 'flame' },
+    tidemaw: { nameAt: 2.0, main: '#a8f0f0', hot: '#ffffff', deep: '#106a7a', glow: '110,220,230', crest: 'moon' }
+  });
+  // Lore for the side areas, Mother's register, and the werewolves of the opening night.
+  LORE.splice(1, 0,
+    { id: 'howl', kind: 'page', scene: 'forest', x: 1020, title: "Trapper's Warning", where: 'Nailed to a tree, forest trail', hint: 'On the trail, not far from home.',
+      text: "Wolves walked upright past the village last night. Moonstruck, the old folk call it. When the moon hangs this close, the wolves in the hills drink its light and forget they were ever wolves. Stay inside after dark. Aldric went after them at dawn and did not come back down the hill road.", sign: '- Hob, trapper' });
+  LORE.push(
+    { id: 'hessa', kind: 'stone', scene: 'mire', x: 740, title: "The Mire Witch's Ward", where: 'Rune stone, the Witchmire', hint: 'Near the old witch hut.',
+      text: 'HESSA LIVED HERE. SHE SOLD CHARMS TO THE WATCH AND SECRETS TO MORWEN. When the moon broke, Morwen came for her one last time and asked how to bring a dead child back. Hessa said: you cannot. Morwen said: then I will make a world where children do not die.' },
+    { id: 'pictos', kind: 'stone', scene: 'mire', x: 1520, title: 'Goblin Pictograms', where: 'Scratched rock, the Witchmire', hint: 'Deep in the mire.',
+      text: 'Crude pictures scratched in mud-rock. A big moon. Goblins running. A goblin with a glowing crown. Pale horses carrying a shining stone east. And at the end, one small goblin hiding in the reeds, with the word SKARN under it, many times.' },
+    { id: 'roll', kind: 'stone', scene: 'barrow', x: 700, title: 'Roll of the Fallen', where: 'Grave stone, the Watch Barrows', hint: 'Among the first graves.',
+      text: 'HERE LIE THE BROTHERS OF THE SILVER WATCH WHO TOOK UP THE SHARD AND WERE LOST TO IT. Bertil. Osk. Mourn the Bell-Ringer. Ninety-one names. Captain Aldric sealed the shard beneath them, and set this stone so no one would forget why.' },
+    { id: 'orders', kind: 'page', scene: 'barrow', x: 1380, title: "An Acolyte's Orders", where: 'A dropped scroll, the Watch Barrows', hint: 'Deep in the barrows.',
+      text: 'By order of the Pale Queen: dig every Watch grave. Splinters of the Hollow shard sleep in the bones of those it took. Every splinter brings the new moon closer. Leave the goblin his crown. A king who thinks he won will not notice what we carried away.' },
+    { id: 'ledger', kind: 'page', scene: 'cinder', x: 640, title: "Caravan Master's Ledger", where: 'A burnt ledger, Cinder Deep', hint: 'Near the mouth of the deep.',
+      text: 'Night of the Black Tide, twelve winters ago. Three wagons of moonsilver for Gloamhold. Riders on burning horses came down the road. We hid in the old mine. Something in the dark below us was breathing. It liked the moonsilver. It liked us more.' },
+    { id: 'star', kind: 'stone', scene: 'cinder', x: 1460, title: 'The Fallen Star', where: 'Scorched stone, Cinder Deep', hint: 'Deep in the cavern.',
+      text: 'A SECOND SHARD FELL HERE ON THE NIGHT OF THE MOONFALL. THE MINERS CALLED IT THE EMBER STAR. A cave wyrm swallowed it whole and has not stopped burning since. The Pale Court never came for this one. Even they were afraid.' },
+    { id: 'register', kind: 'page', scene: 'archive', x: 720, title: 'Register of Moon-Readers', where: 'Waterlogged register, Sunken Archive', hint: 'In the first reading hall.',
+      text: "Moon-readers in residence, the winter of the fever. ... Brother Calden. Ilse of the Marsh. Seren of the Hollow villages, visiting to study the well, with her husband's blessing and a locket of her little one. All taken at the Black Tide. All taken alive.", sign: '- Archive record' },
+    { id: 'lys', kind: 'page', scene: 'archive', x: 1460, title: 'The Long Winter', where: 'A scholar\'s note, Sunken Archive', hint: 'Deep in the archive.',
+      text: "Morwen had a daughter named Lys. In the Long Winter the moon waned for nine nights and the cold came in. Lys did not wake. Morwen sat by the window for the whole of the tenth night and asked the moon why it had looked away. The next spring she began to pull it down." },
+    { id: 'skarnend', kind: 'page', scene: null, x: 0, title: "Skarn's Hoard", where: 'Found where Skarn fell', hint: 'Defeat the champion of the Witchmire.',
+      text: "Skarn's hoard is mostly spoons. Under the spoons is a Watch map with the Hollow circled, and a note in a pale, elegant hand: 'Dig where the crown-wearer sleeps. Payment on delivery.' Someone paid the goblins to dig up the shard." },
+    { id: 'mournend', kind: 'page', scene: null, x: 0, title: 'The Bell-Ringer', where: 'Found where Mourn fell', hint: 'Defeat the champion of the Barrows.',
+      text: "Mourn rang the barrow bell every night for twenty winters so the shard's whisper could not reach the village. When the acolytes dug up his grave, the bell went quiet. That was the night the wolves first walked upright." },
+    { id: 'ignarothend', kind: 'page', scene: null, x: 0, title: 'The Ember Star', where: 'Found where Ignaroth fell', hint: 'Defeat the champion of Cinder Deep.',
+      text: 'The wyrm coughs up the Ember Star as it dies, a shard the size of a fist, still burning. Wren will want to see this. It is one shard the Pale Queen will never have.' },
+    { id: 'tidemawend', kind: 'page', scene: null, x: 0, title: "Seren's Verse", where: 'Found where Tidemaw fell', hint: 'Defeat the champion of the Sunken Archive.',
+      text: "Inside the archive bell is a page in your mother's hand, a verse the moon-readers sang to keep the well bright: 'Wane, and I will wait. Fall, and I will catch you. Break, and I will sing you whole.' She was not singing for the Queen. She was singing against her." }
+  );
+  // Shrines, moon moths and hunt boards placed through the world.
+  const SHRINES = { forest: 2560, hollow: 1160, pass: 1660, gloam: 1850, mire: 920, barrow: 1080, cinder: 820, archive: 1180 };
+  const MOTHS = {
+    forest: [[1350, 98], [2280, 100], [3200, 108]], hollow: [[610, 108], [1290, 100], [2010, 106]], pass: [[650, 108], [1335, 102], [2760, 80]],
+    gloam: [[630, 110], [1690, 96], [3030, 82]], mire: [[600, 100], [1245, 88], [1665, 96]], barrow: [[650, 104], [1210, 96], [1685, 102]],
+    cinder: [[620, 104], [1190, 96], [1440, 76]], archive: [[650, 106], [912, 82], [1428, 102]]
+  };
+  const MOTH_TOTAL = Object.values(MOTHS).reduce((s, a) => s + a.length, 0);
+  const BOARDS = [{ fire: 'camp', scene: 'forest', x: 3560 }, { fire: 'lookout', scene: 'pass', x: 1835 }, { fire: 'gate', scene: 'gloam', x: 2185 }];
+  const BLESSINGS = [
+    { id: 'swift', name: 'SWIFTFOOT', desc: 'You move faster.', color: '#9be37a' },
+    { id: 'wrath', name: 'WRATH OF THE MOON', desc: '+3 damage.', color: '#ff8a6a' },
+    { id: 'ward', name: 'SILVER WARD', desc: 'Take 2 less damage.', color: '#a8c4ff' },
+    { id: 'fortune', name: 'FORTUNE', desc: 'Luck up, double coins.', color: '#f2c14e' },
+    { id: 'mend', name: 'MOONMEND', desc: 'Slowly heal over time.', color: '#ff9ab8' }
+  ];
+  const depths = { moths: [], shrines: [], blessing: null, bounty: null, bountiesDone: 0, peddler: null, ambush: null, mothRewards: 0, champs: 0 };
+  let peddlerSel = 0, mendTimer = 0;
+
+  function depthR() { return REGIONS[platformScene] || {}; }
+  function blessed(id) { return depths.blessing && depths.blessing.id === id && time < depths.blessing.until; }
+  function blessSpeed() { return blessed('swift') ? 1.3 : 1; }
+  function blessDamage(d) { return blessed('wrath') ? d + 3 : d; }
+  function blessHurt(a) { return blessed('ward') ? Math.max(1, a - 2) : a; }
+  function blessLuck() { return blessed('fortune') ? 0.6 : 0; }
+  function blessCoins() { return blessed('fortune') ? 2 : 1; }
+
+  // ---- Bounties from the hunt boards ----
+  const BOUNTY_POOLS = { 1: ['goblin', 'sneak', 'brute', 'mushroom', 'rotshroom', 'skeleton', 'shade', 'acolyte', 'eye'], 2: ['hound', 'crow', 'skull', 'fiend', 'toad', 'gazer'], 3: ['lamp', 'drowned', 'gazer', 'acolyte', 'skeleton', 'ghost'] };
+  function newBounty() {
+    const ch = Math.min(3, questChapter()), roll = Math.random();
+    if (roll < 0.18) return { kind: 'elite', need: 2 + Math.floor(Math.random() * 2), have: 0, reward: 40 + ch * 15, rarity: rollRarity(0.3, 'rare') };
+    if (roll < 0.3) return { kind: 'chest', need: 3, have: 0, reward: 30 + ch * 10, rarity: rollRarity(0.2) };
+    const pool = BOUNTY_POOLS[ch], type = pool[Math.floor(Math.random() * pool.length)];
+    const need = 4 + Math.floor(Math.random() * 5);
+    return { kind: 'kill', type, need, have: 0, reward: need * (4 + ch * 2), rarity: rollRarity(0.1) };
+  }
+  function bountyLabel(b) {
+    if (!b) return 'No bounty taken';
+    if (b.kind === 'elite') return 'Slay ' + b.need + ' elites';
+    if (b.kind === 'chest') return 'Open ' + b.need + ' chests';
+    const n = MOB_TYPES[b.type].name; return 'Slay ' + b.need + ' ' + n + (/s$/.test(n) ? '' : 's');
+  }
+  function useBoard() {
+    const b = depths.bounty;
+    if (b && b.have >= b.need) {
+      inventory.coins = (inventory.coins || 0) + b.reward;
+      depths.bountiesDone++; depths.bounty = null;
+      sfx('victory', 0.7); padRumble(0.4, 0.5, 220);
+      notice = 'Bounty claimed: +' + b.reward + ' coins.'; noticeUntil = time + 2.6;
+      if (Math.random() < 0.35 + luckValue() * 0.2) dropRelic(sidePlayer.x, sidePlayer.y - 40, b.rarity);
+      else pickups.push({ type: 'tonic', amount: 1, x: sidePlayer.x, y: sidePlayer.y - 40, vx: 30, vy: -200, age: 0 });
+      if (onSave) onSave(getSaveData());
+      return;
+    }
+    if (b) { startDialogue([{ who: 'board', text: 'CURRENT BOUNTY: ' + bountyLabel(b) + '. Progress ' + b.have + ' / ' + b.need + '. Reward ' + b.reward + ' coins and a ' + RARITY[b.rarity].name.toLowerCase() + ' prize.' }]); return; }
+    const nb = newBounty(); depths.bounty = nb;
+    sfx('bookOpen');
+    startDialogue([{ who: 'board', text: 'A new notice is pinned up: ' + bountyLabel(nb) + '. Reward: ' + nb.reward + ' coins and a ' + RARITY[nb.rarity].name.toLowerCase() + ' prize. Come back to any hunt board to claim it.' }], () => { if (onSave) onSave(getSaveData()); });
+  }
+  function depthsOnKill(m) {
+    const b = depths.bounty;
+    if (b && b.have < b.need && ((b.kind === 'kill' && m.type === b.type) || (b.kind === 'elite' && m.elite))) {
+      b.have++;
+      if (b.have >= b.need) { notice = 'Bounty complete. Return to a hunt board.'; noticeUntil = time + 2.6; sfx('level', 0.6); }
+      else addDamageNumber(sidePlayer.x, sidePlayer.y - 76, 'BOUNTY ' + b.have + '/' + b.need, '#e8d2a0');
+    }
+    if (m.T.spores) { for (let i = -1; i <= 1; i++) sporeClouds.push({ x: m.x + i * 14, y: SIDE_GROUND_Y - 10, life: 3.2, max: 3.2, hit: 0 }); sfx('squish', 0.6, 0.7); }
+    if (m.ambush && depths.ambush && !depths.ambush.done && depths.ambush.mobs.every(o => o.dead)) finishAmbush();
+  }
+  function depthsOnChest() {
+    const b = depths.bounty;
+    if (b && b.kind === 'chest' && b.have < b.need) { b.have++; if (b.have >= b.need) { notice = 'Bounty complete. Return to a hunt board.'; noticeUntil = time + 2.6; } }
+  }
+
+  // ---- Moon shrines ----
+  function useShrine() {
+    const key = platformScene;
+    if (depths.shrines.includes(key)) { notice = 'The shrine is quiet. Rest at a fire to rekindle it.'; noticeUntil = time + 2.2; sfx('uiError'); return; }
+    depths.shrines.push(key);
+    sidePlayer.pray = { t: 0 }; sidePlayer.vx = 0;
+    sfx('magic', 0.8); padRumble(0.3, 0.5, 300);
+    const roll = Math.random();
+    if (roll < 0.14) {
+      // A trial: the moon sends champions of its own.
+      notice = 'THE MOON TESTS YOU. Survive the trial!'; noticeUntil = time + 2.6;
+      startAmbush(sidePlayer.x, true);
+      return;
+    }
+    if (roll < 0.22) {
+      stats.health = stats.maxHealth; inventory.coins = (inventory.coins || 0) + 25;
+      notice = 'A gift! Healed and 25 coins at your feet.'; noticeUntil = time + 2.6; return;
+    }
+    const B = BLESSINGS[Math.floor(Math.random() * BLESSINGS.length)];
+    depths.blessing = { id: B.id, until: time + 120, t: time };
+    notice = 'Blessing: ' + B.name + ' - ' + B.desc; noticeUntil = time + 3;
+    spawnSparks(sidePlayer.x, sidePlayer.y - 30, 1, 18, [B.color, '#ffffff', '#cfe6ff']);
+  }
+
+  // ---- Moon moths ----
+  function mothKey(scene, i) { return scene + ':' + i; }
+  function updateMoths() {
+    const list = MOTHS[platformScene]; if (!list) return;
+    list.forEach(([mx, my], i) => {
+      const k = mothKey(platformScene, i); if (depths.moths.includes(k)) return;
+      const y = my + Math.sin(time * 2 + i) * 3;
+      if (Math.abs(sidePlayer.x - mx) < 14 && sidePlayer.y - 44 < y + 6 && sidePlayer.y > y - 6) {
+        depths.moths.push(k); inventory.mothlamp = 1;
+        sfx('gem', 0.8, 1.3); spawnSparks(mx, y, 1, 12, ['#cfe6ff', '#ffffff', '#8fd8ff']);
+        const n = depths.moths.length;
+        addDamageNumber(mx, y - 10, 'MOON MOTH ' + n + '/' + MOTH_TOTAL, '#cfe6ff');
+        mothMilestone(n);
+        if (onSave) onSave(getSaveData());
+      }
+    });
+  }
+  const MOTH_REWARDS = [[6, 'Your lantern glows. Max health +4.'], [12, 'The moths gather. A relic falls from the light.'], [18, 'The lantern hums. A new relic slot opens.'], [MOTH_TOTAL, 'Every moth found. The old moon shines in your hands.']];
+  function mothMilestone(n) {
+    MOTH_REWARDS.forEach(([at, text], k) => {
+      if (n !== at || depths.mothRewards > k) return;
+      depths.mothRewards = k + 1;
+      notice = text; noticeUntil = time + 3.2; sfx('victory', 0.7);
+      if (k === 0) { stats.maxHealth += 4; stats.health = stats.maxHealth; }
+      if (k === 1) dropRelic(sidePlayer.x, sidePlayer.y - 50, rollRarity(0.4, 'rare'));
+      if (k === 2) fortune.slots = Math.min(4, fortune.slots + 1);
+      if (k === 3) dropRelic(sidePlayer.x, sidePlayer.y - 50, 'legend');
+    });
+  }
+
+  // ---- Tess, the wandering peddler ----
+  function rollPeddler(scene) {
+    depths.peddler = null;
+    const R = REGIONS[scene]; if (!R || R.side) return;
+    if (Math.random() > 0.38) return;
+    const lo = 420, hi = (R.arena ? R.arena.left : R.width) - 400;
+    let x = lo + Math.random() * (hi - lo);
+    if (FIRES.some(f => f.scene === scene && Math.abs(f.x - x) < 200)) x = lo + 80;
+    const wares = [];
+    const relicR = rollRarity(0.35, 'rare'), rid = randomRelic(relicR);
+    if (rid) wares.push({ kind: 'relic', id: rid, price: { common: 30, rare: 55, epic: 90, legend: 140 }[RELICS[rid].rarity] });
+    wares.push({ kind: 'item', id: 'tonic', n: 2, price: 14 });
+    wares.push({ kind: 'mystery', price: 25 });
+    wares.push({ kind: 'bless', price: 20 });
+    depths.peddler = { scene, x: Math.round(x), wares, bob: Math.random() * 6 };
+  }
+  function talkToPeddler() {
+    const first = !story.peddlerMet; story.peddlerMet = true;
+    const lines = first ? [
+      { who: 'tess', text: "Oh! A knight. A real one, with the little silver tree on the shield. I'm Tess. I go where the road goes, and the road goes everywhere lately." },
+      { who: 'tess', text: "Bits of the moon have been turning up in odd places. I collect them. And other things. Want to see?" }]
+      : [[{ who: 'tess', text: 'Back again? The road is lonely. Buy something, it helps.' }], [{ who: 'tess', text: "Saw pale riders on the ridge last night. I hid in my own pack. It's a big pack." }], [{ who: 'tess', text: 'Mystery bundles are my favorite. Even I forget what I put in them.' }]][Math.floor(Math.random() * 3)];
+    startDialogue(lines, () => { peddlerSel = 0; openPanel('peddler'); });
+  }
+  function peddlerBuy() {
+    const p = depths.peddler; if (!p) return;
+    const w = p.wares[peddlerSel]; if (!w || w.sold) { sfx('uiError'); return; }
+    if ((inventory.coins || 0) < w.price) { sfx('uiError'); notice = 'Not enough coins.'; noticeUntil = time + 1.5; invShake = time; return; }
+    inventory.coins -= w.price; w.sold = true; sfx('coin', 0.9);
+    if (w.kind === 'relic') { panel = null; grantRelic(w.id); }
+    else if (w.kind === 'item') { inventory[w.id] = (inventory[w.id] || 0) + w.n; newItems.add(w.id); notice = 'Bought ' + w.n + ' ' + ITEM_DEFS[w.id].name + '.'; noticeUntil = time + 1.8; }
+    else if (w.kind === 'bless') { const B = BLESSINGS[Math.floor(Math.random() * BLESSINGS.length)]; depths.blessing = { id: B.id, until: time + 120, t: time }; notice = 'Tess burns a charm. ' + B.name + '!'; noticeUntil = time + 2.4; }
+    else {
+      const r = Math.random();
+      if (r < 0.15) { panel = null; dropRelic(sidePlayer.x, sidePlayer.y - 40, rollRarity(0.2)); notice = 'The bundle holds a relic!'; }
+      else if (r < 0.55) { inventory.coins += 45; notice = 'The bundle is full of coins. +45.'; }
+      else if (r < 0.8) { inventory.bread = (inventory.bread || 0) + 3; newItems.add('bread'); notice = 'Three loaves of bread. Tess shrugs.'; }
+      else { notice = 'The bundle is full of spoons. Tess looks embarrassed.'; }
+      noticeUntil = time + 2.2;
+    }
+    if (onSave) onSave(getSaveData());
+  }
+  function wareName(w) {
+    if (w.kind === 'relic') return RELICS[w.id].name;
+    if (w.kind === 'item') return ITEM_DEFS[w.id].name + ' x' + w.n;
+    if (w.kind === 'bless') return 'Shrine Charm';
+    return 'Mystery Bundle';
+  }
+  function wareDesc(w) {
+    if (w.kind === 'relic') return RARITY[RELICS[w.id].rarity].name + ' relic. ' + RELICS[w.id].desc;
+    if (w.kind === 'item') return 'Heals in a pinch. Always useful.';
+    if (w.kind === 'bless') return 'A random moon blessing for two minutes.';
+    return 'Could be anything. Probably spoons.';
+  }
+  function drawPeddlerPanel() {
+    const p = depths.peddler; if (!p) { panel = null; return; }
+    ctx.save();
+    ctx.fillStyle = 'rgba(6,4,12,.82)'; ctx.fillRect(0, 0, 320, 240);
+    const x = 46, y = 44, w = 228, h = 156;
+    ctx.fillStyle = '#1b1424'; ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = '#b98cff'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.strokeStyle = '#4a3560'; ctx.strokeRect(x + 2.5, y + 2.5, w - 5, h - 5);
+    invText("TESS'S PACK", x + 10, y + 16, '#e8d2ff', 'bold 9px monospace');
+    ctx.fillStyle = '#f2c14e'; ctx.fillRect(x + w - 50, y + 9, 5, 5);
+    invText(String(inventory.coins || 0), x + w - 10, y + 15, '#ffe3a1', 'bold 7px monospace', 'right');
+    peddlerSel = clamp(peddlerSel, 0, p.wares.length - 1);
+    p.wares.forEach((ware, i) => {
+      const ry = y + 26 + i * 22, sel = i === peddlerSel;
+      ctx.fillStyle = sel ? '#2e2240' : '#231a30'; ctx.fillRect(x + 8, ry, w - 16, 19);
+      if (sel) { ctx.strokeStyle = '#d7b6ff'; ctx.strokeRect(x + 8.5, ry + 0.5, w - 17, 18); }
+      ctx.fillStyle = '#0d0a10'; ctx.fillRect(x + 12, ry + 2, 15, 15);
+      if (ware.kind === 'relic') drawRelicIcon(ware.id, x + 15.5, ry + 5.5, 1);
+      else if (ware.kind === 'item') drawItemIcon('tonic', x + 13, ry + 3, 1);
+      else { ctx.fillStyle = ware.kind === 'bless' ? '#cfe6ff' : '#b88a5a'; ctx.fillRect(x + 16, ry + 6, 7, 7); ctx.fillStyle = '#0d0a10'; ctx.fillRect(x + 19, ry + 8, 1, 3); }
+      const col = ware.sold ? '#6f6670' : ware.kind === 'relic' ? RARITY[RELICS[ware.id].rarity].color : '#f3e7c9';
+      invText(wareName(ware), x + 32, ry + 9, col, 'bold 7px monospace');
+      invText(ware.sold ? 'SOLD' : ware.price + 'c', x + w - 14, ry + 9, ware.sold ? '#6f6670' : (inventory.coins || 0) >= ware.price ? '#ffe3a1' : '#c86a6a', 'bold 7px monospace', 'right');
+      invText(wareDesc(ware).slice(0, 44), x + 32, ry + 16, '#8f8478', '5px monospace');
+    });
+    invText(inputMode === 'pad' ? 'UP/DOWN CHOOSE   ✕ BUY   ○ LEAVE' : 'W/S CHOOSE   E BUY   ESC LEAVE', 160, y + h - 8, '#c9bca6', '6px monospace', 'center');
+    ctx.restore();
+  }
+  function peddlerInput(act) {
+    if (act === 'up') { peddlerSel = Math.max(0, peddlerSel - 1); sfx('uiMove'); }
+    else if (act === 'down') { peddlerSel = Math.min(((depths.peddler && depths.peddler.wares.length) || 1) - 1, peddlerSel + 1); sfx('uiMove'); }
+    else if (act === 'ok') peddlerBuy();
+    else if (act === 'back') { panel = null; sfx('uiBack'); }
+  }
+
+  // ---- Ambushes ----
+  function rollAmbush(scene) {
+    depths.ambush = null;
+    const R = REGIONS[scene]; if (!R || scene === 'forest' && !equipment.armor) return;
+    if (Math.random() > (R.side ? 0.45 : 0.3)) return;
+    const hi = (R.arena ? R.arena.left : R.width - 400) - 260;
+    const x = 500 + Math.random() * Math.max(100, hi - 500);
+    if (FIRES.some(f => f.scene === scene && Math.abs(f.x - x) < 220)) return;
+    depths.ambush = { x: Math.round(x), armed: true, done: false, mobs: [] };
+  }
+  function startAmbush(x, trial) {
+    const types = Array.from(new Set((SCENE_MOBS[platformScene] || []).map(s => s[0]))).filter(t => !MOB_TYPES[t].riser && !MOB_TYPES[t].boss);
+    const n = trial ? 3 : 3 + Math.min(2, questChapter() - 1);
+    const mobs = [];
+    for (let i = 0; i < n; i++) {
+      const t = types[Math.floor(Math.random() * types.length)] || 'goblin';
+      const side = i % 2 ? 1 : -1;
+      const m = makeMob(t, clamp(x + side * (90 + i * 26), 60, sideWorldWidth() - 60), 80, i);
+      m.respawn = Infinity; m.ambush = true; m.dormant = false; m.flash = 0.4; m.attackCooldown = 0.8 + i * 0.25;
+      if (trial || Math.random() < 0.3) makeElite(m);
+      m.dir = side < 0 ? 1 : -1;
+      sideMobs.push(m); mobs.push(m);
+      spawnDust(m.x, SIDE_GROUND_Y, 8);
+    }
+    depths.ambush = { x: Math.round(x), armed: false, done: false, mobs, t: time, trial: !!trial };
+    sfx('roar', 0.7, 1.1); screenShake = 5; padRumble(0.6, 0.6, 300);
+    ambushBanner = { t: time, text: trial ? 'TRIAL OF THE MOON' : 'AMBUSH!' };
+  }
+  let ambushBanner = null;
+  function finishAmbush() {
+    const a = depths.ambush; a.done = true;
+    const list = sceneChests();
+    list.push({ x: clamp(Math.round(sidePlayer.x + sidePlayer.facing * 40), 80, sideWorldWidth() - 80), rarity: rollRarity(a.trial ? 0.6 : 0.3, 'rare'), mimic: false, open: false, t: 0, looted: false, bonus: true });
+    notice = a.trial ? 'Trial passed! The moon leaves a chest.' : 'Ambush beaten! They dropped a chest.'; noticeUntil = time + 2.6;
+    sfx('victory', 0.6);
+    ambushBanner = { t: time, text: a.trial ? 'TRIAL PASSED' : 'AMBUSH CLEARED', good: true };
+  }
+
+  // ---- Spore clouds left by rot shrooms ----
+  const sporeClouds = [];
+  function updateSpores(dt) {
+    for (let i = sporeClouds.length - 1; i >= 0; i--) {
+      const s = sporeClouds[i]; s.life -= dt; s.hit -= dt;
+      if (s.hit <= 0 && sidePlayer.deadTime <= 0 && Math.abs(sidePlayer.x - s.x) < 14 && sidePlayer.y > SIDE_GROUND_Y - 30 && canHitPlayer() && s.life < s.max - 0.4) {
+        s.hit = 1; hurtSidePlayer(2, sidePlayer.x < s.x ? -1 : 1, 'Rot spores');
+      }
+      if (s.life <= 0) sporeClouds.splice(i, 1);
+    }
+  }
+  function drawSpores() {
+    sporeClouds.forEach(s => {
+      const a = Math.min(1, s.life / 0.8) * Math.min(1, (s.max - s.life) / 0.3);
+      for (let k = 0; k < 4; k++) {
+        const ox = Math.sin(time * 2 + k * 1.7 + s.x) * 6, oy = Math.cos(time * 1.6 + k) * 4 - k * 4;
+        ctx.fillStyle = 'rgba(140,200,70,' + 0.18 * a + ')';
+        ctx.beginPath(); ctx.arc(s.x + ox, s.y + oy, 7 + k, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(210,255,140,' + 0.6 * a + ')';
+      for (let k = 0; k < 3; k++) ctx.fillRect(Math.round(s.x + Math.sin(time * 3 + k * 2) * 8), Math.round(s.y - 6 - ((time * 10 + k * 7) % 16)), 1, 1);
+    });
+  }
+
+  // ---- Entering and leaving the side areas ----
+  const DEPTH_GATES = { forest: 'mire', hollow: 'barrow', pass: 'cinder', gloam: 'archive' };
+  function depthsInteraction(x) {
+    const R = depthR();
+    if (depths.peddler && depths.peddler.scene === platformScene && Math.abs(x - depths.peddler.x) < 26) return { label: 'TALK TO TESS', act: talkToPeddler };
+    const sh = SHRINES[platformScene];
+    if (sh != null && Math.abs(x - sh) < 22) return { label: depths.shrines.includes(platformScene) ? 'SHRINE (QUIET)' : 'PRAY AT THE SHRINE', act: useShrine };
+    const bd = BOARDS.find(b => b.scene === platformScene && Math.abs(x - b.x) < 20);
+    if (bd) return { label: depths.bounty && depths.bounty.have >= depths.bounty.need ? 'CLAIM BOUNTY' : 'READ THE HUNT BOARD', act: useBoard };
+    const dg = DEPTH_GATES[platformScene];
+    if (dg && Math.abs(x - REGIONS[dg].parentX) < 24) {
+      const D = REGIONS[dg];
+      return { label: 'ENTER ' + D.name, act: () => enterRegion(dg, D.entry, 1) };
+    }
+    if (R.side) {
+      if (x < 70) return { label: 'BACK TO ' + REGIONS[R.parent].name, act: () => enterRegion(R.parent, R.parentX + 30, 1) };
+      if (x > R.width - 80 && story[R.bossFlag]) return { label: 'RETURN TO ' + REGIONS[R.parent].name, act: () => enterRegion(R.parent, R.parentX + 30, 1) };
+    }
+    return null;
+  }
+  function depthsOnEnter(scene, from) {
+    sporeClouds.length = 0;
+    if (from === scene) return;
+    rollPeddler(scene);
+    rollAmbush(scene);
+    const R = REGIONS[scene];
+    if (R && R.side && !story[R.bossFlag + 'Seen']) {
+      story[R.bossFlag + 'Seen'] = true;
+      const intro = {
+        mire: [{ who: 'rowan', text: "A trail into the marsh. Goblin tracks everywhere... and something big dragging a blade." }],
+        barrow: [{ who: 'rowan', text: 'Graves. Hundreds of them. Every stone has the silver tree of the Watch on it.' }, { who: 'rowan', text: "Someone has been digging them up." }],
+        cinder: [{ who: 'rowan', text: 'An old caravan mine. The air is hot enough to burn... and something down there is breathing.' }],
+        archive: [{ who: 'rowan', text: "The Watch archive, flooded to the rafters. If anyone wrote down what happened to Mother, it's in here." }]
+      }[scene];
+      if (intro) setTimeout(() => { if (platformScene === scene && !dialogue) startDialogue(intro); }, 1300);
+    }
+  }
+  function depthsCine(c, boss, dt, th) {
+    // Champions: a heavy step forward and a roar that shakes the hall.
+    if (cineEvent(c, 'step', 0.6)) { boss.moving = true; sfx('slam', 0.6, 0.6); spawnDust(boss.x, SIDE_GROUND_Y, 10); screenShake = 3; }
+    if (c.t > 0.6 && c.t < 1.2) { boss.x -= 30 * dt * c.speed; boss.walk += dt * 10; }
+    if (cineEvent(c, 'roar', 1.25)) {
+      boss.moving = false; boss.atkLen = 0.9; boss.attackTime = 0.9;
+      sfx('roar', 1, boss.type === 'wyrm' ? 0.7 : 0.9); screenShake = 8; padRumble(1, 1, 600); c.flash = 0.35; c.flashColor = th.glow;
+      cineFx.push({ kind: 'ring', x: boss.x, y: boss.y - boss.T.bodyH * 0.5, r: 8, vr: 240, life: 0.6, max: 0.6, color: th.glow });
+      cineBurst(boss.x, boss.y - boss.T.bodyH * 0.5, 26, { angle: -Math.PI / 2, spread: Math.PI * 2, speed: 150, g: 60, life: 0.9, size: 2, color: th.glow });
+    }
+  }
+  function depthsOutro() {
+    const R = REGIONS[bossOutro.scene];
+    const lore = { mire: 'skarnend', barrow: 'mournend', cinder: 'ignarothend', archive: 'tidemawend' }[bossOutro.scene];
+    bossOutro = null;
+    depths.champs++;
+    if (lore) addLore(lore);
+    notice = 'Champion slain. New lore found.'; noticeUntil = time + 3.4;
+    ambushBanner = { t: time, text: 'CHAMPION SLAIN', good: true, color: R.color };
+    if (onSave) onSave(getSaveData());
+  }
+
+  // ---- Per-frame update ----
+  function updateDepths(dt) {
+    if (!outdoorScene()) return;
+    updateSpores(dt);
+    updateMoths();
+    if (depths.blessing && time >= depths.blessing.until) { depths.blessing = null; notice = 'Your blessing fades.'; noticeUntil = time + 1.6; }
+    if (blessed('mend') && stats.health > 0 && stats.health < stats.maxHealth) { mendTimer += dt; if (mendTimer > 2.5) { mendTimer = 0; stats.health++; addDamageNumber(sidePlayer.x, sidePlayer.y - 60, '+1', '#ff9ab8'); } }
+    const a = depths.ambush;
+    if (a && a.armed && !bossFight && !dialogue && Math.abs(sidePlayer.x - a.x) < 40 && sidePlayer.deadTime <= 0) startAmbush(a.x, false);
+    if (a && !a.armed && !a.done && a.mobs.length && a.mobs.every(o => o.dead)) finishAmbush();
+  }
+  // Rest rekindles the shrines.
+  function depthsOnRest() { depths.shrines.length = 0; }
+
+  // ---- World drawing: gates, shrines, boards, moths, Tess ----
+  function drawDepthGate(x, D) {
+    const g = SIDE_GROUND_Y, c = D.color;
+    const open = D.unlock();
+    // two leaning posts and a crossbeam hung with charms
+    ctx.fillStyle = '#1a1210'; ctx.fillRect(x - 22, g - 46, 6, 46); ctx.fillRect(x + 16, g - 46, 6, 46);
+    ctx.fillStyle = '#3a2a20'; ctx.fillRect(x - 21, g - 45, 4, 45); ctx.fillRect(x + 17, g - 45, 4, 45);
+    ctx.fillStyle = '#2a1e18'; ctx.fillRect(x - 26, g - 50, 52, 6);
+    ctx.fillStyle = '#4a3828'; ctx.fillRect(x - 25, g - 49, 50, 3);
+    for (let i = 0; i < 4; i++) { const cx = x - 14 + i * 9, sw = Math.sin(time * 2 + i) * 1.5; ctx.fillStyle = '#5a4a38'; ctx.fillRect(Math.round(cx + sw), g - 44, 1, 5); ctx.fillStyle = c; ctx.fillRect(Math.round(cx + sw) - 1, g - 39, 3, 3); }
+    // a glow from the path beyond
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const gg = ctx.createRadialGradient(x, g - 20, 2, x, g - 20, 34);
+    const rgb = hexRgb(c);
+    gg.addColorStop(0, 'rgba(' + rgb + ',' + (0.22 + Math.sin(time * 2) * 0.06) + ')'); gg.addColorStop(1, 'rgba(' + rgb + ',0)');
+    ctx.fillStyle = gg; ctx.fillRect(x - 34, g - 54, 68, 54); ctx.restore();
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(x - 15, g - 40, 30, 40);
+    ctx.font = 'bold 5px monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#0d0a10'; ctx.fillRect(x - 30, g - 60, 60, 9);
+    ctx.fillStyle = open ? c : '#6f6670'; ctx.fillText(D.name.replace(/^THE /, ''), x, g - 54);
+  }
+  function hexRgb(h) { const n = parseInt(h.slice(1), 16); return ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255); }
+  function drawShrine(x) {
+    const g = SIDE_GROUND_Y, used = depths.shrines.includes(platformScene);
+    ctx.fillStyle = '#1c1a24'; ctx.fillRect(x - 10, g - 6, 20, 6);
+    ctx.fillStyle = '#3a3848'; ctx.fillRect(x - 8, g - 8, 16, 3);
+    ctx.fillStyle = '#2c2a38'; ctx.fillRect(x - 4, g - 34, 8, 27);
+    ctx.fillStyle = '#4a4860'; ctx.fillRect(x - 3, g - 33, 2, 25);
+    // crescent on top
+    const p = used ? 0.25 : 0.7 + Math.sin(time * 3) * 0.2;
+    ctx.fillStyle = 'rgba(207,230,255,' + p + ')'; ctx.beginPath(); ctx.arc(x, g - 40, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1c1a24'; ctx.beginPath(); ctx.arc(x + 3, g - 42, 5, 0, Math.PI * 2); ctx.fill();
+    if (!used) {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      const gg = ctx.createRadialGradient(x, g - 40, 1, x, g - 40, 26);
+      gg.addColorStop(0, 'rgba(160,200,255,.3)'); gg.addColorStop(1, 'rgba(160,200,255,0)');
+      ctx.fillStyle = gg; ctx.fillRect(x - 26, g - 66, 52, 52); ctx.restore();
+      if (Math.random() < 0.08) combatFx.push({ kind: 'spark', x: x + (Math.random() - 0.5) * 10, y: g - 40, vx: 0, vy: -20, color: '#cfe6ff', life: 0.6, max: 0.6 });
+    }
+  }
+  function drawBoard(x) {
+    const g = SIDE_GROUND_Y, b = depths.bounty, ready = b && b.have >= b.need;
+    ctx.fillStyle = '#2a1c12'; ctx.fillRect(x - 12, g - 30, 3, 30); ctx.fillRect(x + 9, g - 30, 3, 30);
+    ctx.fillStyle = '#5a3e26'; ctx.fillRect(x - 14, g - 34, 28, 18);
+    ctx.fillStyle = '#7a5634'; ctx.fillRect(x - 13, g - 33, 26, 2);
+    ctx.fillStyle = '#e8d8b0'; ctx.fillRect(x - 10, g - 30, 8, 10); ctx.fillRect(x + 1, g - 29, 9, 8);
+    ctx.fillStyle = '#8a7450'; ctx.fillRect(x - 9, g - 28, 6, 1); ctx.fillRect(x - 9, g - 26, 5, 1); ctx.fillRect(x + 2, g - 27, 7, 1);
+    ctx.fillStyle = '#c8324a'; ctx.fillRect(x - 7, g - 31, 2, 2); ctx.fillRect(x + 5, g - 30, 2, 2);
+    if (ready || !b) {
+      const bob = Math.round(Math.sin(time * 4) * 2);
+      ctx.fillStyle = ready ? '#9be37a' : '#f2c14e'; ctx.fillRect(x - 1, g - 46 + bob, 3, 6); ctx.fillRect(x - 1, g - 38 + bob, 3, 2);
+    }
+  }
+  function drawMoths() {
+    const list = MOTHS[platformScene]; if (!list) return;
+    ctx.save();
+    list.forEach(([mx, my], i) => {
+      if (depths.moths.includes(mothKey(platformScene, i))) return;
+      if (mx < sideCameraX - 20 || mx > sideCameraX + canvas.width + 20) return;
+      const y = my + Math.sin(time * 2 + i) * 3, x = mx + Math.sin(time * 1.3 + i * 2) * 4;
+      ctx.globalCompositeOperation = 'lighter';
+      const gg = ctx.createRadialGradient(x, y, 1, x, y, 16);
+      gg.addColorStop(0, 'rgba(180,220,255,.45)'); gg.addColorStop(1, 'rgba(180,220,255,0)');
+      ctx.fillStyle = gg; ctx.fillRect(x - 16, y - 16, 32, 32);
+      ctx.globalCompositeOperation = 'source-over';
+      const flap = Math.abs(Math.sin(time * 12 + i)) * 3 + 1;
+      ctx.fillStyle = '#e6f4ff'; ctx.fillRect(Math.round(x) - Math.round(flap) - 1, Math.round(y) - 2, Math.round(flap), 3); ctx.fillRect(Math.round(x) + 2, Math.round(y) - 2, Math.round(flap), 3);
+      ctx.fillStyle = '#8fd8ff'; ctx.fillRect(Math.round(x), Math.round(y) - 2, 2, 4);
+    });
+    ctx.restore();
+  }
+  function drawPeddler() {
+    const p = depths.peddler; if (!p || p.scene !== platformScene) return;
+    const x = Math.round(p.x), g = SIDE_GROUND_Y, bob = Math.round(Math.sin(time * 2 + p.bob));
+    if (x < sideCameraX - 40 || x > sideCameraX + canvas.width + 40) return;
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(x, g + 1, 16, 3, 0, 0, Math.PI * 2); ctx.fill();
+    // a huge pack piled with pots and a lantern
+    ctx.fillStyle = '#4a3020'; ctx.fillRect(x + 1, g - 34 + bob, 16, 26);
+    ctx.fillStyle = '#6a4630'; ctx.fillRect(x + 2, g - 33 + bob, 14, 3);
+    ctx.fillStyle = '#8a8070'; ctx.fillRect(x + 4, g - 40 + bob, 6, 6); ctx.fillStyle = '#b8732e'; ctx.fillRect(x + 11, g - 38 + bob, 5, 4);
+    ctx.fillStyle = '#2a1a10'; ctx.fillRect(x + 17, g - 30 + bob, 1, 8);
+    ctx.fillStyle = '#ffd36a'; ctx.fillRect(x + 16, g - 22 + bob, 3, 4);
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const gg = ctx.createRadialGradient(x + 17, g - 20, 1, x + 17, g - 20, 22); gg.addColorStop(0, 'rgba(255,200,110,.35)'); gg.addColorStop(1, 'rgba(255,200,110,0)');
+    ctx.fillStyle = gg; ctx.fillRect(x - 5, g - 42, 44, 44); ctx.restore();
+    // hooded body
+    ctx.fillStyle = '#3a2a50'; ctx.fillRect(x - 7, g - 26 + bob, 12, 26 - bob);
+    ctx.fillStyle = '#5a4078'; ctx.fillRect(x - 6, g - 25 + bob, 3, 24 - bob);
+    ctx.fillStyle = '#2a1e3a'; ctx.fillRect(x - 8, g - 34 + bob, 12, 10);
+    ctx.fillStyle = '#e0b890'; ctx.fillRect(x - 6, g - 30 + bob, 6, 5);
+    ctx.fillStyle = '#1a1020'; ctx.fillRect(x - 5, g - 28 + bob, 1, 1); ctx.fillRect(x - 2, g - 28 + bob, 1, 1);
+    ctx.fillStyle = '#c8a0ff'; ctx.fillRect(x - 9, g - 35 + bob, 2, 2);
+    if (Math.abs(sidePlayer.x - x) > 40) {
+      ctx.fillStyle = '#0d0a10'; ctx.fillRect(x - 14, g - 50, 28, 8);
+      ctx.fillStyle = '#d7b6ff'; ctx.font = 'bold 5px monospace'; ctx.textAlign = 'center'; ctx.fillText('PEDDLER', x, g - 44);
+    }
+  }
+  function drawDepthDecor() {
+    const R = depthR(), g = SIDE_GROUND_Y, L = sideCameraX - 60, Rr = sideCameraX + canvas.width + 60;
+    if (platformScene === 'mire') {
+      for (let x = Math.floor(L / 140) * 140; x < Rr; x += 140) {
+        // black water pools and reeds
+        const k = (x / 140) % 3;
+        ctx.fillStyle = 'rgba(10,25,15,.85)'; ctx.fillRect(x + 20, g, 60 + k * 10, 3);
+        ctx.fillStyle = 'rgba(140,210,120,' + (0.18 + Math.sin(time * 2 + x) * 0.08) + ')'; ctx.fillRect(x + 30 + Math.round(Math.sin(time + x) * 6), g + 1, 10, 1);
+        ctx.fillStyle = '#2a4a24'; for (let r = 0; r < 5; r++) ctx.fillRect(x + 4 + r * 3, g - 6 - ((r * 7 + x) % 6), 1, 6 + ((r * 7 + x) % 6));
+      }
+      if (740 > L && 600 < Rr) {
+        // the witch hut on stilts
+        const hx = 600;
+        ctx.fillStyle = '#1a1410'; ctx.fillRect(hx + 4, g - 20, 3, 20); ctx.fillRect(hx + 52, g - 20, 3, 20);
+        ctx.fillStyle = '#3a2a1c'; ctx.fillRect(hx, g - 50, 60, 30);
+        ctx.fillStyle = '#2a1e14'; ctx.beginPath(); ctx.moveTo(hx - 6, g - 50); ctx.lineTo(hx + 30, g - 74); ctx.lineTo(hx + 66, g - 50); ctx.fill();
+        ctx.fillStyle = 'rgba(160,230,120,' + (0.5 + Math.sin(time * 3) * 0.2) + ')'; ctx.fillRect(hx + 12, g - 42, 8, 7);
+        ctx.fillStyle = '#120c08'; ctx.fillRect(hx + 36, g - 44, 10, 24);
+      }
+    } else if (platformScene === 'barrow') {
+      for (let x = Math.floor(L / 70) * 70; x < Rr; x += 70) {
+        if (x > R.arena.left - 40 || x < 160) continue;
+        const k = (x / 70) % 4, h = 14 + k * 3;
+        ctx.fillStyle = '#1e2030'; ctx.fillRect(x, g - h, 12, h);
+        ctx.fillStyle = '#34384c'; ctx.fillRect(x + 1, g - h + 1, 10, 2);
+        ctx.fillStyle = '#4a5068'; ctx.fillRect(x + 5, g - h + 4, 2, 6); ctx.fillRect(x + 3, g - h + 6, 6, 2);
+        if (k === 1) { ctx.fillStyle = '#2a1e18'; ctx.fillRect(x + 14, g - 3, 14, 3); ctx.fillStyle = '#3a2a20'; ctx.fillRect(x + 15, g - 5, 12, 2); }
+      }
+    } else if (platformScene === 'cinder') {
+      for (let x = Math.floor(L / 120) * 120; x < Rr; x += 120) {
+        const a = 0.35 + Math.sin(time * 2 + x * 0.1) * 0.2;
+        ctx.fillStyle = 'rgba(255,' + (90 + Math.round(Math.sin(x) * 30)) + ',30,' + a + ')';
+        ctx.fillRect(x + 10, g + 2, 26, 1); ctx.fillRect(x + 20, g + 3, 12, 1); ctx.fillRect(x + 50, g + 1, 18, 1);
+        ctx.fillStyle = '#1a0806'; ctx.beginPath(); ctx.moveTo(x + 80, 0); ctx.lineTo(x + 92, 0); ctx.lineTo(x + 86, 18 + (x % 3) * 6); ctx.fill();
+      }
+    } else if (platformScene === 'archive') {
+      for (let x = Math.floor(L / 160) * 160; x < Rr; x += 160) {
+        // drowned bookshelves
+        ctx.fillStyle = '#10181c'; ctx.fillRect(x + 20, g - 56, 34, 56);
+        for (let s = 0; s < 4; s++) {
+          ctx.fillStyle = '#1e2a30'; ctx.fillRect(x + 21, g - 54 + s * 14, 32, 2);
+          for (let b = 0; b < 6; b++) { ctx.fillStyle = ['#3a2a40', '#2a3a40', '#4a3020', '#203040'][(b + s + x / 160) % 4]; ctx.fillRect(x + 22 + b * 5, g - 52 + s * 14 + (b % 2), 4, 11 - (b % 2)); }
+        }
+        ctx.fillStyle = 'rgba(10,30,40,.75)'; ctx.fillRect(x, g - 6, 160, 6);
+        ctx.fillStyle = 'rgba(120,220,230,' + (0.15 + Math.sin(time * 2 + x) * 0.08) + ')'; ctx.fillRect(x + 30 + Math.round(Math.sin(time + x) * 8), g - 6, 18, 1);
+      }
+    }
+    if (R.side && story[R.bossFlag]) drawSignpost(R.width - 50, REGIONS[R.parent].name.replace(/^THE /, ''), 1);
+    if (R.side) drawSignpost(60, REGIONS[R.parent].name.replace(/^THE /, ''), -1);
+  }
+  function drawDepthsWorld() {
+    if (!outdoorScene()) return;
+    drawDepthDecor();
+    const dg = DEPTH_GATES[platformScene];
+    if (dg) drawDepthGate(REGIONS[dg].parentX, REGIONS[dg]);
+    const sh = SHRINES[platformScene]; if (sh != null) drawShrine(sh);
+    BOARDS.filter(b => b.scene === platformScene).forEach(b => drawBoard(b.x));
+    drawPeddler();
+    drawMoths();
+    drawSpores();
+  }
+  // Screen-space colour grade and fog for the side areas.
+  function drawDepthsGrade() {
+    const R = depthR(); if (!R.side) return;
+    const W = canvas.width, H = canvas.height;
+    const gr = ctx.createLinearGradient(0, 0, 0, H);
+    gr.addColorStop(0, R.gradeTop); gr.addColorStop(1, R.gradeBot);
+    ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 5; i++) {
+      const fx = ((i * 97 + time * (6 + i * 2) - sideCameraX * 0.3) % 420 + 420) % 420 - 50, fy = 150 + (i % 3) * 18;
+      const g = ctx.createRadialGradient(fx, fy, 2, fx, fy, 70);
+      g.addColorStop(0, 'rgba(' + R.fog + ',.10)'); g.addColorStop(1, 'rgba(' + R.fog + ',0)');
+      ctx.fillStyle = g; ctx.fillRect(fx - 70, fy - 70, 140, 140);
+    }
+    ctx.restore();
+  }
+  // HUD: blessing timer, bounty tracker and the ambush banner.
+  function drawDepthsHUD() {
+    let y = 36;
+    if (depths.blessing && time < depths.blessing.until) {
+      const B = BLESSINGS.find(b => b.id === depths.blessing.id), left = Math.ceil(depths.blessing.until - time);
+      ctx.fillStyle = 'rgba(9,10,20,.75)'; ctx.fillRect(4, y, 92, 10);
+      ctx.fillStyle = B.color; ctx.fillRect(4, y + 9, Math.round(92 * left / 120), 1);
+      invText(B.name, 7, y + 7, B.color, 'bold 5px monospace');
+      invText(left + 's', 93, y + 7, '#c9bca6', '5px monospace', 'right');
+      y += 12;
+    }
+    const b = depths.bounty;
+    if (b) {
+      ctx.fillStyle = 'rgba(9,10,20,.75)'; ctx.fillRect(4, y, 92, 10);
+      const done = b.have >= b.need;
+      invText(done ? 'BOUNTY DONE' : bountyLabel(b).toUpperCase().slice(0, 18), 7, y + 7, done ? '#9be37a' : '#e8d2a0', 'bold 5px monospace');
+      invText(b.have + '/' + b.need, 93, y + 7, '#c9bca6', '5px monospace', 'right');
+    }
+    if (ambushBanner) {
+      const t = time - ambushBanner.t; if (t > 2.4) { ambushBanner = null; return; }
+      const a = Math.min(1, t * 5) * Math.min(1, (2.4 - t) * 2.5), s = 1 + Math.max(0, 0.3 - t) * 1.5;
+      ctx.save(); ctx.globalAlpha = a;
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 104, 320, 26);
+      const col = ambushBanner.color || (ambushBanner.good ? '#9be37a' : '#ff5a4a');
+      ctx.fillStyle = col; ctx.fillRect(0, 104, 320, 1); ctx.fillRect(0, 129, 320, 1);
+      ctx.translate(160, 122); ctx.scale(s, s);
+      ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+      ctx.fillStyle = '#000'; ctx.fillText(ambushBanner.text, 1, 1);
+      ctx.fillStyle = col; ctx.fillText(ambushBanner.text, 0, 0);
+      ctx.restore();
+    }
+  }
+  function depthsSave() { return { moths: depths.moths.slice(), bounty: depths.bounty, bountiesDone: depths.bountiesDone, mothRewards: depths.mothRewards, champs: depths.champs }; }
+  function depthsLoad(d) {
+    if (!d || typeof d !== 'object') return;
+    if (Array.isArray(d.moths)) depths.moths = d.moths.filter(k => typeof k === 'string');
+    if (d.bounty && typeof d.bounty === 'object' && d.bounty.need) depths.bounty = d.bounty;
+    if (Number.isFinite(d.bountiesDone)) depths.bountiesDone = d.bountiesDone;
+    if (Number.isFinite(d.mothRewards)) depths.mothRewards = d.mothRewards;
+    if (Number.isFinite(d.champs)) depths.champs = d.champs;
+  }
+  function depthsReset() { Object.assign(depths, { moths: [], shrines: [], blessing: null, bounty: null, bountiesDone: 0, peddler: null, ambush: null, mothRewards: 0, champs: 0 }); sporeClouds.length = 0; }
+
+  // Side areas on the world map, branching off their parent region.
+  const DEPTH_NODES = [
+    { id: 'mire', name: 'Witchmire', x: 34, y: 98, from: [44, 70] }, { id: 'barrow', name: 'Barrows', x: 70, y: 38, from: [88, 52] },
+    { id: 'cinder', name: 'Cinder Deep', x: 124, y: 92, from: [120, 64] }, { id: 'archive', name: 'Archive', x: 132, y: 22, from: [146, 40] }
+  ];
+  function depthKnown(id) { const R = REGIONS[id]; return story[R.bossFlag + 'Seen'] || story[R.bossFlag]; }
+  function drawDepthMapNodes(mx0, my0, here) {
+    DEPTH_NODES.forEach(n => {
+      const R = REGIONS[n.id], known = depthKnown(n.id), px = mx0 + n.x, py = my0 + n.y;
+      if (!known && !R.unlock()) return;
+      ctx.strokeStyle = 'rgba(122,85,48,.7)'; ctx.setLineDash([1, 2]); ctx.beginPath(); ctx.moveTo(mx0 + n.from[0], my0 + n.from[1]); ctx.lineTo(px, py); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = '#3a2412'; ctx.fillRect(px - 2, py - 2, 5, 5);
+      ctx.fillStyle = story[R.bossFlag] ? '#71b86c' : known ? R.color : '#a08a60'; ctx.fillRect(px - 1, py - 1, 3, 3);
+      invText(known ? n.name : '?', px, py + 9, known ? '#5a3e22' : '#8a7450', '5px monospace', 'center');
+      if (n.id === here) { const r = 4 + (Math.sin(time * 5) + 1) * 1.5; ctx.strokeStyle = 'rgba(200,40,40,.8)'; ctx.beginPath(); ctx.arc(px + 0.5, py + 0.5, r, 0, Math.PI * 2); ctx.stroke(); }
+    });
+  }
   // Moves the knight to another outdoor region (or a different spot in one).
   function enterRegion(scene, x, facing) {
     if (bossFight) endBossFight(false);
@@ -6506,6 +7298,7 @@ const Overworld = (() => {
     if (from !== scene) maybeBloodMoon(questChapter() > 1 || story.bossDefeated ? 0.12 : 0.06);
     loadSceneMobs(scene);
     placeNpcs();
+    depthsOnEnter(scene, from);
     if (from !== scene) { sfx('creak'); sceneTitle = { text: scene === 'forest' && x > CAMP.start ? "BRAM'S CAMP" : region().name, sub: REGION_SUBS[scene], t: time }; }
     keys.clear();
     if (scene === 'hollow') story.hollowEntered = true;
@@ -6584,7 +7377,7 @@ const Overworld = (() => {
         story.metBram = true;
         startDialogue([
           { who: 'bram', text: "Whoa there! Put the sword down, I'm no goblin. Name's Bram. I keep this fire burning for anyone fool enough to travel the deep wood." },
-          { who: 'bram', text: "That armor... you're Aldric's kid. He came through three days ago, heading into the Hollow. Didn't come back out." },
+          { who: 'bram', text: "That armor... you're Aldric's kid. He came through a few days ago, heading into the Hollow. Didn't come back out." },
           { who: 'rowan', text: "Then that's where I'm going." },
           { who: 'bram', text: "Thought you'd say that. Rest by the fire, and bring me anything you loot. I'll trade fair. The Hollow is just past my sign." }
         ]);
@@ -6843,9 +7636,9 @@ const Overworld = (() => {
       const x0 = Math.floor(sideCameraX / 32) * 32;
       for (let x = x0 - 32; x < sideCameraX + W + 32; x += 32) ctx.drawImage(passArt.ground, x, SIDE_GROUND_Y - 4, 32, 56);
     } else { ctx.fillStyle = '#5a2a24'; ctx.fillRect(sideCameraX, SIDE_GROUND_Y, W, 44); }
-    PASS_SIDE_PLATFORMS.slice(1).forEach(pl => { if (pl.x < sideCameraX + W && pl.x + pl.w > sideCameraX) drawRockLedge(pl); });
+    sidePlatforms().slice(1).forEach(pl => { if (pl.x < sideCameraX + W && pl.x + pl.w > sideCameraX) drawRockLedge(pl); });
     // charred wagons and bones from the burned caravans
-    [880, 2150, 3420].forEach((x, i) => {
+    (platformScene === 'pass' ? [880, 2150, 3420] : []).forEach((x, i) => {
       if (x < sideCameraX - 60 || x > sideCameraX + W + 60) return;
       const g = SIDE_GROUND_Y;
       ctx.fillStyle = '#2a1414'; ctx.fillRect(x - 24, g - 18, 48, 12);
@@ -6853,9 +7646,9 @@ const Overworld = (() => {
       ctx.strokeStyle = '#1a0c0c'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x - 14, g - 5, 6, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.arc(x + 14, g - 5, 6, Math.PI * 0.2, Math.PI * 1.7); ctx.stroke();
       ctx.fillStyle = 'rgba(255,120,60,' + (0.35 + Math.sin(time * 4 + i) * 0.2) + ')'; ctx.fillRect(x - 4, g - 20, 3, 2); ctx.fillRect(x + 10, g - 19, 2, 2);
     });
-    drawSignpost(70, 'HOLLOW', -1);
-    if (story.passBossDefeated) drawSignpost(PASS_SIDE_WIDTH - 70, 'GLOAMHOLD', 1);
-    FIRES.filter(f => f.scene === 'pass').forEach(f => drawCampfire(f.x));
+    if (platformScene === 'pass') { drawSignpost(70, 'HOLLOW', -1); if (story.passBossDefeated) drawSignpost(PASS_SIDE_WIDTH - 70, 'GLOAMHOLD', 1); }
+    drawDepthsWorld();
+    FIRES.filter(f => f.scene === platformScene).forEach(f => drawCampfire(f.x));
     drawLoreSpots();
     drawWren();
     drawChests();
@@ -6869,7 +7662,7 @@ const Overworld = (() => {
     const vg = ctx.createRadialGradient(160, 120, 110, 160, 120, 230);
     vg.addColorStop(0, 'rgba(40,10,10,0)'); vg.addColorStop(1, 'rgba(40,10,10,.45)');
     ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
-    drawSideOverlays('ASHEN PASS');
+    drawSideOverlays(platformScene === 'pass' ? 'ASHEN PASS' : region().name);
   }
   function drawTownPart(name, x, flip) {
     const r = TOWN_PARTS[name]; if (!imgReady(gloamArt.town)) return;
@@ -6892,7 +7685,8 @@ const Overworld = (() => {
     drawLayer(gloamArt.mountains, 0.05, 16, 96, 224);
     drawLayer(gloamArt.lights, 0.1, 30, 96, 224);
     if (imgReady(gloamArt.clouds)) tileImage(gloamArt.clouds, sideCameraX * 0.15 + time * 4, -40, 288, 224);
-    if (sideCameraX < CASTLE_START + 200) {
+    const CS = platformScene === 'gloam' ? CASTLE_START : -400;
+    if (sideCameraX < CS + 200) {
       // far poles and the old watchtower
       if (imgReady(gloamArt.far)) {
         const off = sideCameraX * 0.25;
@@ -6909,18 +7703,19 @@ const Overworld = (() => {
 
     ctx.save(); worldShake(); ctx.imageSmoothingEnabled = false;
     // Castle quarter: stone hall panels standing behind the walkway.
-    if (imgReady(gloamArt.castle) && sideCameraX + W > CASTLE_START) {
-      let x = CASTLE_START, i = 0;
-      while (x < GLOAM_SIDE_WIDTH + 40) {
+    const CS2 = platformScene === 'gloam' ? CASTLE_START : -40;
+    if (imgReady(gloamArt.castle) && sideCameraX + W > CS2) {
+      let x = CS2, i = 0;
+      while (x < sideWorldWidth() + 40) {
         const r = CASTLE_PARTS[i % CASTLE_PARTS.length];
         if (x + r[2] > sideCameraX && x < sideCameraX + W) ctx.drawImage(gloamArt.castle, r[0], r[1], r[2], r[3], x, SIDE_GROUND_Y - r[3], r[2], r[3]);
         x += r[2]; i++;
       }
       ctx.fillStyle = '#0a1214';
-      if (CASTLE_START + 0 > sideCameraX - 20) { ctx.fillRect(CASTLE_START - 12, SIDE_GROUND_Y - 176, 16, 176); ctx.fillStyle = '#26383a'; ctx.fillRect(CASTLE_START - 10, SIDE_GROUND_Y - 176, 2, 176); }
+      if (platformScene === 'gloam' && CASTLE_START + 0 > sideCameraX - 20) { ctx.fillRect(CASTLE_START - 12, SIDE_GROUND_Y - 176, 16, 176); ctx.fillStyle = '#26383a'; ctx.fillRect(CASTLE_START - 10, SIDE_GROUND_Y - 176, 2, 176); }
     }
     // Town houses on the near side of the city.
-    if (sideCameraX < CASTLE_START) {
+    if (platformScene === 'gloam' && sideCameraX < CASTLE_START) {
       const plan = [[220, 'small'], [420, 'tall'], [560, 'lamp'], [700, 'row'], [1060, 'lamp'], [1180, 'tall', 1], [1380, 'small', 1], [1560, 'row'], [1900, 'lamp'], [2000, 'tall'], [2140, 'small']];
       plan.forEach(([x, n, f]) => { if (x < sideCameraX + W + 20 && x + 280 > sideCameraX) drawTownPart(n, x, f); });
       // lamp glows over the posts
@@ -6940,14 +7735,15 @@ const Overworld = (() => {
     for (let x = Math.floor(sideCameraX / 180) * 180; x < sideCameraX + W + 180; x += 180) {
       if ((x / 180) % 3 === 1) { ctx.fillStyle = 'rgba(10,18,30,.8)'; ctx.fillRect(x + 20, SIDE_GROUND_Y, 70, 2); ctx.fillStyle = 'rgba(140,210,220,' + (0.2 + Math.sin(time * 2 + x) * 0.1) + ')'; ctx.fillRect(x + 30 + Math.round(Math.sin(time + x) * 10), SIDE_GROUND_Y, 14, 1); }
     }
-    GLOAM_SIDE_PLATFORMS.slice(1).forEach(pl => {
+    sidePlatforms().slice(1).forEach(pl => {
       if (pl.x > sideCameraX + W || pl.x + pl.w < sideCameraX) return;
       if (imgReady(gloamArt.crate)) for (let x = pl.x; x < pl.x + pl.w; x += 32) ctx.drawImage(gloamArt.crate, 0, 0, Math.min(32, pl.x + pl.w - x), 14, x, pl.y, Math.min(32, pl.x + pl.w - x), 14);
       ctx.fillStyle = 'rgba(8,24,28,.35)'; ctx.fillRect(pl.x, pl.y, pl.w, 14);
       ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(pl.x + 4, pl.y + 14, pl.w - 8, 3);
     });
-    drawSignpost(70, 'ASHEN PASS', -1);
-    FIRES.filter(f => f.scene === 'gloam').forEach(f => drawCampfire(f.x));
+    if (platformScene === 'gloam') drawSignpost(70, 'ASHEN PASS', -1);
+    drawDepthsWorld();
+    FIRES.filter(f => f.scene === platformScene).forEach(f => drawCampfire(f.x));
     drawLoreSpots();
     drawWren();
     drawChests();
@@ -6962,13 +7758,13 @@ const Overworld = (() => {
     const dk = ctx.createRadialGradient(px, py, 40, px, py, 230);
     dk.addColorStop(0, 'rgba(2,8,10,0)'); dk.addColorStop(1, 'rgba(2,8,10,.4)');
     ctx.fillStyle = dk; ctx.fillRect(0, 0, W, H);
-    drawSideOverlays('GLOAMHOLD');
+    drawSideOverlays(platformScene === 'gloam' ? 'GLOAMHOLD' : region().name);
   }
 
   // ---- Ambient particles (world space) ----
   const ambient = [];
   function updateAmbient(dt) {
-    const W = canvas.width, s = platformScene;
+    const W = canvas.width, s = (REGIONS[platformScene] && REGIONS[platformScene].ambient) || platformScene;
     const want = s === 'gloam' ? 70 : s === 'pass' ? 36 : 26;
     while (ambient.length < want) {
       const x = sideCameraX + Math.random() * (W + 80) - 40;
@@ -7035,7 +7831,7 @@ const Overworld = (() => {
       for (let x = x0 - 128; x < sideCameraX + W + 128; x += 128) ctx.drawImage(hollowArt.ground, x, SIDE_GROUND_Y - 18, 128, 96);
     } else { ctx.fillStyle = '#1a1424'; ctx.fillRect(sideCameraX, SIDE_GROUND_Y, W, 44); }
     // Log platforms built from the log tile's caps and middle.
-    HOLLOW_SIDE_PLATFORMS.slice(1).forEach(pl => {
+    sidePlatforms().slice(1).forEach(pl => {
       if (pl.x > sideCameraX + W || pl.x + pl.w < sideCameraX) return;
       if (!imgReady(hollowArt.log)) { ctx.fillStyle = '#4a2c1a'; ctx.fillRect(pl.x, pl.y, pl.w, pl.h); return; }
       const top = pl.y - 7;
@@ -7044,11 +7840,11 @@ const Overworld = (() => {
       ctx.drawImage(hollowArt.log, 152, 0, 40, 40, pl.x + pl.w - 34, top, 40, 40);
     });
     // Entrance arch back to the forest and the King's throne in the arena.
-    drawSignpost(70, 'FOREST', -1);
-    drawThrone(3128);
+    if (platformScene === 'hollow') { drawSignpost(70, 'FOREST', -1); drawThrone(3128); }
+    drawDepthsWorld();
     drawLoreSpots();
     drawDad();
-    if (story.ch2Started) drawSignpost(HOLLOW_SIDE_WIDTH - 34, 'ASHEN PASS', 1);
+    if (platformScene === 'hollow' && story.ch2Started) drawSignpost(HOLLOW_SIDE_WIDTH - 34, 'ASHEN PASS', 1);
     drawChests();
     drawSideMobs();
     drawSidePlayer();
@@ -7077,7 +7873,7 @@ const Overworld = (() => {
     const dk = ctx.createRadialGradient(px, py, 30, px, py, 210);
     dk.addColorStop(0, 'rgba(5,2,12,0)'); dk.addColorStop(1, 'rgba(5,2,12,.62)');
     ctx.fillStyle = dk; ctx.fillRect(0, 0, W, H);
-    drawSideOverlays('THE HOLLOW');
+    drawSideOverlays(platformScene === 'hollow' ? 'THE HOLLOW' : region().name);
   }
   // Grukk's throne: a stepped stone dais, a tall cracked seat built from
   // slabs and bones, horned skull crest, torn banners and twin braziers.
@@ -7183,6 +7979,7 @@ const Overworld = (() => {
 
   // Shared screen-space overlays for the outdoor scenes.
   function drawSideOverlays(label) {
+    drawDepthsGrade();
     if (bossFight && bossFight.cine) { drawBossCine(); return; }
     const W = canvas.width;
     drawBloodMoonOverlay();
@@ -7273,6 +8070,7 @@ const Overworld = (() => {
       if (time - invUseFlash < 0.3) { ctx.fillStyle = 'rgba(155,227,122,.5)'; ctx.fillRect(142, 4, 22, 22); }
       ctx.textAlign = 'left'; ctx.font = '6px monospace';
       drawFortuneHUD();
+      drawDepthsHUD();
     }
     if (comboTimer > 0 || (sidePlayer.atk && sidePlayer.atk.name !== 'slash1')) {
       const step = sidePlayer.atk ? ({ slash1: 1, slash2: 2, finisher: 3, thrust: 1, air: 1 })[sidePlayer.atk.name] : ({ slash1: 1, slash2: 2 })[lastMove] || 0;
@@ -7299,10 +8097,11 @@ const Overworld = (() => {
   }
 
   function drawPlatformer() {
+    const art = (REGIONS[platformScene] && REGIONS[platformScene].art) || platformScene;
     if (platformScene === 'house') drawSideInterior();
-    else if (platformScene === 'hollow') drawSideHollow();
-    else if (platformScene === 'pass') drawSidePass();
-    else if (platformScene === 'gloam') drawSideGloam();
+    else if (art === 'hollow') drawSideHollow();
+    else if (art === 'pass') drawSidePass();
+    else if (art === 'gloam') drawSideGloam();
     else drawSideForest();
     if (!(bossFight && bossFight.cine)) drawSideHUD();
     drawPanel();
@@ -7540,6 +8339,7 @@ const Overworld = (() => {
     if (panel === 'perk') { drawPerkPanel(); return; }
     if (panel === 'relic') { drawRelicReveal(); return; }
     if (panel === 'wheel') { drawWheel(); return; }
+    if (panel === 'peddler') { drawPeddlerPanel(); return; }
     ctx.fillStyle = 'rgba(10, 12, 22, 0.94)';
     ctx.fillRect(43, 37, 234, 164);
     ctx.strokeStyle = '#d9b56b'; ctx.lineWidth = 2;
@@ -8236,13 +9036,13 @@ const Overworld = (() => {
     const pages = story.pages.length;
     invBox(x + 2, y + 118, w - 4, 50, '#201a26', '#4b3d35');
     invText('SIDE QUESTS', x + 10, y + 128, '#d6b477', 'bold 6px monospace');
-    invText('Goblin Trouble', x + 10, y + 139, kills >= 5 ? '#9be37a' : '#ffe3a1', 'bold 7px monospace');
-    invBar(x + 92, y + 134, w - 134, 4, kills, 5, kills >= 5 ? '#71b86c' : '#e2584f', '#3a1d22');
-    invText(kills >= 5 ? 'DONE' : kills + '/5', x + w - 10, y + 139, kills >= 5 ? '#9be37a' : '#f3e7c9', 'bold 6px monospace', 'right');
-    invText('Lost Pages', x + 10, y + 153, pages >= LORE.length ? '#9be37a' : '#ffe3a1', 'bold 7px monospace');
-    invBar(x + 92, y + 148, w - 134, 4, pages, LORE.length, pages >= LORE.length ? '#71b86c' : '#5fa8ff', '#1d2a3a');
-    invText(pages >= LORE.length ? 'DONE' : pages + '/' + LORE.length, x + w - 10, y + 153, pages >= LORE.length ? '#9be37a' : '#f3e7c9', 'bold 6px monospace', 'right');
-    invText('Find Dad\'s journal pages and lore stones.', x + 10, y + 163, '#8f8478', '5px monospace');
+    const rows = [['Goblin Trouble', kills, 5, '#e2584f'], ['Lost Pages', pages, LORE.length, '#5fa8ff'], ['Moon Moths', depths.moths.length, MOTH_TOTAL, '#cfe6ff'], ['Champions', DEPTH_IDS.filter(d => story[REGIONS[d].bossFlag]).length, 4, '#ff9a5a']];
+    rows.forEach(([label, have, need, col], i) => {
+      const ry = y + 137 + i * 9, done = have >= need;
+      invText(label, x + 10, ry, done ? '#9be37a' : '#ffe3a1', 'bold 6px monospace');
+      invBar(x + 92, ry - 4, w - 134, 3, have, need, done ? '#71b86c' : col, '#2a2232');
+      invText(done ? 'DONE' : have + '/' + need, x + w - 10, ry, done ? '#9be37a' : '#f3e7c9', 'bold 6px monospace', 'right');
+    });
   }
 
   // ---- MAP tab: the known world and fast travel between campfires ----
@@ -8260,6 +9060,7 @@ const Overworld = (() => {
   function mapNodeHere() {
     if (!platformMode || !outdoorScene()) return 'home';
     if (platformScene === 'forest') return sidePlayer.x > CAMP.start - 200 ? 'camp' : 'wood';
+    if (REGIONS[platformScene].side) return platformScene;
     return platformScene;
   }
   function drawMapTab(x, y, w) {
@@ -8294,6 +9095,7 @@ const Overworld = (() => {
         ctx.fillStyle = '#c8324a'; ctx.fillRect(px - 1, py - 1, 3, 3);
       }
     });
+    drawDepthMapNodes(mx0, my0, here);
     invText('N', mx0 + 8, my0 + 12, '#5a3e22', 'bold 6px monospace', 'center');
     ctx.fillStyle = '#5a3e22'; ctx.fillRect(mx0 + 7, my0 + 14, 3, 1); ctx.fillRect(mx0 + 8, my0 + 13, 1, 6);
     // fast travel list
@@ -8573,7 +9375,8 @@ const Overworld = (() => {
       newItems: Array.from(newItems),
       loreSeen: Array.from(loreSeen),
       relics: { owned: fortune.owned.slice(), equipped: fortune.equipped.slice(), slots: fortune.slots },
-      pendingPerks
+      pendingPerks,
+      depths: depthsSave()
     };
   }
 
@@ -8590,7 +9393,7 @@ const Overworld = (() => {
     armorTutorialPending = false; armorQuestActive = false; dadNoteRead = false;
     Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0, xp: 0, kills: 0, goblinKills: 0, atkUp: 0, defUp: 0, perkAtk: 0, perkDef: 0, critUp: 0, luck: 0, thirst: 0, chargeUp: 0, elites: 0, chests: 0 });
     fortune.owned = []; fortune.equipped = []; fortune.slots = 2; fortune.phoenixUsed = false; pendingPerks = 0; perkOffer = null; relicReveal = null; wheel = null;
-    bloodMoon = false; witchUntil = 0; Object.keys(chestRolls).forEach(k => delete chestRolls[k]); fortuneFx.length = 0;
+    bloodMoon = false; witchUntil = 0; Object.keys(chestRolls).forEach(k => delete chestRolls[k]); fortuneFx.length = 0; depthsReset();
     stepDistance = 0;
     worldClock = 0.28;
     // A genuinely new slot begins in the kid's bedroom.
@@ -8626,6 +9429,7 @@ const Overworld = (() => {
       if (Number.isFinite(saveData.relics.slots)) fortune.slots = clamp(Math.floor(saveData.relics.slots), 2, 4);
       if (Array.isArray(saveData.relics.equipped)) fortune.equipped = saveData.relics.equipped.filter(id => fortune.owned.includes(id)).slice(0, fortune.slots);
     }
+    depthsLoad(saveData.depths);
     if (Number.isFinite(saveData.pendingPerks)) pendingPerks = clamp(Math.floor(saveData.pendingPerks), 0, 20);
     dadNoteRead = saveData.sideNoteRead === true;
     if (typeof saveData.armorQuestActive === 'boolean') armorQuestActive = saveData.armorQuestActive;
