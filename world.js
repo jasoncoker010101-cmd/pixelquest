@@ -63,9 +63,9 @@ const Overworld = (() => {
     introActive = false;
     introTime = INTRO_DURATION;
     insideHouse = true;
-    interiorPlayer.x = 208;
-    interiorPlayer.y = 184;
-    interiorPlayer.facing = 'up';
+    interiorPlayer.x = KID_SPAWN.x;
+    interiorPlayer.y = KID_SPAWN.y;
+    interiorPlayer.facing = KID_SPAWN.facing;
     interiorPlayer.moving = false;
     interiorPlayer.walk = 0;
     platformMode = true;
@@ -701,20 +701,57 @@ const Overworld = (() => {
   const HOUSE_DOOR = { x: HOUSE.x + HOUSE.w / 2, y: HOUSE.y + 67 };
   let insideHouse = false;
   const interiorPlayer = { x: 208, y: 184, facing: 'up', moving: false, walk: 0 };
+  // ---------------------------------------------------------------------------
+  // Top-down family home. One coordinate space is shared by drawing, collision
+  // and the player (no extra zoom), so furniture and walls always line up.
+  //
+  //   +-----------+------+-----------+
+  //   | Dad's room| Bath | Your room |   back of the house (private rooms)
+  //   +--door-----+-door-+-----door--+
+  //   |            hallway           |
+  //   +---door----+      +--door-----+
+  //   | Kitchen & |Entry | Living    |   front of the house
+  //   |  dining   |      |  room     |
+  //   +-----------+-DOOR-+-----------+
+  // ---------------------------------------------------------------------------
+  const HOME = Object.freeze({
+    left: 18, right: 302, top: 28, bottom: 222,
+    backWallY: 100, frontWallY: 140,      // tops of the two interior walls (12px thick)
+    leftWallX: 124, rightWallX: 186,      // left edges of the two interior walls (10px thick)
+    frontDoor: { x1: 148, x2: 172 }
+  });
+  const HOUSE_ROOMS = {
+    dad:     { x1: 18,  y1: 28,  x2: 124, y2: 100 },
+    bath:    { x1: 134, y1: 28,  x2: 186, y2: 100 },
+    kid:     { x1: 196, y1: 28,  x2: 302, y2: 100 },
+    hall:    { x1: 18,  y1: 112, x2: 302, y2: 140 },
+    kitchen: { x1: 18,  y1: 152, x2: 124, y2: 222 },
+    entry:   { x1: 134, y1: 140, x2: 186, y2: 222 },
+    living:  { x1: 196, y1: 152, x2: 302, y2: 222 }
+  };
+  // Wall rectangles: [x, y, width, height]. Horizontal interior walls are 12px
+  // (4px cap + 8px visible face); door gaps are simply left out.
   const INTERIOR_WALLS = [
-    // Outer shell. The front door opens into the bottom of the long hallway.
-    [12, 12, 296, 14], [12, 24, 14, 194], [294, 24, 14, 194],
-    [12, 218, 132, 12], [176, 218, 132, 12],
-    // Left side: kitchen above Dad's bedroom, both entered from the hallway.
-    [126, 25, 10, 27], [126, 82, 10, 33],
-    [126, 125, 10, 35], [126, 193, 10, 25],
-    [26, 115, 100, 10],
-    // Right side: living room, bathroom, then the player's bedroom.
-    [184, 25, 10, 27], [184, 82, 10, 15],
-    [184, 97, 10, 18], [184, 143, 10, 10],
-    [184, 153, 10, 15], [184, 196, 10, 22],
-    [194, 104, 100, 10], [194, 151, 100, 10]
+    // Outer shell. The back wall is tall so windows and pictures can hang on it.
+    [8, 4, 304, 24], [8, 4, 10, 228], [302, 4, 10, 228],
+    [8, 222, 140, 10], [172, 222, 140, 10],
+    // Back wall of the hallway: doors to Dad's room, the bathroom and your room.
+    [18, 100, 40, 12], [86, 100, 61, 12], [173, 100, 61, 12], [262, 100, 40, 12],
+    // Front wall of the hallway: kitchen door, open entry, living-room door.
+    [18, 140, 70, 12], [116, 140, 18, 12], [186, 140, 14, 12], [228, 140, 74, 12],
+    // Walls between the side rooms.
+    [124, 4, 10, 96], [186, 4, 10, 96],
+    [124, 140, 10, 82], [186, 140, 10, 82]
   ];
+  const HOUSE_DOORS = [
+    // Interior doorways, used to draw door frames and thresholds.
+    { x1: 58, x2: 86, y: 100 }, { x1: 147, x2: 173, y: 100 }, { x1: 234, x2: 262, y: 100 },
+    { x1: 88, x2: 116, y: 140 }, { x1: 200, x2: 228, y: 140 }
+  ];
+  // Player positions are the sprite's top-left (feet hitbox is x+3..x+12, y+9..y+15).
+  const KID_SPAWN = { x: 250, y: 58, facing: 'down' };   // beside your bed
+  const ENTRY_SPAWN = { x: 152, y: 192, facing: 'up' };  // just inside the front door
+  const HOUSE_LAYOUT_VERSION = 2;
   const interiorArtSheet = new Image();
   let interiorArtReady = false;
   interiorArtSheet.onload = () => { interiorArtReady = true; };
@@ -746,19 +783,114 @@ const Overworld = (() => {
   }
 
   const MAILBOX = { x: 15.4 * TILE, y: 12.4 * TILE };
-  // The note rests on the dresser in Dad's bedroom.
-  // Dad's dresser (with the note) sits below his bed, leaving the doorway side of the room open.
-  const DAD_NOTE = { x: 55, y: 186 };
-  // Dad's armor stand in the lower-left corner of Dad's top-down bedroom.
-  const DAD_ARMOR = { x: 105, y: 200 };
-  function nearDadArmor() {
-    return Math.hypot(interiorPlayer.x + 8 - DAD_ARMOR.x, interiorPlayer.y + 12 - DAD_ARMOR.y) < 20;
+  // Dad's note rests on his nightstand; the armor stand is by his doorway.
+  const DAD_NOTE = { x: 77, y: 52 };   // where the player stands to read it (player centre)
+  const DAD_ARMOR = { x: 108, y: 88 }; // centre of the armor stand footprint
+  function interiorCenter() {
+    return { x: interiorPlayer.x + 8, y: interiorPlayer.y + 12 };
   }
-  function nearDadNote() {
-    return Math.hypot(interiorPlayer.x - DAD_NOTE.x, interiorPlayer.y - DAD_NOTE.y) < 35;
-  }
+  function dadNoteDistance() { const c = interiorCenter(); return Math.hypot(c.x - DAD_NOTE.x, c.y - DAD_NOTE.y); }
+  function dadArmorDistance() { const c = interiorCenter(); return Math.hypot(c.x - DAD_ARMOR.x, c.y - DAD_ARMOR.y); }
+  function nearDadNote() { return dadNoteDistance() < 16; }
+  function nearDadArmor() { return dadArmorDistance() < 20; }
   function nearFrontDoor() {
-    return Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 28;
+    const c = interiorCenter();
+    return c.x > HOME.frontDoor.x1 - 6 && c.x < HOME.frontDoor.x2 + 6 && c.y > 196;
+  }
+
+  // Furniture. Each entry owns its artwork AND its collision footprint, so the
+  // two can never drift apart. Tall pieces stand against a wall and overlap the
+  // wall face (3/4 view); their footprint is only the part touching the floor.
+  //   art: [sx, sy, sw, sh] from Pixel_Interiors/Interior.png, or draw: fn(x, y, w, h)
+  //   solid: [x1, y1, x2, y2] footprint, omitted for rugs and wall decor
+  //   layer: 'floor' (rugs), 'wall' (hung on a wall) or default (depth-sorted)
+  const PI_ART = {
+    bedDoubleBlue: [16, 50, 43, 46], bedSinglePink: [160, 47, 30, 49],
+    wardrobe: [64, 115, 35, 45], nightstand: [240, 181, 26, 27], lamp: [207, 179, 18, 27],
+    bookshelf: [336, 38, 48, 58], chest: [496, 428, 24, 20], toyHorse: [541, 423, 29, 25],
+    globe: [580, 431, 15, 17], diningSet: [16, 335, 70, 33], roundTable: [195, 329, 45, 39],
+    barrel: [399, 377, 19, 23], vegCrate: [166, 403, 29, 29], plateRack: [16, 387, 24, 45],
+    plantBig: [336, 424, 38, 24], plantPink: [432, 424, 19, 24], plantRed: [467, 424, 14, 24],
+    rugBeige: [240, 544, 81, 62], rugBlue: [544, 544, 79, 60], rugOrange: [112, 544, 110, 77], rugRed: [16, 544, 78, 46],
+    windowBlue: [572, 250, 40, 38], windowPink: [622, 250, 40, 38],
+    painting: [501, 377, 36, 25], clock: [549, 381, 17, 18], frameA: [439, 378, 16, 22], frameB: [471, 378, 16, 22]
+  };
+  const HOUSE_FURNITURE = [
+    // ----- Dad's bedroom (back left) -----
+    { art: 'painting', x: 31, y: 9, w: 26, h: 18, layer: 'wall' },
+    { art: 'clock', x: 71, y: 11, w: 11, h: 12, layer: 'wall' },
+    { art: 'rugBeige', x: 30, y: 62, w: 58, h: 34, layer: 'floor' },
+    { art: 'bedDoubleBlue', x: 21, y: 22, w: 43, h: 46, solid: [21, 30, 64, 66] },
+    { art: 'nightstand', x: 68, y: 25, w: 18, h: 19, solid: [68, 31, 86, 43], id: 'dad-nightstand' },
+    { art: 'wardrobe', x: 91, y: 13, w: 31, h: 40, solid: [91, 33, 122, 52] },
+    { art: 'chest', x: 32, y: 70, w: 22, h: 18, solid: [32, 76, 54, 87] },
+    { draw: 'armorStand', x: 108, y: 94, solid: [100, 85, 116, 95] },
+
+    // ----- Bathroom (back centre) -----
+    { art: 'windowBlue', x: 139, y: 8, w: 17, h: 16, layer: 'wall' },
+    { draw: 'mirror', x: 173, y: 9, w: 11, h: 12, layer: 'wall' },
+    { draw: 'bathMat', x: 158, y: 58, w: 18, h: 10, layer: 'floor' },
+    { draw: 'tub', x: 135, y: 24, w: 21, h: 42, solid: [135, 28, 156, 66] },
+    { draw: 'toilet', x: 157, y: 25, w: 14, h: 20, solid: [157, 28, 171, 45] },
+    { draw: 'sink', x: 172, y: 24, w: 13, h: 19, solid: [172, 28, 185, 43] },
+
+    // ----- Your bedroom (back right) -----
+    { art: 'windowPink', x: 234, y: 7, w: 22, h: 20, layer: 'wall' },
+    { art: 'rugBlue', x: 214, y: 58, w: 50, h: 30, layer: 'floor' },
+    { art: 'bookshelf', x: 199, y: 12, w: 30, h: 37, solid: [199, 34, 229, 48] },
+    { art: 'nightstand', x: 251, y: 27, w: 16, h: 17, solid: [251, 33, 267, 44] },
+    { art: 'lamp', x: 254, y: 17, w: 10, h: 15, z: 45 },
+    { art: 'bedSinglePink', x: 270, y: 22, w: 30, h: 49, solid: [270, 30, 300, 70] },
+    { art: 'toyHorse', x: 205, y: 76, w: 17, h: 15, solid: [206, 83, 221, 91] },
+    { art: 'chest', x: 274, y: 78, w: 20, h: 16, solid: [274, 84, 294, 94] },
+
+    // ----- Hallway -----
+    { art: 'frameA', x: 104, y: 101, w: 8, h: 10, layer: 'wall' },
+    { art: 'frameB', x: 207, y: 101, w: 8, h: 10, layer: 'wall' },
+    { draw: 'runner', x: 30, y: 120, w: 260, h: 13, layer: 'floor' },
+    { art: 'plantRed', x: 21, y: 112, w: 12, h: 22, solid: [21, 126, 33, 134] },
+    { art: 'plantPink', x: 287, y: 113, w: 13, h: 20, solid: [287, 126, 300, 134] },
+
+    // ----- Kitchen and dining (front left) -----
+    { art: 'clock', x: 70, y: 141, w: 9, h: 10, layer: 'wall' },
+    { draw: 'fridge', x: 20, y: 137, w: 15, h: 33, solid: [20, 152, 35, 170] },
+    { draw: 'counter', x: 35, y: 150, w: 16, h: 20, sink: true, solid: [35, 152, 51, 170] },
+    { draw: 'stove', x: 51, y: 150, w: 16, h: 20, solid: [51, 152, 67, 170] },
+    { draw: 'counter', x: 67, y: 150, w: 19, h: 20, solid: [67, 152, 86, 170] },
+    { art: 'rugRed', x: 34, y: 174, w: 62, h: 36, layer: 'floor' },
+    { art: 'diningSet', x: 35, y: 178, w: 60, h: 28, solid: [37, 184, 93, 202] },
+    { art: 'barrel', x: 20, y: 197, w: 15, h: 18, solid: [20, 206, 35, 215] },
+    { art: 'vegCrate', x: 104, y: 199, w: 19, h: 19, solid: [104, 207, 123, 218] },
+
+    // ----- Entry (front centre) -----
+    { draw: 'runner', x: 150, y: 160, w: 20, h: 44, layer: 'floor' },
+    { draw: 'doormat', x: 150, y: 210, w: 20, h: 10, layer: 'floor' },
+    { art: 'plantPink', x: 136, y: 199, w: 12, h: 19, solid: [136, 210, 148, 218] },
+    { art: 'plantRed', x: 173, y: 197, w: 11, h: 21, solid: [173, 210, 184, 218] },
+
+    // ----- Living room (front right) -----
+    { art: 'rugOrange', x: 232, y: 170, w: 66, h: 42, layer: 'floor' },
+    { art: 'lamp', x: 232, y: 140, w: 12, h: 19, solid: [233, 153, 243, 159] },
+    { draw: 'sofa', x: 246, y: 146, w: 52, h: 24, solid: [246, 152, 298, 170] },
+    { art: 'roundTable', x: 256, y: 178, w: 32, h: 26, solid: [258, 184, 286, 200] },
+    { draw: 'armchair', x: 205, y: 180, w: 22, h: 22, solid: [205, 186, 227, 202] },
+    { art: 'plantBig', x: 262, y: 201, w: 36, h: 21, solid: [264, 210, 296, 221] },
+    { art: 'plantPink', x: 267, y: 176, w: 9, h: 12, z: 201 }
+  ];
+
+  function interiorBlocked(px, py) {
+    // px/py are the sprite's top-left; collide using the feet only.
+    const left = px + 3, right = px + 12, top = py + 9, bottom = py + 15;
+    for (const [x, y, w, h] of INTERIOR_WALLS) {
+      if (left < x + w && right > x && top < y + h && bottom > y) return true;
+    }
+    for (const f of HOUSE_FURNITURE) {
+      if (!f.solid) continue;
+      const [x1, y1, x2, y2] = f.solid;
+      if (left < x2 && right > x1 && top < y2 && bottom > y1) return true;
+    }
+    // Keep the player inside the front doorway instead of walking out of the house.
+    return bottom > HOME.bottom + 2;
   }
 
   function rng(seed) {
@@ -864,40 +996,6 @@ const Overworld = (() => {
     return mailboxBlocked(px, py);
   }
 
-  function interiorBlocked(px, py) {
-    // Interior player coordinates are the character CENTER. drawPlayer is
-    // rendered at center - 8, so convert its lower-body hitbox back to world
-    // coordinates here. This keeps collision aligned with the visible sprite.
-    const left = px + 3, right = px + 12;
-    const top = py + 9, bottom = py + 15;
-
-    // Convert the shared [x,y,width,height] wall layout into collision edges.
-    const roomScale = 1.0304; // 1.12 room expansion combined with 0.92 camera zoom.
-    const walls = INTERIOR_WALLS.map(([x, y, w, h]) => {
-      const x1 = 160 + (x - 160) * roomScale;
-      const y1 = 120 + (y - 120) * roomScale;
-      return [x1, y1, x1 + w * roomScale, y1 + h * roomScale];
-    });
-
-    // Collision footprints follow the furniture's outer shadow / base, not
-    // arbitrary oversized boxes. The plant is separate from the coffee table.
-    const furniture = [
-      // Kitchen fixtures and dining set (upper-left).
-      [33,39,57,71], [64,66,112,104], [35,78,54,100], [95,79,115,100],
-      // Living-room seating, coffee table and shelf (upper-right).
-      [198,39,241,72], [230,70,258,94], [266,34,293,67], [270,72,292,91],
-      // Separate bathroom fixtures opening onto the hallway.
-      [210,111,237,136], [254,111,282,136],
-      [38,138,76,178], [78,145,91,160], [89,139,115,172], [42,182,68,204],
-      [244,164,282,204], [224,165,239,180], [224,185,248,205], [257,185,283,205],
-      // Dad's armor stand base.
-      [96,198,114,212]
-    ];
-
-    return walls.concat(furniture).some(([x1, y1, x2, y2]) =>
-      left < x2 && right > x1 && top < y2 && bottom > y1
-    );
-  }
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
   function isNight() { const h = worldClock % 1; return h >= 0.76 || h < 0.19; }
@@ -1553,182 +1651,258 @@ const Overworld = (() => {
     ctx.restore();
   }
 
+  // ----- Hand-drawn pieces that the interior sprite sheet does not include. -----
+  // Palette taken from Pixel_Interiors so everything matches.
+  const HP = { ink: '#0f1835', dark: '#5a3234', wood: '#c99969', woodMid: '#ae864e', woodDeep: '#926b41', woodShade: '#775035', light: '#dac17f' };
+  function hpRect(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
+  function hpBox(x, y, w, h, fill) { hpRect(x, y, w, h, HP.ink); hpRect(x + 1, y + 1, w - 2, h - 2, fill); }
+
+  function drawHouseFridge(x, y, w, h) {
+    hpBox(x, y, w, h, '#dfe5e8');
+    hpRect(x + w - 4, y + 1, 3, h - 2, '#b7c2c8');
+    hpRect(x + 1, y + 1, w - 5, 1, '#f7fafb');
+    hpRect(x + 1, y + 12, w - 2, 1, HP.ink);
+    hpRect(x + 3, y + 5, 1, 5, '#6c7a84'); hpRect(x + 3, y + 15, 1, 7, '#6c7a84');
+    hpRect(x + 6, y + 4, 4, 3, '#e98a6b'); // a magnet
+  }
+  function drawHouseCounter(x, y, w, h, sink) {
+    // Stone worktop over wooden cupboards.
+    hpBox(x, y, w, h, HP.wood);
+    hpRect(x + 1, y + 1, w - 2, 8, '#d9d2c4');
+    hpRect(x + 1, y + 8, w - 2, 1, '#a99d88');
+    hpRect(x + 1, y + 9, w - 2, 1, HP.ink);
+    const doors = Math.max(1, Math.round((w - 2) / 9));
+    const dw = (w - 2) / doors;
+    for (let i = 0; i < doors; i++) {
+      const dx = Math.round(x + 1 + i * dw);
+      hpRect(dx + 1, y + 11, Math.round(dw) - 2, h - 13, HP.woodMid);
+      hpRect(dx + 1, y + 11, Math.round(dw) - 2, 1, HP.light);
+      hpRect(dx + Math.round(dw / 2) - 1, y + 14, 1, 2, HP.dark);
+    }
+    if (sink) {
+      hpRect(x + 3, y + 2, w - 6, 5, '#6f8792');
+      hpRect(x + 4, y + 3, w - 8, 3, '#9fb9c4');
+      hpRect(x + Math.floor(w / 2) - 1, y + 1, 2, 2, '#c5d0d3');
+    }
+  }
+  function drawHouseStove(x, y, w, h) {
+    hpBox(x, y, w, h, '#4a505c');
+    hpRect(x + 1, y + 1, w - 2, 8, '#363b45');
+    for (const [bx, by] of [[3, 2], [9, 2], [3, 5], [9, 5]]) { hpRect(x + bx, y + by, 4, 2, '#7a808c'); hpRect(x + bx + 1, y + by, 2, 1, '#1d2028'); }
+    hpRect(x + 1, y + 9, w - 2, 1, HP.ink);
+    hpRect(x + 3, y + 12, w - 6, 5, '#1d2028');
+    hpRect(x + 4, y + 13, w - 8, 1, '#5f6672');
+    hpRect(x + 3, y + 11, w - 6, 1, '#aab2bd');
+  }
+  function drawHouseSofa(x, y, w, h) {
+    const c = '#a8513f', hi = '#c96b55', sh = '#7a3a31';
+    hpBox(x, y, w, h, sh);                       // frame
+    hpRect(x + 1, y + 1, w - 2, 8, c);           // backrest
+    hpRect(x + 2, y + 2, w - 4, 1, hi);
+    hpBox(x, y + 6, 7, h - 6, c); hpBox(x + w - 7, y + 6, 7, h - 6, c); // arms
+    hpRect(x + 1, y + 7, 5, 1, hi); hpRect(x + w - 6, y + 7, 5, 1, hi);
+    const seatW = (w - 14) / 3;
+    for (let i = 0; i < 3; i++) {
+      const sx = Math.round(x + 7 + i * seatW);
+      hpBox(sx, y + 9, Math.round(seatW), h - 11, c);
+      hpRect(sx + 1, y + 10, Math.round(seatW) - 2, 2, hi);
+    }
+    hpRect(x + 2, y + h - 2, w - 4, 1, HP.dark);
+  }
+  function drawHouseArmchair(x, y, w, h) {
+    const c = '#a8513f', hi = '#c96b55', sh = '#7a3a31';
+    hpBox(x, y, w, h, sh);
+    hpRect(x + 1, y + 1, w - 2, 7, c); hpRect(x + 2, y + 2, w - 4, 1, hi);
+    hpBox(x, y + 5, 6, h - 5, c); hpBox(x + w - 6, y + 5, 6, h - 5, c);
+    hpBox(x + 6, y + 8, w - 12, h - 10, c); hpRect(x + 7, y + 9, w - 14, 2, hi);
+  }
+  function drawHouseTub(x, y, w, h) {
+    hpBox(x, y, w, h, '#f4f0e4');
+    hpRect(x + w - 3, y + 1, 2, h - 2, '#d3cfc2');
+    hpBox(x + 3, y + 5, w - 6, h - 9, '#8fbccd');
+    hpRect(x + 4, y + 6, w - 8, h - 11, '#b9dde8');
+    hpRect(x + 5, y + 8, 3, 1, '#e8f6fa'); hpRect(x + 8, y + 14, 4, 1, '#e8f6fa');
+    hpRect(x + Math.floor(w / 2) - 2, y + 1, 4, 3, '#aab8bd'); // taps
+  }
+  function drawHouseToilet(x, y, w, h) {
+    hpBox(x + 1, y, w - 2, 7, '#f2eee0');                  // cistern against the wall
+    hpRect(x + 2, y + 1, w - 4, 1, '#ffffff');
+    hpBox(x, y + 6, w, h - 6, '#f7f3e8');                  // bowl
+    hpRect(x + 3, y + 9, w - 6, h - 13, '#c5d3cb');
+    hpRect(x + 4, y + 10, w - 8, 1, '#e6eeea');
+  }
+  function drawHouseSink(x, y, w, h) {
+    hpRect(x + Math.floor(w / 2) - 3, y + 8, 6, h - 8, HP.ink);
+    hpRect(x + Math.floor(w / 2) - 2, y + 8, 4, h - 9, '#d9d4c6');
+    hpBox(x, y, w, 9, '#f4f0e4');
+    hpRect(x + 3, y + 2, w - 6, 5, '#8fbccd');
+    hpRect(x + Math.floor(w / 2) - 1, y + 1, 2, 2, '#aab8bd');
+  }
+  function drawHouseMirror(x, y, w, h) {
+    hpBox(x, y, w, h, '#c49a55');
+    hpRect(x + 2, y + 2, w - 4, h - 4, '#a9cbd6');
+    hpRect(x + 3, y + 3, 2, h - 7, '#e2f1f5');
+  }
+  function drawHouseRunner(x, y, w, h) {
+    hpRect(x, y, w, h, '#6d4140');
+    hpRect(x + 2, y + 2, w - 4, h - 4, '#9b5a4a');
+    hpRect(x + 4, y + 4, w - 8, h - 8, '#c08a5e');
+    for (let i = x + 10; i < x + w - 10; i += 16) hpRect(i, y + Math.floor(h / 2), 6, 1, '#9b5a4a');
+  }
+  function drawHouseDoormat(x, y, w, h) {
+    hpRect(x, y, w, h, '#5d4a33'); hpRect(x + 1, y + 1, w - 2, h - 2, '#8a7350');
+    for (let i = x + 3; i < x + w - 2; i += 3) hpRect(i, y + 2, 1, h - 4, '#6f5b3e');
+  }
+  function drawHouseBathMat(x, y, w, h) {
+    hpRect(x, y, w, h, '#4f7f86'); hpRect(x + 1, y + 1, w - 2, h - 2, '#79aab0');
+    hpRect(x + 2, y + 3, w - 4, 1, '#a6cfd2'); hpRect(x + 2, y + h - 4, w - 4, 1, '#a6cfd2');
+  }
+
+  function drawHouseFloors() {
+    const planks = (r, base, line, dark, light) => {
+      hpRect(r.x1, r.y1, r.x2 - r.x1, r.y2 - r.y1, base);
+      for (let y = r.y1; y < r.y2; y += 8) {
+        hpRect(r.x1, y, r.x2 - r.x1, 1, light);
+        hpRect(r.x1, y + 7, r.x2 - r.x1, 1, dark);
+        const offset = (Math.floor(y / 8) % 2) * 17;
+        for (let x = r.x1 + 6 + offset; x < r.x2; x += 34) hpRect(x, y + 1, 1, 6, line);
+      }
+    };
+    const tiles = (r, a, b, grout) => {
+      hpRect(r.x1, r.y1, r.x2 - r.x1, r.y2 - r.y1, grout);
+      for (let y = r.y1; y < r.y2; y += 8) for (let x = r.x1; x < r.x2; x += 8) {
+        hpRect(x, y, Math.min(7, r.x2 - x), Math.min(7, r.y2 - y), ((x - r.x1) / 8 + (y - r.y1) / 8) % 2 ? a : b);
+      }
+    };
+    // Whole ground floor in warm timber, then tiled wet rooms on top.
+    planks({ x1: HOME.left, y1: HOME.top, x2: HOME.right, y2: HOME.bottom }, '#b9794c', 'rgba(76,39,31,.35)', '#8c533b', '#d39a61');
+    planks(HOUSE_ROOMS.kid, '#c08a5e', 'rgba(76,39,31,.3)', '#94603f', '#dcab73');
+    tiles(HOUSE_ROOMS.bath, '#d6e0d7', '#c3d3cb', '#9fb6ae');
+    tiles(HOUSE_ROOMS.kitchen, '#d9c6a0', '#b98a62', '#8c6a4c');
+    // Wood under the front doorway.
+    hpRect(HOME.frontDoor.x1, HOME.bottom, HOME.frontDoor.x2 - HOME.frontDoor.x1, 10, '#6d4140');
+    hpRect(HOME.frontDoor.x1 + 1, HOME.bottom + 1, HOME.frontDoor.x2 - HOME.frontDoor.x1 - 2, 3, '#9b6550');
+  }
+
+  function drawHouseWalls() {
+    // Back wall: tall wallpapered face per room with a timber cap and skirting.
+    const backFace = (x1, x2, paper, stripe) => {
+      hpRect(x1, 8, x2 - x1, 20, paper);
+      for (let x = x1 + 3; x < x2; x += 6) hpRect(x, 8, 1, 13, stripe);
+      hpRect(x1, 21, x2 - x1, 5, HP.woodMid);       // wainscot rail
+      hpRect(x1, 21, x2 - x1, 1, HP.light);
+      hpRect(x1, 26, x2 - x1, 2, '#3a222b');        // skirting shadow
+    };
+    hpRect(8, 4, 304, 4, '#704333'); hpRect(8, 4, 304, 1, '#a96749');
+    backFace(18, 124, '#8f6f5d', '#9d7c69');
+    backFace(134, 186, '#8fb0aa', '#9dbcb6');
+    backFace(196, 302, '#7d8fae', '#8a9cba');
+    // Interior horizontal walls: 4px cap and an 8px face toward the room below.
+    const hWall = (x, y, w) => {
+      hpRect(x, y, w, 4, '#704333'); hpRect(x, y, w, 1, '#a96749');
+      hpRect(x, y + 4, w, 8, '#9a6a4c');
+      for (let i = x + 4; i < x + w; i += 8) hpRect(i, y + 4, 1, 6, '#875a40');
+      hpRect(x, y + 10, w, 2, '#3a222b');
+    };
+    // Side and outer walls are seen from above as timber caps.
+    const vWall = (x, y, w, h) => {
+      hpRect(x, y, w, h, '#704333');
+      hpRect(x + 1, y, 2, h, '#a96749');
+      hpRect(x + w - 2, y, 2, h, '#4b2c2c');
+    };
+    for (const [x, y, w, h] of INTERIOR_WALLS) {
+      if (y === 4 && w > h) continue;             // the back wall was drawn above
+      if (h === 12 && w > h) hWall(x, y, w);
+      else vWall(x, y, w, h);
+    }
+    // Door frames on the interior doorways.
+    for (const d of HOUSE_DOORS) {
+      // Door posts and a worn wooden threshold so each opening reads as a doorway.
+      hpRect(d.x1, d.y, 3, 12, '#4b2c2c'); hpRect(d.x2 - 3, d.y, 3, 12, '#4b2c2c');
+      hpRect(d.x1 + 1, d.y, 1, 12, '#a96749'); hpRect(d.x2 - 2, d.y, 1, 12, '#a96749');
+      hpRect(d.x1 + 3, d.y + 4, d.x2 - d.x1 - 6, 6, '#a5714e');
+      hpRect(d.x1 + 3, d.y + 4, d.x2 - d.x1 - 6, 1, '#d39a61');
+      hpRect(d.x1 + 3, d.y + 9, d.x2 - d.x1 - 6, 1, '#7a4a35');
+    }
+    // Front door, seen from inside: a closed wooden door set in the front wall.
+    const fd = HOME.frontDoor, fw = fd.x2 - fd.x1;
+    hpRect(fd.x1 - 3, HOME.bottom, fw + 6, 10, '#4b2c2c');
+    hpRect(fd.x1, HOME.bottom + 1, fw, 9, '#8a5638');
+    for (let x = fd.x1 + 4; x < fd.x2; x += 5) hpRect(x, HOME.bottom + 1, 1, 9, '#6e432d');
+    hpRect(fd.x1, HOME.bottom + 1, fw, 1, '#c58a57');
+    hpRect(fd.x2 - 5, HOME.bottom + 4, 2, 2, '#e3c06a');
+  }
+
+  function drawHouseFurniturePiece(f) {
+    if (f.art) { const a = PI_ART[f.art]; drawInteriorArt(a[0], a[1], a[2], a[3], f.x, f.y, f.w, f.h); }
+    else if (f.draw === 'fridge') drawHouseFridge(f.x, f.y, f.w, f.h);
+    else if (f.draw === 'counter') drawHouseCounter(f.x, f.y, f.w, f.h, f.sink);
+    else if (f.draw === 'stove') drawHouseStove(f.x, f.y, f.w, f.h);
+    else if (f.draw === 'sofa') drawHouseSofa(f.x, f.y, f.w, f.h);
+    else if (f.draw === 'armchair') drawHouseArmchair(f.x, f.y, f.w, f.h);
+    else if (f.draw === 'tub') drawHouseTub(f.x, f.y, f.w, f.h);
+    else if (f.draw === 'toilet') drawHouseToilet(f.x, f.y, f.w, f.h);
+    else if (f.draw === 'sink') drawHouseSink(f.x, f.y, f.w, f.h);
+    else if (f.draw === 'mirror') drawHouseMirror(f.x, f.y, f.w, f.h);
+    else if (f.draw === 'runner') drawHouseRunner(f.x, f.y, f.w, f.h);
+    else if (f.draw === 'doormat') drawHouseDoormat(f.x, f.y, f.w, f.h);
+    else if (f.draw === 'bathMat') drawHouseBathMat(f.x, f.y, f.w, f.h);
+    else if (f.draw === 'armorStand') drawTopDownArmorStand(f.x, f.y);
+    if (f.id === 'dad-nightstand') {
+      // Dad's folded note on top of his nightstand.
+      hpRect(f.x + 4, f.y + 3, 11, 7, 'rgba(35,18,24,.35)');
+      hpRect(f.x + 3, f.y + 2, 11, 7, '#eadbb3');
+      hpRect(f.x + 4, f.y + 3, 9, 1, '#fff0cc');
+      hpRect(f.x + 5, f.y + 5, 6, 1, '#b59a70');
+      if (!dadNoteRead) hpRect(f.x + 8, f.y - 2 + Math.round(Math.sin(time * 4)), 2, 2, '#ffe28a');
+    }
+  }
+
+  function drawHousePrompt(text, cx, y) {
+    ctx.font = 'bold 7px monospace';
+    const w = Math.ceil(ctx.measureText(text).width) + 10;
+    const x = Math.round(clamp(cx - w / 2, 4, 316 - w));
+    hpRect(x, y, w, 13, 'rgba(15,12,24,.94)');
+    ctx.strokeStyle = '#f4d27b'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 12);
+    ctx.fillStyle = '#fff0bd'; ctx.textAlign = 'center';
+    ctx.fillText(text, x + w / 2, y + 9);
+  }
+
   function drawHouseInterior() {
-    // Zoom the complete interior out slightly. This scales the player and furniture
-    // down together rather than enlarging the character and creating collision issues.
-    ctx.save();
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    ctx.scale(0.92, 0.92);
-    ctx.translate(-canvas.width / 2, -canvas.height / 2);
-    // Top-down family home. The central hallway is deliberately long and open:
-    // front door at the bottom, kitchen/living room above, bedrooms at the bottom.
     ctx.fillStyle = '#160d20';
     ctx.fillRect(0, 0, 320, 240);
+    drawHouseFloors();
+    for (const f of HOUSE_FURNITURE) if (f.layer === 'floor') drawHouseFurniturePiece(f);
+    drawHouseWalls();
+    for (const f of HOUSE_FURNITURE) if (f.layer === 'wall') drawHouseFurniturePiece(f);
 
-    // Give every room and the central hallway a little more usable floor area.
-    // The outer 0.92 camera scale keeps the complete house visible on screen.
-    ctx.save();
-    ctx.translate(160, 120);
-    ctx.scale(1.12, 1.12);
-    ctx.translate(-160, -120);
-
-    // Warm timber floor throughout the house.
-    ctx.fillStyle = '#704333'; ctx.fillRect(18, 18, 284, 208);
-    ctx.fillStyle = '#c58a57'; ctx.fillRect(25, 25, 270, 193);
-    for (let y = 27; y < 218; y += 10) {
-      ctx.fillStyle = '#e7b777'; ctx.fillRect(25, y, 270, 2);
-      ctx.fillStyle = '#b9794c'; ctx.fillRect(25, y + 2, 270, 6);
-      ctx.fillStyle = '#8c533b'; ctx.fillRect(25, y + 8, 270, 2);
-      const offset = (Math.floor(y / 10) % 2) * 18;
-      for (let x = 30 + offset; x < 294; x += 36) {
-        ctx.fillStyle = 'rgba(76,39,31,.25)'; ctx.fillRect(x, y + 3, 1, 5);
-        ctx.fillStyle = 'rgba(255,224,170,.2)'; ctx.fillRect(x + 1, y + 3, 1, 4);
-      }
+    // Depth-sort furniture and the player by where they touch the floor, so the
+    // player walks in front of things below them and behind things above them.
+    const items = HOUSE_FURNITURE
+      .filter(f => !f.layer)
+      .map(f => ({ z: f.z != null ? f.z : (f.solid ? f.solid[3] : f.y + f.h), f }));
+    items.push({ z: interiorPlayer.y + 15.5, player: true });
+    items.sort((a, b) => a.z - b.z);
+    for (const item of items) {
+      if (!item.player) { drawHouseFurniturePiece(item.f); continue; }
+      const oldFacing = player.facing, oldMoving = player.moving, oldWalk = player.walk;
+      player.facing = interiorPlayer.facing;
+      player.moving = interiorPlayer.moving;
+      player.walk = interiorPlayer.walk;
+      drawPlayer(Math.round(interiorPlayer.x), Math.round(interiorPlayer.y));
+      player.facing = oldFacing; player.moving = oldMoving; player.walk = oldWalk;
     }
 
-    // Separate floor areas keep each room readable without reducing its space.
-    // Kitchen, upper-left.
-    ctx.fillStyle = '#a96d56'; ctx.fillRect(30, 29, 92, 80);
-    ctx.fillStyle = '#c58a57'; ctx.fillRect(34, 33, 84, 72);
-    // Living room, upper-right.
-    ctx.fillStyle = '#49617b'; ctx.fillRect(198, 29, 91, 68);
-    ctx.fillStyle = '#b7a28a'; ctx.fillRect(202, 33, 83, 60);
-    // Dad's bedroom, lower-left.
-    ctx.fillStyle = '#9b6749'; ctx.fillRect(30, 130, 92, 82);
-    ctx.fillStyle = '#bd8056'; ctx.fillRect(34, 134, 84, 74);
-    // Player's bedroom, lower-right.
-    ctx.fillStyle = '#60758a'; ctx.fillRect(198, 157, 91, 55);
-    ctx.fillStyle = '#b7b09a'; ctx.fillRect(202, 161, 83, 47);
-    // Bathroom, a separate room directly off the hallway.
-    ctx.fillStyle = '#557b80'; ctx.fillRect(198, 108, 91, 39);
-    ctx.fillStyle = '#b6c6b9'; ctx.fillRect(202, 112, 83, 31);
-
-    // Long central hallway, from the front entrance nearly to the far wall.
-    ctx.fillStyle = '#c58a57'; ctx.fillRect(136, 27, 48, 188);
-    ctx.fillStyle = '#8b553e'; ctx.fillRect(137, 28, 2, 186); ctx.fillRect(181, 28, 2, 186);
-    // A long runner emphasizes the distance and keeps the walking route clear.
-    ctx.fillStyle = '#6d4140'; ctx.fillRect(143, 34, 34, 174);
-    ctx.fillStyle = '#9b6550'; ctx.fillRect(146, 37, 28, 168);
-    ctx.fillStyle = '#c18a61'; ctx.fillRect(148, 39, 24, 164);
-    for (let y = 45; y < 201; y += 24) {
-      ctx.fillStyle = 'rgba(92,48,43,.42)'; ctx.fillRect(150, y, 20, 1);
-      ctx.fillStyle = 'rgba(241,194,133,.38)'; ctx.fillRect(150, y + 2, 20, 1);
+    if (introActive || panel) return;
+    if (nearDadArmor() && (!nearDadNote() || dadArmorDistance() < dadNoteDistance())) {
+      drawHousePrompt(equipment.armor ? 'ARMOR EQUIPPED' : '[ E ] EQUIP ARMOR', DAD_ARMOR.x - 20, 58);
+    } else if (nearDadNote()) {
+      drawHousePrompt('[ E ] READ NOTE', DAD_NOTE.x, 70);
+    } else if (nearFrontDoor()) {
+      drawHousePrompt('[ E ] GO OUTSIDE', 160, 178);
     }
-
-    // Consistent raised timber wall pieces, with dark lower trim.
-    const wallH = (x, y, w, h = 10) => {
-      ctx.fillStyle = '#3a222b'; ctx.fillRect(x, y + 2, w, h);
-      ctx.fillStyle = '#704333'; ctx.fillRect(x, y, w, h - 2);
-      ctx.fillStyle = '#a96749'; ctx.fillRect(x + 1, y + 1, w - 2, 2);
-      ctx.fillStyle = '#d39a61'; ctx.fillRect(x + 2, y + 1, Math.max(0, w - 4), 1);
-      ctx.fillStyle = 'rgba(35,18,25,.35)'; ctx.fillRect(x, y + h - 1, w, 2);
-    };
-    const wallV = (x, y, h, w = 10) => {
-      ctx.fillStyle = '#3a222b'; ctx.fillRect(x + 2, y, w, h);
-      ctx.fillStyle = '#704333'; ctx.fillRect(x, y, w - 2, h);
-      ctx.fillStyle = '#a96749'; ctx.fillRect(x + 1, y + 1, 2, h - 2);
-      ctx.fillStyle = '#d39a61'; ctx.fillRect(x + 1, y + 2, 1, h - 4);
-      ctx.fillStyle = 'rgba(35,18,25,.35)'; ctx.fillRect(x + w - 1, y, 2, h);
-    };
-
-    // Draw the same wall rectangles used by collision, so doors stay open and aligned.
-    for (const [wx, wy, ww, wh] of INTERIOR_WALLS) {
-      if (ww >= wh) wallH(wx, wy, ww, wh);
-      else wallV(wx, wy, wh, ww);
-    }
-    ctx.restore();
-
-    // Furniture remains slightly smaller than the expanded rooms, leaving
-    // more clear floor around each item and keeping the player easy to move.
-
-    // Kitchen: counter, dining table and small kitchen pieces.
-    drawInteriorArt(16, 387, 39, 48, 34, 38, 22, 29);
-    drawInteriorArt(16, 253, 88, 62, 64, 65, 48, 38);
-    drawInteriorArt(240, 405, 31, 34, 95, 40, 20, 23);
-    drawInteriorArt(51, 395, 32, 34, 36, 77, 18, 18);
-
-    // Living room: sofa, coffee table, bookcase and decor.
-    drawInteriorArt(140, 263, 66, 50, 198, 39, 43, 33);
-    drawInteriorArt(224, 282, 47, 40, 230, 70, 28, 24);
-    drawInteriorArt(336, 38, 50, 57, 266, 34, 24, 31);
-    drawInteriorArt(337, 432, 48, 42, 270, 72, 17, 17);
-
-    // Bathroom: pale tile floor, toilet, sink, and a curtained shower.
-    ctx.fillStyle = '#d6e0d7'; ctx.fillRect(202, 112, 83, 31);
-    ctx.fillStyle = '#a9c0b8';
-    for (let x = 204; x < 285; x += 10) ctx.fillRect(x, 112, 1, 31);
-    for (let y = 114; y < 143; y += 8) ctx.fillRect(202, y, 83, 1);
-    ctx.fillStyle = '#8faeb0'; ctx.fillRect(258, 115, 23, 25);
-    ctx.fillStyle = '#d9e9e5'; ctx.fillRect(260, 117, 19, 21);
-    ctx.fillStyle = '#6f9c9b'; ctx.fillRect(260, 117, 19, 2);
-    for (let x = 262; x < 279; x += 5) { ctx.fillStyle = '#b5d0ca'; ctx.fillRect(x, 119, 2, 18); }
-    // Toilet.
-    ctx.fillStyle = '#718b88'; ctx.fillRect(209, 115, 13, 7);
-    ctx.fillStyle = '#f2eee0'; ctx.fillRect(210, 116, 11, 6);
-    ctx.fillStyle = '#718b88'; ctx.fillRect(208, 122, 16, 13);
-    ctx.fillStyle = '#f7f3e8'; ctx.fillRect(209, 123, 14, 10);
-    ctx.fillStyle = '#c5d3cb'; ctx.fillRect(212, 125, 8, 6);
-    // Pedestal sink.
-    ctx.fillStyle = '#718b88'; ctx.fillRect(235, 116, 15, 9);
-    ctx.fillStyle = '#f4f0e4'; ctx.fillRect(236, 117, 13, 7);
-    ctx.fillStyle = '#b4c6bd'; ctx.fillRect(240, 124, 5, 13);
-    ctx.fillStyle = '#879e96'; ctx.fillRect(241, 116, 3, 2);
-
-    // Blue bed sprites only: remove the oversized rug layer that made each
-    // bed spill into the walking route. Both headboards sit against upper walls.
-    drawInteriorArt(16, 48, 47, 49, 38, 138, 38, 40);
-    drawInteriorArt(224, 282, 47, 40, 78, 145, 13, 15);
-    drawInteriorArt(336, 38, 50, 57, 89, 139, 26, 33);
-    drawInteriorArt(224, 282, 47, 40, 42, 182, 26, 22);
-
-    drawInteriorArt(16, 48, 47, 49, 244, 164, 38, 40);
-    drawInteriorArt(224, 282, 47, 40, 224, 165, 14, 15);
-    drawInteriorArt(336, 38, 50, 57, 224, 185, 24, 20);
-    drawInteriorArt(224, 282, 47, 40, 257, 185, 26, 20);
-
-    // A folded paper note on Dad's dresser.
-    ctx.save();
-    ctx.translate(-45, 2);
-    ctx.fillStyle = 'rgba(35,18,24,.35)'; ctx.fillRect(92, 181, 17, 13);
-    ctx.fillStyle = '#77513c'; ctx.fillRect(91, 178, 17, 13);
-    ctx.fillStyle = '#eadbb3'; ctx.fillRect(92, 178, 15, 11);
-    ctx.fillStyle = '#fff0cc'; ctx.fillRect(93, 179, 12, 1);
-    ctx.fillStyle = '#b59a70'; ctx.fillRect(94, 182, 9, 1); ctx.fillRect(94, 185, 7, 1);
-    ctx.fillStyle = '#d1bd91'; ctx.fillRect(103, 178, 4, 4);
-    ctx.fillStyle = '#f7ebca'; ctx.fillRect(103, 179, 2, 2);
-    ctx.restore();
-
-    drawTopDownArmorStand(DAD_ARMOR.x, 208);
-
-    // Draw the player in the same top-down view used by the rest of the house.
-    const oldFacing = player.facing, oldMoving = player.moving, oldWalk = player.walk;
-    player.facing = interiorPlayer.facing;
-    player.moving = interiorPlayer.moving;
-    player.walk = interiorPlayer.walk;
-    drawPlayer(Math.round(interiorPlayer.x), Math.round(interiorPlayer.y));
-    player.facing = oldFacing; player.moving = oldMoving; player.walk = oldWalk;
-
-    const showArmorPrompt = !panel && nearDadArmor() && (!nearDadNote() ||
-      Math.hypot(interiorPlayer.x + 8 - DAD_ARMOR.x, interiorPlayer.y + 12 - DAD_ARMOR.y) < Math.hypot(interiorPlayer.x - DAD_NOTE.x, interiorPlayer.y - DAD_NOTE.y));
-    if (showArmorPrompt) {
-      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(30, 163, 110, 14);
-      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(30.5, 163.5, 109, 13);
-      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-      ctx.fillText(equipment.armor ? 'ARMOR EQUIPPED' : '[ E ] EQUIP ARMOR', 85, 173);
-    } else if (!panel && nearDadNote()) {
-      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(73, 163, 108, 14);
-      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(73.5, 163.5, 107, 13);
-      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('[ E ] READ NOTE', 127, 173);
-    }
-    if (!panel && Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 25) {
-      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(121, 188, 78, 14);
-      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(121.5, 188.5, 77, 13);
-      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('[ E ] OUTSIDE', 160, 198);
-    }
-    ctx.restore();
   }
+
   function drawTopDownArmorStand(x, baseY) {
     // Small top-down version of Dad's armor display (the side-view one is far too tall here).
     ctx.save();
@@ -2457,8 +2631,8 @@ const Overworld = (() => {
       platformScene = 'house';
       insideHouse = true;
       // Come back in through the front door at the bottom of the hallway.
-      interiorPlayer.x = 160; interiorPlayer.y = 194;
-      interiorPlayer.facing = 'up'; interiorPlayer.moving = false; interiorPlayer.walk = 0;
+      interiorPlayer.x = ENTRY_SPAWN.x; interiorPlayer.y = ENTRY_SPAWN.y;
+      interiorPlayer.facing = ENTRY_SPAWN.facing; interiorPlayer.moving = false; interiorPlayer.walk = 0;
       keys.clear(); sideJumpQueued = false;
       sidePlayer.x = 880; sidePlayer.y = SIDE_GROUND_Y;
       sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
@@ -2508,8 +2682,8 @@ const Overworld = (() => {
       const nx = oldX + ix * speed * dt;
       const ny = oldY + iy * speed * dt;
       // Resolve each axis separately so hallways stay open and the player can slide along furniture.
-      if (nx > 31 && nx < 289 && !interiorBlocked(nx, oldY)) interiorPlayer.x = nx;
-      if (ny > 28 && ny < 213 && !interiorBlocked(interiorPlayer.x, ny)) interiorPlayer.y = ny;
+      if (!interiorBlocked(nx, oldY)) interiorPlayer.x = nx;
+      if (!interiorBlocked(interiorPlayer.x, ny)) interiorPlayer.y = ny;
       interiorPlayer.moving = Math.abs(interiorPlayer.x - oldX) > 0.01 || Math.abs(interiorPlayer.y - oldY) > 0.01;
       if (interiorPlayer.moving) interiorPlayer.walk += dt * (keys.has('shift') ? 15 : 10);
       return;
@@ -2796,9 +2970,7 @@ const Overworld = (() => {
     // The house is top-down; only the forest uses side-view interaction.
     if (platformMode && platformScene === 'forest') { interactPlatformer(); return; }
     if (insideHouse) {
-      const noteDist = Math.hypot(interiorPlayer.x - DAD_NOTE.x, interiorPlayer.y - DAD_NOTE.y);
-      const armorDist = Math.hypot(interiorPlayer.x + 8 - DAD_ARMOR.x, interiorPlayer.y + 12 - DAD_ARMOR.y);
-      if (nearDadNote() && (!nearDadArmor() || noteDist <= armorDist)) {
+      if (nearDadNote() && (!nearDadArmor() || dadNoteDistance() <= dadArmorDistance())) {
         panel = 'dad-note';
         dadNoteRead = true;
         if (onSave) onSave(getSaveData());
@@ -2840,15 +3012,16 @@ const Overworld = (() => {
         notice = 'You step outside.';
         noticeUntil = time + 2;
       } else {
-        notice = 'The front door is downstairs.';
+        notice = 'Nothing nearby to interact with.';
         noticeUntil = time + 1.8;
       }
       return;
     }
     if (Math.hypot(player.x - HOUSE_DOOR.x, player.y - HOUSE_DOOR.y) < 39) {
       insideHouse = true;
-      interiorPlayer.x = 160;
-      interiorPlayer.y = 194;
+      interiorPlayer.x = ENTRY_SPAWN.x;
+      interiorPlayer.y = ENTRY_SPAWN.y;
+      interiorPlayer.facing = ENTRY_SPAWN.facing;
       interiorPlayer.moving = false;
       interiorPlayer.walk = 0;
       keys.clear();
@@ -2875,6 +3048,7 @@ const Overworld = (() => {
       sideX: sidePlayer.x,
       sideNoteRead: dadNoteRead,
       houseSpawnMigrated: true,
+      houseLayout: HOUSE_LAYOUT_VERSION,
       x: player.x,
       y: player.y,
       facing: player.facing,
@@ -2894,7 +3068,7 @@ const Overworld = (() => {
     // Reset the slot to a clean starting state before applying saved values.
     player.x = SPAWN.x * TILE; player.y = SPAWN.y * TILE; player.facing = 'down';
     insideHouse = false;
-    interiorPlayer.x = 160; interiorPlayer.y = 194; interiorPlayer.facing = 'up'; interiorPlayer.moving = false; interiorPlayer.walk = 0;
+    interiorPlayer.x = KID_SPAWN.x; interiorPlayer.y = KID_SPAWN.y; interiorPlayer.facing = KID_SPAWN.facing; interiorPlayer.moving = false; interiorPlayer.walk = 0;
     inventory.berries = 3; inventory.wood = 0; inventory.fish = 0;
     equipment.armor = false;
     armorTutorialPending = false; armorQuestActive = false; dadNoteRead = false;
@@ -2944,19 +3118,23 @@ const Overworld = (() => {
     // must begin in the kid's bedroom. Later saves preserve the real location.
     if (saveData.houseSpawnMigrated !== true) {
       insideHouse = true;
-      interiorPlayer.x = 208;
-      interiorPlayer.y = 184;
-      interiorPlayer.facing = 'down';
+      interiorPlayer.x = KID_SPAWN.x;
+      interiorPlayer.y = KID_SPAWN.y;
+      interiorPlayer.facing = KID_SPAWN.facing;
       return;
     }
     insideHouse = saveData.insideHouse === true;
     if (insideHouse) {
-      if (Number.isFinite(saveData.interiorX)) interiorPlayer.x = clamp(saveData.interiorX, 31, 289);
-      if (Number.isFinite(saveData.interiorY)) interiorPlayer.y = clamp(saveData.interiorY, 28, 213);
+      if (Number.isFinite(saveData.interiorX)) interiorPlayer.x = clamp(saveData.interiorX, HOME.left, HOME.right - 16);
+      if (Number.isFinite(saveData.interiorY)) interiorPlayer.y = clamp(saveData.interiorY, HOME.top - 8, HOME.bottom - 15);
       if (['up', 'down', 'left', 'right'].includes(saveData.interiorFacing)) interiorPlayer.facing = saveData.interiorFacing;
       if (Number.isFinite(saveData.interiorWalk)) interiorPlayer.walk = saveData.interiorWalk;
       if (interiorBlocked(interiorPlayer.x, interiorPlayer.y)) {
-        interiorPlayer.x = 208; interiorPlayer.y = 184; interiorPlayer.facing = 'up';
+        interiorPlayer.x = KID_SPAWN.x; interiorPlayer.y = KID_SPAWN.y; interiorPlayer.facing = KID_SPAWN.facing;
+      }
+      // Saves made before the house was rebuilt hold positions from the old floor plan.
+      if (saveData.houseLayout !== HOUSE_LAYOUT_VERSION) {
+        interiorPlayer.x = KID_SPAWN.x; interiorPlayer.y = KID_SPAWN.y; interiorPlayer.facing = KID_SPAWN.facing;
       }
     }
   }
@@ -3106,7 +3284,7 @@ const Overworld = (() => {
         if (AudioCtor) { if (!introAudio) introAudio = new AudioCtor(); if (introAudio.state === 'suspended') introAudio.resume(); }
       } catch (_) {}
     }
-    if (introActive) { insideHouse = true; interiorPlayer.x = 208; interiorPlayer.y = 184; interiorPlayer.facing = 'up'; }
+    if (introActive) { insideHouse = true; interiorPlayer.x = KID_SPAWN.x; interiorPlayer.y = KID_SPAWN.y; interiorPlayer.facing = KID_SPAWN.facing; }
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('keyup', onKeyUp);
     const maxCamX = Math.max(0, MAP_W * TILE - canvas.width);
