@@ -6942,6 +6942,7 @@ const Overworld = (() => {
       spawnDust(m.x, SIDE_GROUND_Y, 8);
     }
     depths.ambush = { x: Math.round(x), armed: false, done: false, mobs, t: time, trial: !!trial };
+    sceneTitle = null;
     sfx('roar', 0.7, 1.1); screenShake = 5; padRumble(0.6, 0.6, 300);
     ambushBanner = { t: time, text: trial ? 'TRIAL OF THE MOON' : 'AMBUSH!' };
   }
@@ -8770,7 +8771,7 @@ const Overworld = (() => {
     ctx.restore();
   }
 
-  const INV_TAB_W = 24, INV_TAB_X0 = 120;
+  const INV_TAB_W = 23, INV_TAB_X0 = 124;
   const loreSeen = new Set();
   function itemOffset() { return Math.max(0, Math.floor(invSel / 6) - 2) * 6; }
   function itemSlotRect(i) {
