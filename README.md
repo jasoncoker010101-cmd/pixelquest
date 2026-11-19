@@ -21,6 +21,8 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
   - Chapter 3, The Moon-Eater: reach Gloamhold, a drowned city in the rain, and fight Vael in the castle quarter. The chapter ends with a tease for Chapter 4, The Pale Court.
 - **Lore:** about 19 lore entries on stones, letters, and logs across every area, all readable in the LORE tab.
 - **Areas:** the house, the forest, Bram's camp (campfire rest point and shop), the Hollow, the Ashen Pass, and Gloamhold. Each area has its own music, weather and particles (fireflies, embers, rain), and boss arena.
+- **Boss entrances:** each boss gets a cinematic. Letterbox bars slide in and the camera swings to the boss. Grukk smashes the ground and roars, Ashmane gallops in on a trail of blue fire and rears up in a ring of flame, and Vael drops out of the sky and breathes moonfire. Then the boss's name and title burn in above its head. Press E / ✕ to skip.
+- **Boss music:** a dramatic entrance theme plays during the cinematic, and each boss has its own battle theme.
 - **World map and fast travel:** the MAP tab shows every region and your position. While resting at a campfire, you can pick another fire you have visited to travel there.
 - **Enemies:** goblins, mushrooms, and flying eyes in the forest. Skeletons (they block with a shield) and ghosts in the Hollow. A two-phase ogre boss that sends out shockwaves and calls ghosts when below half HP.
 - **Inventory:** full-screen bag with ITEMS / GEAR / STATS / QUEST / LORE / MAP tabs. Each item has an action menu (use, set as quick item, inspect, equip, drop), plus rarity colors, NEW tags, and a rotating inspect view with item lore. Mouse/touch clicks work too.

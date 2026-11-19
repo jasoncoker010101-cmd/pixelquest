@@ -2636,7 +2636,13 @@ const Overworld = (() => {
   function updateSideCamera(dt) {
     let target = clamp(sidePlayer.x - canvas.width * 0.43, 0, Math.max(0, sideWorldWidth() - canvas.width));
     if (bossFight && (bossFight.active || bossFight.intro)) target = clamp((BOSS_ARENA.left + BOSS_ARENA.right) / 2 - canvas.width / 2 + (sidePlayer.x - (BOSS_ARENA.left + BOSS_ARENA.right) / 2) * 0.5, BOSS_ARENA.left - 20, BOSS_ARENA.right - canvas.width + 20);
-    sideCameraX += (target - sideCameraX) * Math.min(1, dt * 7);
+    if (bossFight && bossFight.cine && bossFight.t < CINE_END - 0.3) {
+      const b = theBoss();
+      if (b) target = clamp(b.x - canvas.width / 2 + (b.type === 'mare' ? 10 : 0), 0, Math.max(0, sideWorldWidth() - canvas.width));
+      sideCameraX += (target - sideCameraX) * Math.min(1, dt * 3.2);
+      return;
+    }
+    sideCameraX += (target - sideCameraX) * Math.min(1, dt * (bossFight && bossFight.intro ? 4 : 7));
   }
 
   // ---------------------------------------------------------------------------
@@ -2818,8 +2824,8 @@ const Overworld = (() => {
   }
 
   // Music: looping tracks per area, cross-faded every frame.
-  const MUSIC_FILES = { house: 'house', forest: 'forest', ambience: 'forest_ambience', hollow: 'hollow', boss: 'boss', camp: 'camp', pass: 'pass', gloam: 'gloam' };
-  const MUSIC_VOL = { house: 0.32, forest: 0.34, ambience: 0.22, hollow: 0.38, boss: 0.42, camp: 0.34, pass: 0.36, gloam: 0.4 };
+  const MUSIC_FILES = { house: 'house', forest: 'forest', ambience: 'forest_ambience', hollow: 'hollow', boss: 'boss', bossMare: 'boss_mare', bossVael: 'boss_vael', bossIntro: 'boss_intro', camp: 'camp', pass: 'pass', gloam: 'gloam' };
+  const MUSIC_VOL = { house: 0.32, forest: 0.34, ambience: 0.22, hollow: 0.38, boss: 0.42, bossMare: 0.4, bossVael: 0.42, bossIntro: 0.5, camp: 0.34, pass: 0.36, gloam: 0.4 };
   const musicTracks = {};
   function musicTrack(key) {
     if (!musicTracks[key]) {
@@ -2834,7 +2840,8 @@ const Overworld = (() => {
     if (!platformMode && insideHouse) return { house: 1 };
     if (!platformMode) return { forest: 1, ambience: 1 };
     if (platformScene === 'house') return { house: 1 };
-    if (bossFight && bossFight.active) return { boss: 1 };
+    if (bossFight && bossFight.intro) return { bossIntro: 1 };
+    if (bossFight && bossFight.active) { const b = theBoss(); return b && b.type === 'mare' ? { bossMare: 1 } : b && b.type === 'demon' ? { bossVael: 1 } : { boss: 1 }; }
     if (platformScene === 'pass') return Math.abs(sidePlayer.x - 1900) < 260 ? { camp: 0.8, pass: 0.4 } : { pass: 1 };
     if (platformScene === 'gloam') return Math.abs(sidePlayer.x - 2240) < 220 ? { camp: 0.7, gloam: 0.5 } : { gloam: 1, ambience: 0.25 };
     if (platformScene === 'hollow') {
@@ -2853,7 +2860,7 @@ const Overworld = (() => {
       const target = (want[key] || 0) * MUSIC_VOL[key] * duck;
       if (!target && !musicTracks[key]) return;
       const t = musicTrack(key);
-      t.v += (target - t.v) * Math.min(1, dt * 1.6);
+      t.v += (target - t.v) * Math.min(1, dt * (bossFight && bossFight.intro ? 3.2 : 1.6));
       if (Math.abs(target - t.v) < 0.002) t.v = target;
       if (t.v > 0.001 && !t.playing) {
         t.playing = true;
@@ -5102,22 +5109,135 @@ const Overworld = (() => {
       tip: 'Upper slash reaches him in the air. Roll through the moonfire!', flag: 'gloamBossStarted'
     }
   };
+  // ---------------------------------------------------------------------------
+  // Boss entrance cinematics: letterbox bars, the camera swings to the boss,
+  // it does its signature move, and its name card burns in above its head.
+  const CINE_END = 4.5;
+  const BOSS_CINE = {
+    ogre:  { nameAt: 2.25, main: '#ffd88a', hot: '#fff3c8', deep: '#b8461a', glow: '255,150,50', crest: 'skull' },
+    mare:  { nameAt: 2.05, main: '#bfeaff', hot: '#ffffff', deep: '#2a6fd0', glow: '90,190,255', crest: 'flame' },
+    demon: { nameAt: 2.15, main: '#dcc2ff', hot: '#f4fdff', deep: '#5b2aa8', glow: '120,240,255', crest: 'moon' }
+  };
+  const cineFx = [];
+  const cineCanvas = document.createElement('canvas'); cineCanvas.width = 320; cineCanvas.height = 70;
+  const cineCtx = cineCanvas.getContext('2d');
+  function bossNameParts(T) {
+    const [n, ...rest] = T.name.split(', ');
+    return { name: n.toUpperCase(), title: rest.join(', ').toUpperCase() };
+  }
   function startBossIntro() {
     const boss = theBoss(); if (!boss) return;
-    bossFight = { intro: true, active: false, t: 0, talked: false };
+    const B = BOSS_LINES[boss.type] || BOSS_LINES.ogre;
+    const retry = !!story[B.flag];
+    bossFight = { intro: true, active: false, t: 0, talked: false, cine: true, speed: retry ? 1.5 : 1, ev: {}, flash: 0, flashColor: '255,255,255', type: boss.type };
+    cineFx.length = 0;
     // Regular monsters clear out of the arena so the duel is one on one.
     sideMobs.forEach(o => { if (o !== boss && !o.dead && o.x > BOSS_ARENA.left - 220) { o.dead = true; o.deadTime = 99; o.hp = 0; o.respawn = Infinity; spawnDust(o.x, SIDE_GROUND_Y, 4); } });
     mobShots.length = 0;
     sidePlayer.x = Math.max(sidePlayer.x, BOSS_ARENA.left + 40);
-    boss.dir = -1;
-    sfx(boss.type === 'demon' ? 'demon' : boss.type === 'mare' ? 'mare' : 'roar', 1, 0.75); screenShake = 6; padRumble(1, 0.8, 600);
+    sidePlayer.facing = 1;
+    boss.dir = -1; boss.attackTime = 0; boss.st = 'stalk'; boss.moving = false;
+    const home = region().bossX;
+    if (boss.type === 'mare') { boss.x = BOSS_ARENA.right + 90; boss.st = 'charge'; boss.moving = true; }
+    else if (boss.type === 'demon') { boss.x = home; boss.y = -70; }
+    else boss.x = home;
+    const mt = musicTracks.bossIntro; if (mt) { try { mt.a.currentTime = 0; } catch (_) {} }
+    sfx('slam', 0.6, 0.5); padRumble(0.5, 0.4, 300);
+  }
+  function cineBurst(x, y, n, o) {
+    for (let i = 0; i < n; i++) {
+      const a = (o.angle != null ? o.angle : -Math.PI / 2) + (Math.random() - 0.5) * (o.spread != null ? o.spread : Math.PI * 2);
+      const sp = (o.speed || 60) * (0.4 + Math.random() * 0.8);
+      cineFx.push({ kind: o.kind || 'spark', x: x + (Math.random() - 0.5) * (o.w || 0), y: y + (Math.random() - 0.5) * (o.h || 0), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        g: o.g != null ? o.g : 0, life: (o.life || 0.8) * (0.6 + Math.random() * 0.6), max: o.life || 0.8, size: o.size || 2, color: o.color || '255,255,255' });
+    }
+  }
+  function cineEvent(c, key, at) { if (c.t >= at && !c.ev[key]) { c.ev[key] = true; return true; } return false; }
+  function updateBossCine(c, boss, dt) {
+    const t = c.t, th = BOSS_CINE[boss.type] || BOSS_CINE.ogre, gy = SIDE_GROUND_Y;
+    c.flash = Math.max(0, c.flash - dt * 2.6);
+    if (boss.attackTime > 0) boss.attackTime = Math.max(0, boss.attackTime - dt * c.speed);
+    if (boss.type === 'ogre') {
+      [[0.55, 1.05, 0.7], [1.45, 1.95, 1]].forEach(([s0, hit, pow], k) => {
+        if (cineEvent(c, 'swing' + k, s0)) { boss.atkLen = 0.75; boss.attackTime = 0.75; sfx('swingBig', 0.8, 0.7); }
+        if (cineEvent(c, 'hit' + k, hit)) {
+          const hx = boss.x - 34;
+          screenShake = 6 + pow * 5; padRumble(pow, pow, 260); sfx('slam', 1, 0.6 + k * 0.08);
+          spawnDust(hx, gy, 14); c.flash = 0.25 * pow; c.flashColor = '255,200,140';
+          cineBurst(hx, gy - 2, 18, { kind: 'rock', angle: -Math.PI / 2, spread: 2.2, speed: 150 * pow, g: 420, life: 1.1, size: 3, color: '120,100,90' });
+          cineBurst(hx, gy - 2, 14, { angle: -Math.PI / 2, spread: 2.6, speed: 120, g: 160, life: 0.7, color: th.glow });
+          cineFx.push({ kind: 'ring', x: hx, y: gy, r: 6, vr: 260 * pow, life: 0.5, max: 0.5, color: th.glow });
+          if (k === 1) cineFx.push({ kind: 'ring', x: hx, y: gy, r: 2, vr: 160, life: 0.7, max: 0.7, color: '255,255,255' });
+        }
+      });
+      if (cineEvent(c, 'roar', 2.15)) { sfx('roar', 1, 0.7); screenShake = 9; padRumble(1, 0.8, 700); c.flash = 0.35; c.flashColor = th.glow; c.roarAt = t; }
+      if (c.roarAt && t - c.roarAt < 1.2) screenShake = Math.max(screenShake, 2.2);
+    } else if (boss.type === 'mare') {
+      const home = region().bossX;
+      if (t > 0.35 && t < 1.5) {
+        boss.st = 'charge'; boss.moving = true; boss.walk += dt * 14 * c.speed;
+        const k = clamp((t - 0.35) / 1.1, 0, 1), e = 1 - Math.pow(1 - k, 2.2);
+        const nx = BOSS_ARENA.right + 90 + (home - BOSS_ARENA.right - 90) * e;
+        if (Math.abs(nx - (c.trailX || nx + 99)) > 12) { c.trailX = nx; cineFx.push({ kind: 'flame', x: nx + 26, y: gy, life: 1.6, max: 1.6, size: 16 + Math.random() * 8, color: th.glow, vx: 0, vy: 0, g: 0 }); }
+        if (Math.random() < dt * 20) spawnDust(nx + 18, gy, 1);
+        boss.x = nx;
+        if (Math.floor(t * 7) !== Math.floor((t - dt * c.speed) * 7)) { sfx('land', 0.5, 0.6); screenShake = Math.max(screenShake, 1.5); }
+      }
+      if (cineEvent(c, 'skid', 1.5)) { boss.x = home; boss.st = 'windup'; boss.moving = false; spawnDust(boss.x + 10, gy, 16); sfx('slam', 0.8, 0.9); screenShake = 4; }
+      if (cineEvent(c, 'rear', 1.8)) {
+        sfx('mare', 1, 1.1); sfx('fire', 0.9, 0.7); screenShake = 8; padRumble(1, 0.9, 600); c.flash = 0.45; c.flashColor = th.glow;
+        for (let i = -5; i <= 5; i++) if (i) cineFx.push({ kind: 'flame', x: boss.x + i * 15, y: gy, life: 2.6, max: 2.6, size: 30 + Math.random() * 14 - Math.abs(i) * 2, color: th.glow, vx: 0, vy: 0, g: 0, delay: Math.abs(i) * 0.05 });
+        cineFx.push({ kind: 'ring', x: boss.x, y: gy - 30, r: 8, vr: 220, life: 0.6, max: 0.6, color: th.glow });
+        cineBurst(boss.x, gy - 40, 30, { speed: 110, g: -20, life: 1.2, color: th.glow, w: 40, h: 30 });
+      }
+      if (t > 1.8 && t < 3.4 && Math.random() < dt * 30) cineBurst(boss.x + (Math.random() - 0.5) * 60, gy - 4, 1, { angle: -Math.PI / 2, spread: 0.6, speed: 50, g: -30, life: 0.9, color: th.glow });
+    } else if (boss.type === 'demon') {
+      const hy = gy - (boss.T.fly || 0);
+      if (t < 0.35) boss.y = -70;
+      else if (t < 1.75) {
+        const k = (t - 0.35) / 1.4, e = 1 - Math.pow(1 - k, 3);
+        boss.y = -70 + (hy - 6 + 70) * e + Math.sin(t * 9) * 3 * (1 - k);
+        boss.walk += dt * 10 * c.speed;
+        if (Math.floor(t * 3) !== Math.floor((t - dt * c.speed) * 3)) { sfx('swoosh', 0.6, 0.5); screenShake = Math.max(screenShake, 2); }
+        if (Math.random() < dt * 24) cineBurst(boss.x + (Math.random() - 0.5) * 90, boss.y - 40, 1, { kind: 'feather', angle: Math.PI / 2, spread: 1, speed: 20, g: 18, life: 1.8, size: 2, color: '70,40,90' });
+      } else {
+        boss.y = hy + Math.sin(t * 3) * 2; boss.walk += dt * 8 * c.speed;
+      }
+      if (cineEvent(c, 'land', 1.75)) { spawnDust(boss.x, gy, 18); screenShake = 6; sfx('slam', 0.8, 0.5); cineFx.push({ kind: 'ring', x: boss.x, y: gy, r: 10, vr: 230, life: 0.6, max: 0.6, color: '160,120,255' }); }
+      if (cineEvent(c, 'breath', 1.95)) {
+        boss.st = 'breath'; boss.atkLen = 1.5; boss.attackTime = 1.5;
+        sfx('demon', 1, 0.6); sfx('magic', 0.8, 0.5); screenShake = 9; padRumble(1, 1, 800); c.flash = 0.4; c.flashColor = th.glow;
+      }
+      if (c.ev.breath && boss.attackTime > 0.25) {
+        // Moonfire roars upward from his jaws and rains back down as sparks.
+        const mx = boss.x - 38, my = boss.y - 46;
+        cineBurst(mx, my, 3, { angle: Math.PI * 0.8, spread: 0.6, speed: 170, g: 40, life: 0.7, size: 2, color: th.glow });
+        if (Math.random() < 0.4) cineBurst(mx, my, 1, { kind: 'orb', angle: Math.PI * 0.8, spread: 0.5, speed: 120, g: 30, life: 0.8, size: 3, color: '200,250,255' });
+      }
+      if (c.ev.breath && boss.attackTime <= 0 && boss.st === 'breath') boss.st = 'stalk';
+    }
+    // Ember motes that drift around the name card.
+    if (t > th.nameAt && t < CINE_END - 0.4 && Math.random() < dt * 14) {
+      cineFx.push({ kind: 'mote', x: sideCameraX + 160 + (Math.random() - 0.5) * 220, y: 60 + Math.random() * 40, vx: (Math.random() - 0.5) * 10, vy: -8 - Math.random() * 10, g: 0, life: 1.6, max: 1.6, size: 1, color: th.glow });
+    }
+    if (cineEvent(c, 'name', th.nameAt)) { sfx('slam', 0.9, 0.45); sfx('magic', 0.5, 0.7); c.flash = Math.max(c.flash, 0.3); }
+    for (let i = cineFx.length - 1; i >= 0; i--) {
+      const f = cineFx[i];
+      if (f.delay > 0) { f.delay -= dt; continue; }
+      f.life -= dt; f.vy += (f.g || 0) * dt; f.x += (f.vx || 0) * dt; f.y += (f.vy || 0) * dt;
+      if (f.kind === 'ring') f.r += f.vr * dt;
+      if (f.kind === 'rock' && f.y > gy) { f.y = gy; f.vy *= -0.35; f.vx *= 0.6; }
+      if (f.life <= 0) cineFx.splice(i, 1);
+    }
   }
   function updateBossIntro(dt) {
     if (!bossFight || !bossFight.intro) return;
-    bossFight.t += dt;
-    if (bossFight.t > 1.1 && !bossFight.talked) {
-      bossFight.talked = true;
-      const boss = theBoss();
+    const c = bossFight, boss = theBoss();
+    c.t += dt * (c.cine ? c.speed : 1);
+    if (c.cine && boss) updateBossCine(c, boss, dt);
+    if (c.cine && c.t >= CINE_END) { c.cine = false; c.t = 0; cineFx.length = 0; if (boss) { boss.st = 'stalk'; boss.moving = false; boss.attackTime = 0; } }
+    if (!c.cine && c.t > 0.35 && !c.talked) {
+      c.talked = true;
       const B = BOSS_LINES[boss ? boss.type : 'ogre'] || BOSS_LINES.ogre;
       const retry = story[B.flag];
       story[B.flag] = true;
@@ -5128,6 +5248,163 @@ const Overworld = (() => {
         sfx(b && b.type === 'demon' ? 'demon' : 'roar', 0.9, 0.9);
         notice = B.tip; noticeUntil = time + 2.8;
       });
+    }
+  }
+  function skipBossCine() {
+    if (bossFight && bossFight.cine && bossFight.t > 0.4) { bossFight.t = Math.max(bossFight.t, CINE_END - 0.45); return true; }
+    return !!(bossFight && bossFight.cine);
+  }
+  function drawCineFx() {
+    ctx.save(); ctx.translate(-Math.round(sideCameraX), 0);
+    cineFx.forEach(f => {
+      if (f.delay > 0) return;
+      const a = clamp(f.life / f.max, 0, 1);
+      if (f.kind === 'ring') {
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = 'rgba(' + f.color + ',' + a * 0.9 + ')'; ctx.lineWidth = 1 + a * 3;
+        ctx.beginPath(); ctx.ellipse(f.x, f.y, f.r, f.r * 0.28, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalCompositeOperation = 'source-over';
+      } else if (f.kind === 'rock') {
+        ctx.fillStyle = 'rgba(' + f.color + ',' + Math.min(1, a * 2) + ')'; ctx.fillRect(Math.round(f.x), Math.round(f.y) - f.size, f.size, f.size);
+        ctx.fillStyle = 'rgba(40,30,30,' + Math.min(1, a * 2) + ')'; ctx.fillRect(Math.round(f.x), Math.round(f.y) - 1, f.size, 1);
+      } else if (f.kind === 'feather') {
+        ctx.fillStyle = 'rgba(' + f.color + ',' + a + ')'; ctx.fillRect(Math.round(f.x + Math.sin(f.life * 6) * 3), Math.round(f.y), 3, 1);
+      } else if (f.kind === 'flame') {
+        // Curved tongue of pale blue fire licking up from the ground.
+        const grow = Math.min(1, (f.max - f.life) * 5), h = f.size * grow * (0.6 + a * 0.4) * (1 + Math.sin(time * 14 + f.x) * 0.12);
+        ctx.globalCompositeOperation = 'lighter';
+        const g = ctx.createRadialGradient(f.x, f.y - 4, 1, f.x, f.y - 4, h * 1.4);
+        g.addColorStop(0, 'rgba(' + f.color + ',' + a * 0.22 + ')'); g.addColorStop(1, 'rgba(' + f.color + ',0)');
+        ctx.fillStyle = g; ctx.fillRect(f.x - h * 1.4, f.y - 4 - h * 1.4, h * 2.8, h * 2.8);
+        ctx.globalCompositeOperation = 'source-over';
+        const sway = Math.sin(time * 9 + f.x * 0.3) * 2.5;
+        ctx.fillStyle = 'rgba(40,110,230,' + a * 0.7 + ')';
+        ctx.beginPath(); ctx.moveTo(f.x - h * 0.42, f.y); ctx.quadraticCurveTo(f.x - h * 0.5 + sway, f.y - h * 0.7, f.x + sway * 2, f.y - h * 1.15);
+        ctx.quadraticCurveTo(f.x + h * 0.42 + sway, f.y - h * 0.55, f.x + h * 0.42, f.y); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(' + f.color + ',' + a * 0.85 + ')';
+        ctx.beginPath(); ctx.moveTo(f.x - h * 0.3, f.y); ctx.quadraticCurveTo(f.x - h * 0.35 + sway, f.y - h * 0.6, f.x + sway * 1.6, f.y - h);
+        ctx.quadraticCurveTo(f.x + h * 0.3 + sway, f.y - h * 0.5, f.x + h * 0.3, f.y); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(225,248,255,' + a * 0.6 + ')';
+        ctx.beginPath(); ctx.moveTo(f.x - h * 0.08, f.y); ctx.quadraticCurveTo(f.x + sway * 0.5, f.y - h * 0.3, f.x + sway, f.y - h * 0.38); ctx.quadraticCurveTo(f.x + h * 0.08, f.y - h * 0.2, f.x + h * 0.08, f.y); ctx.closePath(); ctx.fill();
+        ctx.globalCompositeOperation = 'source-over';
+      } else {
+        ctx.globalCompositeOperation = 'lighter';
+        if (f.kind === 'orb') { ctx.fillStyle = 'rgba(' + f.color + ',' + a * 0.4 + ')'; ctx.beginPath(); ctx.arc(f.x, f.y, f.size * a + 2, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,' + a + ')'; ctx.beginPath(); ctx.arc(f.x, f.y, Math.max(0.8, f.size * a * 0.5), 0, Math.PI * 2); ctx.fill(); ctx.globalCompositeOperation = 'source-over'; return; }
+        const sz = f.size;
+        ctx.fillStyle = 'rgba(' + f.color + ',' + a * 0.35 + ')'; ctx.fillRect(Math.round(f.x - sz), Math.round(f.y - sz), sz * 2 + 1, sz * 2 + 1);
+        ctx.fillStyle = 'rgba(' + f.color + ',' + a + ')'; ctx.fillRect(Math.round(f.x - sz / 2), Math.round(f.y - sz / 2), Math.max(1, sz), Math.max(1, sz));
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    });
+    ctx.restore();
+  }
+  function drawCineCrest(x, y, kind, th, a) {
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(x, y);
+    ctx.fillStyle = th.deep; ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(8, 0); ctx.lineTo(0, 8); ctx.lineTo(-8, 0); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = th.main; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = th.hot;
+    if (kind === 'skull') { ctx.fillRect(-3, -4, 6, 5); ctx.fillRect(-2, 1, 4, 2); ctx.fillStyle = th.deep; ctx.fillRect(-2, -2, 1, 2); ctx.fillRect(1, -2, 1, 2); }
+    else if (kind === 'flame') { ctx.beginPath(); ctx.moveTo(-3, 4); ctx.quadraticCurveTo(-4, -1, 0, -5); ctx.quadraticCurveTo(1, -1, 3, -2); ctx.quadraticCurveTo(4, 2, 3, 4); ctx.closePath(); ctx.fill(); }
+    else { ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = th.deep; ctx.beginPath(); ctx.arc(2, -1, 3.4, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+  }
+  function drawBossCine() {
+    const c = bossFight, boss = theBoss(); if (!boss) return;
+    const W = canvas.width, H = canvas.height, t = c.t, th = BOSS_CINE[boss.type] || BOSS_CINE.ogre;
+    const ease = k => { k = clamp(k, 0, 1); return k * k * (3 - 2 * k); };
+    drawCineFx();
+    // Dark vignette that tightens on the boss.
+    const bx = boss.x - sideCameraX, by = boss.y - boss.T.bodyH * 0.6;
+    const vk = ease(t / 0.8) * (1 - ease((t - CINE_END + 0.5) / 0.5));
+    const vg = ctx.createRadialGradient(bx, by, 40, bx, by, 240);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,' + 0.55 * vk + ')');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+    if (c.flash > 0) { ctx.fillStyle = 'rgba(' + c.flashColor + ',' + Math.min(0.6, c.flash) + ')'; ctx.fillRect(0, 0, W, H); }
+    // Name card above the boss.
+    const p = t - th.nameAt;
+    if (p > 0) {
+      const { name, title } = bossNameParts(boss.T);
+      const out = ease((t - (CINE_END - 0.55)) / 0.4);
+      const cx = Math.round(clamp(bx, 96, W - 96));
+      const cy = Math.round(clamp(mobTop(boss) - 34 - out * 6, 50, 108));
+      const A = 1 - out;
+      // Light streak that tears open the card.
+      const sk = ease(p / 0.22), fade = 1 - ease((p - 0.25) / 0.5);
+      if (fade > 0) {
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        const sw = 230 * sk;
+        const g = ctx.createLinearGradient(cx - sw / 2, 0, cx + sw / 2, 0);
+        g.addColorStop(0, 'rgba(' + th.glow + ',0)'); g.addColorStop(0.5, 'rgba(255,255,255,' + 0.9 * fade + ')'); g.addColorStop(1, 'rgba(' + th.glow + ',0)');
+        ctx.fillStyle = g; ctx.fillRect(cx - sw / 2, cy - 1, sw, 3);
+        const g2 = ctx.createRadialGradient(cx, cy, 2, cx, cy, sw / 2);
+        g2.addColorStop(0, 'rgba(' + th.glow + ',' + 0.35 * fade + ')'); g2.addColorStop(1, 'rgba(' + th.glow + ',0)');
+        ctx.save(); ctx.translate(cx, cy); ctx.scale(1, 0.12); ctx.translate(-cx, -cy); ctx.fillStyle = g2; ctx.fillRect(cx - sw / 2, cy - sw / 2, sw, sw); ctx.restore();
+        ctx.restore();
+      }
+      // Big name, letter by letter, on an offscreen layer so a shine can sweep across it.
+      cineCtx.clearRect(0, 0, 320, 70);
+      cineCtx.font = 'bold 22px monospace'; cineCtx.textBaseline = 'alphabetic'; cineCtx.textAlign = 'left';
+      const sp = 3, widths = [...name].map(ch => cineCtx.measureText(ch).width);
+      const total = widths.reduce((a, b) => a + b, 0) + sp * (name.length - 1);
+      let lx = 160 - total / 2;
+      [...name].forEach((ch, i) => {
+        const lp = p - 0.12 - i * 0.07;
+        if (lp <= 0) { lx += widths[i] + sp; return; }
+        const k = ease(lp / 0.22), drop = (1 - k) * -14, sc = 1 + (1 - k) * 1.2;
+        cineCtx.save();
+        cineCtx.translate(lx + widths[i] / 2, 44 + drop); cineCtx.scale(sc, sc);
+        cineCtx.globalAlpha = k;
+        cineCtx.fillStyle = 'rgba(0,0,0,.85)'; cineCtx.fillText(ch, -widths[i] / 2 + 2, 2);
+        const tg = cineCtx.createLinearGradient(0, -18, 0, 2);
+        tg.addColorStop(0, th.hot); tg.addColorStop(0.55, th.main); tg.addColorStop(1, th.deep);
+        cineCtx.fillStyle = lp < 0.12 ? '#ffffff' : tg; cineCtx.fillText(ch, -widths[i] / 2, 0);
+        cineCtx.restore();
+        lx += widths[i] + sp;
+      });
+      const shine = (p - 0.9) / 0.6;
+      if (shine > 0 && shine < 1) {
+        cineCtx.save(); cineCtx.globalCompositeOperation = 'source-atop';
+        const sx = 160 - total / 2 - 30 + (total + 60) * shine;
+        const sg = cineCtx.createLinearGradient(sx - 14, 0, sx + 14, 0);
+        sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, 'rgba(255,255,255,.85)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
+        cineCtx.fillStyle = sg; cineCtx.fillRect(sx - 14, 0, 28, 70); cineCtx.restore();
+      }
+      ctx.save(); ctx.globalAlpha = A;
+      ctx.shadowColor = 'rgba(' + th.glow + ',.9)'; ctx.shadowBlur = 10;
+      ctx.drawImage(cineCanvas, cx - 160, cy - 44 + 8);
+      ctx.restore();
+      // Title line with ornaments that slide out from the centre.
+      const tp = p - 0.2 - name.length * 0.07;
+      if (tp > 0) {
+        const k = ease(tp / 0.35), ty = cy + 18;
+        ctx.save(); ctx.globalAlpha = A * k;
+        ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+        const spaced = title.split('').join(String.fromCharCode(8202));
+        const tw = ctx.measureText(spaced).width;
+        ctx.fillStyle = 'rgba(0,0,0,.8)'; ctx.fillText(spaced, cx + 1, ty + 1);
+        ctx.fillStyle = th.main; ctx.fillText(spaced, cx, ty);
+        const lw = 46 * k, gap = tw / 2 + 6;
+        [-1, 1].forEach(d => {
+          const g = ctx.createLinearGradient(cx + d * gap, 0, cx + d * (gap + lw), 0);
+          g.addColorStop(0, th.main); g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g; ctx.fillRect(Math.min(cx + d * gap, cx + d * (gap + lw)), ty - 3, lw, 1);
+          ctx.fillStyle = th.hot; ctx.fillRect(Math.round(cx + d * gap) - 1, ty - 4, 2, 3);
+        });
+        ctx.restore();
+        drawCineCrest(cx, cy - 22, th.crest, th, A * k);
+      }
+    }
+    // Letterbox bars.
+    const bar = Math.round(26 * ease(t / 0.45) * (1 - ease((t - CINE_END + 0.45) / 0.45)));
+    if (bar > 0) {
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, bar); ctx.fillRect(0, H - bar, W, bar);
+      ctx.fillStyle = 'rgba(' + th.glow + ',.35)'; ctx.fillRect(0, bar, W, 1); ctx.fillRect(0, H - bar - 1, W, 1);
+      if (t > 0.6 && t < CINE_END - 0.6) {
+        ctx.globalAlpha = 0.5 + Math.sin(time * 4) * 0.2;
+        ctx.fillStyle = '#c9c0d8'; ctx.font = '6px monospace'; ctx.textAlign = 'right';
+        ctx.fillText(inputMode === 'pad' ? '✕ SKIP' : 'E SKIP', W - 6, H - bar / 2 + 2);
+        ctx.globalAlpha = 1;
+      }
     }
   }
   function endBossFight(won) {
@@ -5812,10 +6089,10 @@ const Overworld = (() => {
     });
     // Entrance arch back to the forest and the King's throne in the arena.
     drawSignpost(70, 'FOREST', -1);
-    drawThrone(3150);
+    drawThrone(3128);
     drawLoreSpots();
     drawDad();
-    if (story.ch2Started) drawSignpost(HOLLOW_SIDE_WIDTH - 70, 'ASHEN PASS', 1);
+    if (story.ch2Started) drawSignpost(HOLLOW_SIDE_WIDTH - 34, 'ASHEN PASS', 1);
     drawSideMobs();
     drawSidePlayer();
     drawPlayerWaves();
@@ -5844,19 +6121,111 @@ const Overworld = (() => {
     ctx.fillStyle = dk; ctx.fillRect(0, 0, W, H);
     drawSideOverlays('THE HOLLOW');
   }
+  // Grukk's throne: a stepped stone dais, a tall cracked seat built from
+  // slabs and bones, horned skull crest, torn banners and twin braziers.
   function drawThrone(x) {
-    const gy = SIDE_GROUND_Y;
-    ctx.fillStyle = '#1a1220'; ctx.fillRect(x - 22, gy - 58, 44, 58);
-    ctx.fillStyle = '#3a2a3a'; ctx.fillRect(x - 20, gy - 56, 40, 56);
-    ctx.fillStyle = '#2a1e2a'; ctx.fillRect(x - 14, gy - 50, 28, 30);
-    ctx.fillStyle = '#d8cfb4'; [-20, -10, 0, 10, 18].forEach((o, i) => { ctx.fillRect(x + o, gy - 62 - (i % 2) * 5, 3, 8); ctx.fillRect(x + o - 1, gy - 63 - (i % 2) * 5, 5, 3); });
-    ctx.fillStyle = '#4a3a4a'; ctx.fillRect(x - 24, gy - 20, 48, 6);
-    ctx.fillStyle = '#7a4cc0'; ctx.fillRect(x - 2, gy - 46, 4, 4);
-    ctx.fillStyle = 'rgba(200,160,255,' + (0.4 + Math.sin(time * 3) * 0.3) + ')'; ctx.fillRect(x - 1, gy - 45, 2, 2);
+    const gy = SIDE_GROUND_Y, R = (c, X, Y, w, h) => { ctx.fillStyle = c; ctx.fillRect(Math.round(X), Math.round(Y), w, h); };
+    const glow = (X, Y, r, col, a) => {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(X, Y, 1, X, Y, r);
+      g.addColorStop(0, 'rgba(' + col + ',' + a + ')'); g.addColorStop(1, 'rgba(' + col + ',0)');
+      ctx.fillStyle = g; ctx.fillRect(X - r, Y - r, r * 2, r * 2); ctx.restore();
+    };
+    // Purple light pooled behind the seat.
+    glow(x, gy - 70, 90, '120,70,200', 0.16 + Math.sin(time * 1.7) * 0.04);
+    // Dais: three worn steps.
+    [[62, 0], [52, 6], [42, 12]].forEach(([hw, o], i) => {
+      R('#17111d', x - hw - 1, gy - 6 - o, hw * 2 + 2, 7);
+      R(i === 2 ? '#4a3d52' : '#3d3245', x - hw, gy - 6 - o, hw * 2, 6);
+      R('#5d4f66', x - hw, gy - 6 - o, hw * 2, 1);
+      for (let k = -hw + 9; k < hw; k += 17) R('#2a2131', x + k + i * 3, gy - 5 - o, 1, 5);
+    });
+    R('#2a1f30', x - 64, gy - 1, 128, 2);
+    const base = gy - 18;
+    // Back slab with a pointed crown.
+    ctx.fillStyle = '#1b1420';
+    ctx.beginPath(); ctx.moveTo(x - 25, base); ctx.lineTo(x - 25, base - 62); ctx.lineTo(x - 15, base - 74); ctx.lineTo(x, base - 84); ctx.lineTo(x + 15, base - 74); ctx.lineTo(x + 25, base - 62); ctx.lineTo(x + 25, base); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#3b2f42';
+    ctx.beginPath(); ctx.moveTo(x - 23, base); ctx.lineTo(x - 23, base - 61); ctx.lineTo(x - 14, base - 72); ctx.lineTo(x, base - 81); ctx.lineTo(x + 14, base - 72); ctx.lineTo(x + 23, base - 61); ctx.lineTo(x + 23, base); ctx.closePath(); ctx.fill();
+    // Inner panel and carved runes.
+    R('#271e2d', x - 15, base - 64, 30, 46);
+    R('#33283a', x - 13, base - 62, 26, 42);
+    const rp = 0.35 + Math.sin(time * 2.4) * 0.25;
+    ctx.fillStyle = 'rgba(190,140,255,' + rp + ')';
+    [[-8, -56], [6, -50], [-6, -42], [7, -36], [-7, -30]].forEach(([dx, dy], i) => { ctx.fillRect(x + dx, base + dy, 2, 1); ctx.fillRect(x + dx + (i % 2 ? -1 : 1), base + dy + 1, 1, 2); });
+    // Cracks.
+    ctx.strokeStyle = '#1a1220'; ctx.lineWidth = 1; ctx.beginPath();
+    ctx.moveTo(x + 18, base - 58); ctx.lineTo(x + 14, base - 48); ctx.lineTo(x + 17, base - 40); ctx.lineTo(x + 13, base - 30);
+    ctx.moveTo(x - 20, base - 20); ctx.lineTo(x - 16, base - 28); ctx.lineTo(x - 19, base - 34); ctx.stroke();
+    // Bone pillars on the sides.
+    [-1, 1].forEach(d => {
+      const px = x + d * 29;
+      R('#120d16', px - 4, base - 70, 8, 70);
+      for (let yy = base - 68; yy < base; yy += 7) { R('#cbbf9f', px - 3, yy, 6, 5); R('#e8dfc4', px - 3, yy, 6, 1); R('#8f8268', px - 3, yy + 4, 6, 1); R('#6e624f', px + (d > 0 ? 2 : -3), yy + 1, 1, 3); }
+      // Horn sweeping up from each pillar top.
+      ctx.fillStyle = '#d9cfb3';
+      ctx.beginPath(); ctx.moveTo(px - 3, base - 70); ctx.quadraticCurveTo(px + d * 12, base - 80, px + d * 6, base - 98); ctx.quadraticCurveTo(px + d * 4, base - 82, px + 3, base - 70); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#9d9076';
+      ctx.beginPath(); ctx.moveTo(px + 1, base - 70); ctx.quadraticCurveTo(px + d * 8, base - 80, px + d * 6, base - 98); ctx.quadraticCurveTo(px + d * 5, base - 82, px + 3, base - 70); ctx.closePath(); ctx.fill();
+      // Armrest skull.
+      const sx = x + d * 22;
+      R('#1a1220', sx - 6, base - 23, 12, 11);
+      R('#ddd3b8', sx - 5, base - 22, 10, 7); R('#ddd3b8', sx - 3, base - 15, 6, 3);
+      R('#1a1220', sx - 3, base - 20, 2, 3); R('#1a1220', sx + 1, base - 20, 2, 3);
+      R('#1a1220', sx - 2, base - 14, 1, 2); R('#1a1220', sx, base - 14, 1, 2);
+      ctx.fillStyle = 'rgba(190,120,255,' + (0.5 + Math.sin(time * 3 + d) * 0.3) + ')'; ctx.fillRect(sx - 3, base - 19, 1, 1); ctx.fillRect(sx + 2, base - 19, 1, 1);
+    });
+    // Seat with a stone lip and a fur throw.
+    R('#17111d', x - 27, base - 15, 54, 16);
+    R('#4b3e54', x - 26, base - 14, 52, 5);
+    R('#5f5168', x - 26, base - 14, 52, 1);
+    R('#352a3c', x - 24, base - 9, 48, 9);
+    ctx.fillStyle = '#5a3b2a';
+    ctx.beginPath(); ctx.moveTo(x - 14, base - 14); ctx.lineTo(x + 14, base - 14); ctx.lineTo(x + 12, base - 2); ctx.lineTo(x + 8, base + 1); ctx.lineTo(x + 3, base - 3); ctx.lineTo(x - 2, base + 2); ctx.lineTo(x - 7, base - 2); ctx.lineTo(x - 12, base + 1); ctx.closePath(); ctx.fill();
+    R('#7a5338', x - 14, base - 14, 28, 2);
+    // Crest: horned skull with a glowing gem at the crown.
+    const cy = base - 72;
+    R('#120d16', x - 8, cy - 1, 16, 14);
+    R('#e3d9be', x - 7, cy, 14, 9); R('#e3d9be', x - 4, cy + 9, 8, 3);
+    R('#b4a88c', x - 7, cy + 7, 14, 2);
+    R('#1a1220', x - 5, cy + 3, 3, 3); R('#1a1220', x + 2, cy + 3, 3, 3); R('#1a1220', x - 1, cy + 6, 2, 2);
+    [-1, 1].forEach(d => { ctx.fillStyle = '#cfc4a6'; ctx.beginPath(); ctx.moveTo(x + d * 6, cy + 2); ctx.quadraticCurveTo(x + d * 16, cy - 2, x + d * 14, cy - 12); ctx.quadraticCurveTo(x + d * 12, cy - 3, x + d * 5, cy + 5); ctx.closePath(); ctx.fill(); });
+    const eg = 0.6 + Math.sin(time * 3) * 0.35;
+    ctx.fillStyle = 'rgba(200,120,255,' + eg + ')'; ctx.fillRect(x - 4, cy + 4, 1, 1); ctx.fillRect(x + 3, cy + 4, 1, 1);
+    R('#2b1840', x - 3, cy - 8, 6, 6); R('#9a5cff', x - 2, cy - 7, 4, 4); R('#e4c8ff', x - 1, cy - 7, 1, 1);
+    glow(x, cy - 5, 18, '170,110,255', 0.35 + Math.sin(time * 3) * 0.15);
+    // Torn banners hanging from the horns.
+    [-1, 1].forEach(d => {
+      const bx = x + d * 40, top = base - 66, sway = Math.sin(time * 1.3 + d) * 1.5;
+      R('#2b2230', bx - 7, top - 2, 14, 2);
+      ctx.fillStyle = '#4d1d38';
+      ctx.beginPath(); ctx.moveTo(bx - 6, top); ctx.lineTo(bx + 6, top); ctx.lineTo(bx + 6 + sway, top + 34); ctx.lineTo(bx + 3 + sway, top + 30); ctx.lineTo(bx + sway, top + 38); ctx.lineTo(bx - 3 + sway, top + 31); ctx.lineTo(bx - 6 + sway, top + 35); ctx.closePath(); ctx.fill();
+      R('#6d2a4e', bx - 6, top, 2, 30); R('#c9a35b', bx - 1, top + 8, 2, 2); R('#c9a35b', bx - 3, top + 12, 6, 1); R('#c9a35b', bx - 1, top + 14, 2, 6);
+    });
+    // Scattered bones and skulls on the steps.
+    [[-48, -1], [44, -1], [-34, -7], [36, -13]].forEach(([dx, dy], i) => {
+      if (i % 2) { R('#cfc4a6', x + dx - 4, gy + dy - 2, 8, 2); R('#e6ddc4', x + dx - 5, gy + dy - 3, 2, 3); R('#e6ddc4', x + dx + 3, gy + dy - 3, 2, 3); }
+      else { R('#d7cdb2', x + dx - 3, gy + dy - 5, 6, 5); R('#1a1220', x + dx - 2, gy + dy - 4, 1, 2); R('#1a1220', x + dx + 1, gy + dy - 4, 1, 2); }
+    });
+    // Twin braziers with purple fire.
+    [-1, 1].forEach(d => {
+      const fx = x + d * 58, fy = gy - 24;
+      R('#120d16', fx - 2, fy, 4, 24); R('#3a3040', fx - 1, fy, 2, 24);
+      R('#120d16', fx - 7, fy - 5, 14, 6); R('#4a3d52', fx - 6, fy - 4, 12, 4); R('#6a5a72', fx - 6, fy - 4, 12, 1);
+      R('#2a2131', fx - 5, gy - 2, 10, 2);
+      glow(fx, fy - 10, 34, '170,100,255', 0.4 + Math.sin(time * 9 + d) * 0.08);
+      for (let k = 0; k < 4; k++) {
+        const ph = time * 7 + k * 1.7 + d, h = 7 + Math.sin(ph) * 3 + (k === 1 ? 4 : 0);
+        ctx.fillStyle = k === 1 ? 'rgba(240,220,255,.9)' : 'rgba(170,100,255,.85)';
+        ctx.beginPath(); ctx.moveTo(fx - 5 + k * 3, fy - 4); ctx.quadraticCurveTo(fx - 4 + k * 3 + Math.sin(ph * 1.3) * 2, fy - 4 - h * 0.6, fx - 3.5 + k * 3 + Math.sin(ph) * 1.5, fy - 4 - h); ctx.quadraticCurveTo(fx - 2 + k * 3, fy - 4 - h * 0.4, fx - 2 + k * 3, fy - 4); ctx.closePath(); ctx.fill();
+      }
+      for (let k = 0; k < 3; k++) { const e = (time * 0.8 + k * 0.33 + (d > 0 ? 0.5 : 0)) % 1; ctx.fillStyle = 'rgba(210,170,255,' + (1 - e) + ')'; ctx.fillRect(Math.round(fx + Math.sin(e * 9 + k) * 4), Math.round(fy - 10 - e * 26), 1, 1); }
+    });
   }
 
   // Shared screen-space overlays for the outdoor scenes.
   function drawSideOverlays(label) {
+    if (bossFight && bossFight.cine) { drawBossCine(); return; }
     const W = canvas.width;
     if (sidePlayer.deadTime > 0 && sidePlayer.deadTime < 0.7) {
       ctx.fillStyle = 'rgba(0,0,0,' + (1 - sidePlayer.deadTime / 0.7) + ')'; ctx.fillRect(0, 0, W, canvas.height);
@@ -5975,7 +6344,7 @@ const Overworld = (() => {
     else if (platformScene === 'pass') drawSidePass();
     else if (platformScene === 'gloam') drawSideGloam();
     else drawSideForest();
-    drawSideHUD();
+    if (!(bossFight && bossFight.cine)) drawSideHUD();
     drawPanel();
     if (armorTutorialPending) drawArmorInventoryPrompt();
     if (paused) drawPauseMenu();
@@ -7330,6 +7699,7 @@ const Overworld = (() => {
     const k = e.key.toLowerCase();
     unlockAudio();
     if (introActive) { finishIntro(); e.preventDefault(); e.stopPropagation(); return; }
+    if (bossFight && bossFight.cine && !paused) { if (!e.repeat && ['e', 'enter', ' ', 'j', 'f', 'escape', 'x'].includes(k)) skipBossCine(); e.preventDefault(); e.stopPropagation(); return; }
     if (dialogue && !paused) {
       if (!e.repeat && ['e', 'enter', ' ', 'j', 'k', 'f', 'escape', 'x'].includes(k)) advanceDialogue();
       e.preventDefault(); e.stopPropagation(); return;
@@ -7539,6 +7909,7 @@ const Overworld = (() => {
     inputMode = 'pad';
     unlockAudio();
     if (introActive) { finishIntro(); return; }
+    if (bossFight && bossFight.cine && !paused) { if (action === 'primary' || action === 'attack' || action === 'back') skipBossCine(); return; }
     if (dialogue && !paused) { if (action === 'primary' || action === 'attack' || action === 'back') advanceDialogue(); return; }
     if (panel === 'shop' && !paused) {
       if (action === 'primary') buyShopItem(shopSel);
