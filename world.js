@@ -217,31 +217,24 @@ const Overworld = (() => {
   function introBlip() {
     if (typeof settings !== 'undefined' && settings.sound === false) return;
     try {
-      const AudioCtor = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtor) return;
-      if (!introAudio) introAudio = new AudioCtor();
-      if (introAudio.state === 'suspended') introAudio.resume();
-      const osc = introAudio.createOscillator();
-      const gain = introAudio.createGain();
-      const now = introAudio.currentTime;
+      const ac = audioCtx();
+      if (!ac) return;
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      const now = ac.currentTime;
       osc.type = 'square';
       const notes = [690, 760, 720, 820];
       osc.frequency.setValueAtTime(notes[introSoundChar % notes.length], now);
       gain.gain.setValueAtTime(0.012, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.019);
-      osc.connect(gain); gain.connect(introAudio.destination);
+      osc.connect(gain); gain.connect(ac.destination);
       osc.start(now); osc.stop(now + 0.02);
       introSoundChar++;
     } catch (_) {}
   }
-  function pqAsset(path) {
-    const revision = window.PQ_REV || 'latest';
-    const separator = path.includes('?') ? '&' : '?';
-    return path + separator + 'pqrev=' + encodeURIComponent(revision);
-  }
   // Use the user's actual uploaded howl recordings from the assets folder.
-  const introWolfHowlAudioOne = new Audio(pqAsset('./assets/first-wolf-howl.mp3'));
-  const introWolfHowlAudioTwo = new Audio(pqAsset('./assets/distant-wolf-howl.mp3'));
+  const introWolfHowlAudioOne = new Audio('./assets/first-wolf-howl.mp3');
+  const introWolfHowlAudioTwo = new Audio('./assets/distant-wolf-howl.mp3');
   introWolfHowlAudioOne.preload = 'auto';
   introWolfHowlAudioTwo.preload = 'auto';
   function playIntroWolfAudio(audio, volume, rate = 1) {
@@ -344,20 +337,20 @@ const Overworld = (() => {
         tex.w = c.width; tex.h = c.height;
       } catch (_) { tex.data = null; }
     };
-    tex.img.src = pqAsset(src);
+    tex.img.src = src;
     return tex;
   }
   const introEarthDay = introTexture('./assets/intro/earth-day.png');
   const introEarthNight = introTexture('./assets/intro/earth-night.png');
   const introMoonTex = introTexture('./assets/intro/moon.png');
   const introBlackIdle = new Image();
-  introBlackIdle.src = pqAsset('./assets/werewolves/Black_Werewolf/Idle.png');
+  introBlackIdle.src = './assets/werewolves/Black_Werewolf/Idle.png';
   const introRedIdle = new Image();
-  introRedIdle.src = pqAsset('./assets/werewolves/Red_Werewolf/Idle.png');
+  introRedIdle.src = './assets/werewolves/Red_Werewolf/Idle.png';
   const introBlackHurt = new Image();
-  introBlackHurt.src = pqAsset('./assets/werewolves/Black_Werewolf/Hurt.png');
+  introBlackHurt.src = './assets/werewolves/Black_Werewolf/Hurt.png';
   const introRedHurt = new Image();
-  introRedHurt.src = pqAsset('./assets/werewolves/Red_Werewolf/Hurt.png');
+  introRedHurt.src = './assets/werewolves/Red_Werewolf/Hurt.png';
 
   function introHash(n) {
     const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
@@ -1280,18 +1273,16 @@ const Overworld = (() => {
   const BATTLE_FADE = 0.7;
   // CC0 forest-enemy sprite sheet by Vomdrache (OpenGameArt).
   // The middle cell of row two is the detailed grey wolf used in battles.
-  const battleWolfSprite = new Image();
-  battleWolfSprite.src = 'https://opengameart.org/sites/default/files/enemies_081719_zp.png';
   // User-provided free werewolf sprites: idle poses converted to compact 48px images.
   // Use only the supplied animated sheets in the intro; no legacy standing sprites.
   const introBlackWalk = new Image();
-  introBlackWalk.src = pqAsset('./assets/werewolves/Black_Werewolf/walk.png');
+  introBlackWalk.src = './assets/werewolves/Black_Werewolf/walk.png';
   const introBlackRun = new Image();
-  introBlackRun.src = pqAsset('./assets/werewolves/Black_Werewolf/Run.png');
+  introBlackRun.src = './assets/werewolves/Black_Werewolf/Run.png';
   const introRedWalk = new Image();
-  introRedWalk.src = pqAsset('./assets/werewolves/Red_Werewolf/Walk.png');
+  introRedWalk.src = './assets/werewolves/Red_Werewolf/Walk.png';
   const introRedRun = new Image();
-  introRedRun.src = pqAsset('./assets/werewolves/Red_Werewolf/Run.png');
+  introRedRun.src = './assets/werewolves/Red_Werewolf/Run.png';
   let introWolfFleePaths = null;
 
   let camX = 0, camY = 0;
@@ -1309,30 +1300,30 @@ const Overworld = (() => {
   let playerSheetReady = false;
   playerSheet.onload = () => { playerSheetReady = true; };
   playerSheet.onerror = () => { playerSheetReady = false; };
-  playerSheet.src = pqAsset('./assets/player-character3.png');
+  playerSheet.src = './assets/player-character3.png';
 
   // Actual knight sprite sheets from the ZIP the player added to the repository.
   const knightSprites = {};
   ['Idle','Run','Attacks','Hurt','Death','Jump','Roll','Pray','Health'].forEach(name => {
     const image = new Image();
-    image.src = pqAsset('./assets/knight/' + name + '.png');
+    image.src = './assets/knight/' + name + '.png';
     knightSprites[name.toLowerCase()] = image;
   });
   knightSprites.air = new Image();
-  knightSprites.air.src = pqAsset('./assets/knight/attack_from_air.png');
+  knightSprites.air.src = './assets/knight/attack_from_air.png';
   // Monster sheets (single-row strips). Loaded once per file.
   const mobSheets = {};
   function mobSheet(T, anim) {
     const key = T.src + anim[0];
     if (!mobSheets[key]) {
       const img = new Image();
-      img.src = pqAsset('./assets/' + T.src + anim[0] + '.png');
+      img.src = './assets/' + T.src + anim[0] + '.png';
       mobSheets[key] = img;
     }
     return mobSheets[key];
   }
   Object.values(MOB_TYPES).forEach(T => Object.values(T.anims).forEach(an => { if (an) mobSheet(T, an); }));
-  function loadImg(path) { const i = new Image(); i.src = pqAsset('./assets/' + path); return i; }
+  function loadImg(path) { const i = new Image(); i.src = './assets/' + path; return i; }
   const hollowArt = {
     back: loadImg('hollow/back.png'), middle: loadImg('hollow/middle.png'), ground: loadImg('hollow/ground.png'), log: loadImg('hollow/log.png'),
     dadIdle: loadImg('hollow/dad-idle.png'), dadRun: loadImg('hollow/dad-run.png'), dadSlash: loadImg('hollow/dad-slash.png')
@@ -1348,13 +1339,13 @@ const Overworld = (() => {
   let forestTilesReady = false;
   forestTilesSheet.onload = () => { forestTilesReady = true; };
   forestTilesSheet.onerror = () => { forestTilesReady = false; };
-  forestTilesSheet.src = pqAsset('./assets/forest_pack/TopDownFantasy-Forest/Tiles/Tileset.png');
+  forestTilesSheet.src = './assets/forest_pack/TopDownFantasy-Forest/Tiles/Tileset.png';
 
   const forestDecorSheet = new Image();
   let forestDecorReady = false;
   forestDecorSheet.onload = () => { forestDecorReady = true; };
   forestDecorSheet.onerror = () => { forestDecorReady = false; };
-  forestDecorSheet.src = pqAsset('./assets/forest_pack/TopDownFantasy-Forest/Decorations/Decorations.png');
+  forestDecorSheet.src = './assets/forest_pack/TopDownFantasy-Forest/Decorations/Decorations.png';
 
   
   // Supplied side-scrolling forest background by Eder Muniz.
@@ -1362,7 +1353,7 @@ const Overworld = (() => {
   let sideForestBackgroundReady = false;
   sideForestBackground.onload = () => { sideForestBackgroundReady = true; };
   sideForestBackground.onerror = () => { sideForestBackgroundReady = false; };
-  sideForestBackground.src = pqAsset('./assets/free_forest/Free Pixel Art Forest/Preview/Background.png');
+  sideForestBackground.src = './assets/free_forest/Free Pixel Art Forest/Preview/Background.png';
 
   const inventory = { berries: 3, wood: 0, fish: 0, fang: 0, tonic: 0, coins: 0, bread: 0, bone: 0, spore: 0, eye: 0, wisp: 0, boneblade: 0, crown: 0,
     ember: 0, feather: 0, lampglass: 0, toadskin: 0, emberedge: 0, moonsilver: 0, palemane: 0, sigil: 0, locket: 0 };
@@ -1444,7 +1435,7 @@ const Overworld = (() => {
   let interiorArtReady = false;
   interiorArtSheet.onload = () => { interiorArtReady = true; };
   interiorArtSheet.onerror = () => { interiorArtReady = false; };
-  interiorArtSheet.src = pqAsset('./assets/interiors/Pixel_Interiors/Interior.png');
+  interiorArtSheet.src = './assets/interiors/Pixel_Interiors/Interior.png';
 
   function drawInteriorArt(sx, sy, sw, sh, x, y, w, h) {
     if (!interiorArtReady) return;
@@ -1458,7 +1449,7 @@ const Overworld = (() => {
   let interiorSheetReady = false;
   interiorSheet.onload = () => { interiorSheetReady = true; };
   interiorSheet.onerror = () => { interiorSheetReady = false; };
-  interiorSheet.src = pqAsset('./assets/kenney-interior-tilemap.png');
+  interiorSheet.src = './assets/kenney-interior-tilemap.png';
 
   function drawInteriorSprite(col, row, cols, rows, x, y, drawW = cols * 16, drawH = rows * 16) {
     if (!interiorSheetReady) return;
@@ -2249,6 +2240,7 @@ const Overworld = (() => {
   }
   function beginBattle(w) {
     if (battle) return;
+    bloodDrops.length = 0;
     battle = { wolf:w, wolfHP:12, maxWolfHP:12, phase:'intro', fade:0, message:'A wild wolf appeared!', menu:0, turn:0 };
     keys.clear();
     player.moving = false;
@@ -2256,6 +2248,7 @@ const Overworld = (() => {
 
   function updateBattle(dt) {
     if (!battle) return;
+    updateBlood(dt, BATTLE_BLOOD_FLOOR);
     if (battle.phase === 'intro') {
       battle.fade = Math.min(1, battle.fade + dt / BATTLE_FADE);
       if (battle.fade >= 1) battle.phase = 'command';
@@ -2266,6 +2259,7 @@ const Overworld = (() => {
           const i = wolves.indexOf(battle.wolf);
           if (i >= 0) wolves.splice(i,1);
         }
+        bloodDrops.length = 0;
         battle = null;
       }
     }
@@ -2276,6 +2270,7 @@ const Overworld = (() => {
     if (action === 'fight') {
       const damage = Math.max(3, stats.strength + 2);
       battle.wolfHP = Math.max(0, battle.wolfHP - damage);
+      spawnBlood(232, 135, 1, battle.wolfHP <= 0);
       if (battle.wolfHP <= 0) {
         battle.message = 'The wolf ran back into the forest!';
         battle.phase = 'outro';
@@ -2283,6 +2278,7 @@ const Overworld = (() => {
       }
       battle.message = 'You stand your ground! The wolf lunges!';
       stats.health = Math.max(0, stats.health - 2);
+      spawnBlood(108, 145, -1, stats.health <= 0);
       if (stats.health <= 0) {
         battle.message = 'You are worn out! The wolf retreats.';
         battle.phase = 'outro';
@@ -2293,7 +2289,7 @@ const Overworld = (() => {
     }
   }
 
-  function drawBattleWolfFallback() {
+  function drawBattleWolf() {
     // Large, layered pixel-art wolf, facing the player.
     const x=224, y=100, bob=Math.sin(time*2.2)*1.2;
     ctx.save(); ctx.translate(x,y+bob); ctx.scale(0.72,0.72);
@@ -2334,28 +2330,6 @@ const Overworld = (() => {
     ctx.restore();
   }
 
-
-  function drawBattleWolf() {
-    if (!battleWolfSprite.complete || !battleWolfSprite.naturalWidth || !battleWolfSprite.naturalHeight) {
-      drawBattleWolfFallback();
-      return;
-    }
-    const bob = Math.sin(time * 2.2) * 1.2;
-    const cellW = battleWolfSprite.naturalWidth / 3;
-    const cellH = battleWolfSprite.naturalHeight / 4;
-    // The detailed grey wolf is centered in the second row of this CC0 sheet.
-    ctx.save();
-    ctx.imageSmoothingEnabled = false;
-    ctx.fillStyle = 'rgba(0,0,0,0.34)';
-    ctx.fillRect(202, 190, 98, 9);
-    // Set it farther back on the right so the player and wolf have clear space between them.
-    ctx.drawImage(
-      battleWolfSprite,
-      cellW, cellH, cellW, cellH,
-      198, 88 + bob, 104, 104
-    );
-    ctx.restore();
-  }
 
   // ----- Hand-drawn pieces that the interior sprite sheet does not include. -----
   // Palette taken from Pixel_Interiors so everything matches.
@@ -2660,6 +2634,7 @@ const Overworld = (() => {
     ctx.fillStyle='rgba(0,0,0,0.3)';ctx.fillRect(35,180,105,16);
     ctx.save();ctx.translate(76,108);ctx.scale(4.8,4.8);const oldFacing=player.facing;player.facing='up';drawPlayer(8,16);player.facing=oldFacing;ctx.restore();
     drawBattleWolf();
+    drawBlood();
     // Battle HUD
     ctx.fillStyle='rgba(10,14,27,0.94)';ctx.fillRect(12,10,133,47);
     ctx.strokeStyle='#e4d5b5';ctx.lineWidth=2;ctx.strokeRect(13,11,131,45);
@@ -2792,7 +2767,9 @@ const Overworld = (() => {
   const combatFx = [], damageNumbers = [], pickups = [];
   let bloodEffects = true, bloodBurst = 0;
   const bloodDrops = [];
-  const BLOOD_COLORS = ['#5a0c29', '#981638', '#d12748', '#ef5262'];
+  const BLOOD_COLORS = ['#87182c', '#b41e35', '#db3048', '#ff6571'];
+  const BLOOD_LIMIT = 128;
+  const BATTLE_BLOOD_FLOOR = [{ x: 0, y: 184, w: 320 }];
   const DRY_MOBS = new Set(['skeleton', 'ghost', 'shade', 'skull', 'lamp', 'mourn', 'tidemaw']);
 
   function setBloodEffects(enabled) {
@@ -2803,15 +2780,44 @@ const Overworld = (() => {
   function spawnBlood(x, y, direction, heavy) {
     if (!bloodEffects) return;
     const seed = ++bloodBurst * 67;
-    const count = heavy ? 19 : 11;
+    const count = heavy ? 22 : 13;
     for (let i = 0; i < count; i++) {
       const a = introHash(seed + i * 3), b = introHash(seed + i * 3 + 1), c = introHash(seed + i * 3 + 2);
-      const life = 0.27 + a * 0.34;
+      const life = 0.48 + a * 0.23;
       bloodDrops.push({ x: x + a * 6 - 3, y: y + b * 8 - 4,
-        vx: direction * (35 + a * (heavy ? 130 : 90)) * (i % 5 === 0 ? -0.48 : 1), vy: -28 - b * 124,
-        life, max: life, size: i % 7 === 0 ? 3 : i % 3 ? 2 : 1, color: BLOOD_COLORS[Math.floor(c * BLOOD_COLORS.length)] });
+        vx: direction * (30 + a * (heavy ? 135 : 95)) * (i % 5 === 0 ? -0.48 : 1), vy: -26 - b * 104,
+        life, size: i % 5 === 0 ? (heavy ? 4 : 3) : i % 3 ? 2 : 1, color: BLOOD_COLORS[Math.floor(c * BLOOD_COLORS.length)] });
     }
-    if (bloodDrops.length > 128) bloodDrops.splice(0, bloodDrops.length - 128);
+    if (bloodDrops.length > BLOOD_LIMIT) bloodDrops.splice(0, bloodDrops.length - BLOOD_LIMIT);
+  }
+  function updateBlood(dt, platforms) {
+    for (let i = bloodDrops.length - 1; i >= 0; i--) {
+      const p = bloodDrops[i];
+      p.life -= dt;
+      if (p.life <= 0) { bloodDrops.splice(i, 1); continue; }
+      if (p.settled) continue;
+      const previousY = p.y;
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 460 * dt;
+      if (p.y < previousY) continue;
+      let surface = Infinity;
+      for (const pl of platforms) {
+        if (p.x >= pl.x && p.x < pl.x + pl.w && previousY <= pl.y && p.y >= pl.y) surface = Math.min(surface, pl.y);
+      }
+      if (surface < Infinity) {
+        p.y = surface - 1;
+        p.settled = true;
+        p.life = 0.45 + p.size * 0.1;
+      }
+    }
+  }
+  function drawBlood() {
+    ctx.save();
+    for (const p of bloodDrops) {
+      ctx.globalAlpha = Math.min(1, p.life * (p.settled ? 2.4 : 6));
+      ctx.fillStyle = p.settled ? '#821a30' : p.color;
+      ctx.fillRect(Math.round(p.x), Math.round(p.y) - (p.settled ? 0 : p.size - 1), p.settled ? p.size + 1 : p.size, p.settled ? 1 : p.size);
+    }
+    ctx.restore();
   }
   let levelUpUntil = 0;
 
@@ -2868,13 +2874,13 @@ const Overworld = (() => {
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtor) return null;
     if (!introAudio) introAudio = new AudioCtor();
-    if (introAudio.state === 'suspended') introAudio.resume();
+    if (introAudio.state === 'suspended') introAudio.resume().catch(() => {});
     return introAudio;
   }
   function loadSfxFile(file) {
     if (sfxBuffers[file] || sfxLoading[file]) return;
     const ac = audioCtx(); if (!ac || !window.fetch) return;
-    sfxLoading[file] = fetch(pqAsset('./assets/audio/sfx/' + file + '.mp3'))
+    sfxLoading[file] = fetch('./assets/audio/sfx/' + file + '.mp3')
       .then(r => r.arrayBuffer())
       .then(b => new Promise((res, rej) => ac.decodeAudioData(b, res, rej)))
       .then(buf => { sfxBuffers[file] = buf; })
@@ -2920,7 +2926,7 @@ const Overworld = (() => {
   const musicTracks = {};
   function musicTrack(key) {
     if (!musicTracks[key]) {
-      const a = new Audio(pqAsset('./assets/audio/music/' + MUSIC_FILES[key] + '.mp3'));
+      const a = new Audio('./assets/audio/music/' + MUSIC_FILES[key] + '.mp3');
       a.loop = true; a.preload = 'auto'; a.volume = 0;
       musicTracks[key] = { a, v: 0, playing: false };
     }
@@ -2974,13 +2980,11 @@ const Overworld = (() => {
   }
 
   function synthSfx(name) {
-    const AudioCtor = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtor) return;
     if (typeof settings !== 'undefined' && settings && settings.sound === false) return;
     try {
-      if (!introAudio) introAudio = new AudioCtor();
-      if (introAudio.state === 'suspended') introAudio.resume();
-      const ac = introAudio, now = ac.currentTime;
+      const ac = audioCtx();
+      if (!ac) return;
+      const now = ac.currentTime;
       const out = ac.createGain(); out.connect(ac.destination);
       const noise = (dur) => {
         const buf = ac.createBuffer(1, Math.ceil(ac.sampleRate * dur), ac.sampleRate);
@@ -3386,7 +3390,7 @@ const Overworld = (() => {
     hitStop = big ? 0.075 : 0.05;
     screenShake = Math.max(screenShake, big ? 2.5 : 1.2);
     spawnSparks(m.x - f * 8, m.y - m.T.bodyH * 0.6, f, big ? 12 : 7, m.type === 'ghost' ? ['#d8fbff', '#7fe3ff', '#ffffff'] : ['#fff6d0', '#ffd27a', '#ff9a4a']);
-    if (!DRY_MOBS.has(m.type)) spawnBlood(m.x, m.y - m.T.bodyH * 0.52, f, big || m.hp === 0);
+    if (dmg > 0 && !DRY_MOBS.has(m.type)) spawnBlood(m.x, m.y - m.T.bodyH * 0.52, f, big || m.hp === 0);
     addDamageNumber(m.x, mobTop(m) - 10, crit ? dmg + '!' : dmg, crit ? '#ffdf6b' : '#ffffff');
     sfx(big ? 'hitBig' : 'hit');
     mobVoice(m, 'hurt');
@@ -3477,7 +3481,7 @@ const Overworld = (() => {
     hitStop = 0.06; screenShake = Math.max(screenShake, 2.5);
     addDamageNumber(sidePlayer.x, sidePlayer.y - 58, amount, '#ff6b6b');
     spawnSparks(sidePlayer.x, sidePlayer.y - 28, fromDir, 6, ['#ff8a8a', '#ffffff']);
-    spawnBlood(sidePlayer.x, sidePlayer.y - 28, fromDir, stats.health <= 0);
+    if (amount > 0) spawnBlood(sidePlayer.x, sidePlayer.y - 28, fromDir, stats.health <= 0);
     sfx('hurt');
     padRumble(0.9, 0.5, stats.health <= 0 ? 420 : 200);
     if (stats.health <= 0 && phoenixRevive()) {
@@ -3492,16 +3496,7 @@ const Overworld = (() => {
     screenShake = Math.max(0, screenShake - dt * 14);
     comboTimer = Math.max(0, comboTimer - dt);
     landTime = Math.max(0, landTime - dt);
-    for (let i = bloodDrops.length - 1; i >= 0; i--) {
-      const p = bloodDrops[i];
-      p.life -= dt;
-      if (p.life <= 0) { bloodDrops.splice(i, 1); continue; }
-      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 330 * dt;
-      if (p.y >= SIDE_GROUND_Y - 1) {
-        p.y = SIDE_GROUND_Y - 1; p.vy = 0; p.vx = 0;
-        p.life = Math.min(p.life, 0.16);
-      }
-    }
+    if (bloodDrops.length) updateBlood(dt, sidePlatforms());
     for (let i = combatFx.length - 1; i >= 0; i--) {
       const p = combatFx[i];
       p.life -= dt;
@@ -3597,12 +3592,7 @@ const Overworld = (() => {
         ctx.globalAlpha = 1;
       }
     });
-    for (const drop of bloodDrops) {
-      ctx.globalAlpha = Math.min(1, drop.life * 5);
-      ctx.fillStyle = drop.color;
-      ctx.fillRect(Math.round(drop.x), Math.round(drop.y) - drop.size + 1, drop.size, drop.size);
-    }
-    ctx.globalAlpha = 1;
+    if (bloodDrops.length) drawBlood();
     pickups.forEach(p => {
       const bob = p.vy === 0 ? Math.sin(time * 5 + p.x) * 1.5 : 0;
       if (p.type === 'coin') {
@@ -10990,11 +10980,8 @@ const Overworld = (() => {
     introTime = 0; introSoundChar = 0; introTextSegment = ''; introLastReveal = 0;
     introWolfFleePaths = null;
     introWolfHowlOne = false; introWolfHowlTwo = false; introWolfHowlEcho = false;
-    if (introActive) {
-      try {
-        const AudioCtor = window.AudioContext || window.webkitAudioContext;
-        if (AudioCtor) { if (!introAudio) introAudio = new AudioCtor(); if (introAudio.state === 'suspended') introAudio.resume(); }
-      } catch (_) {}
+    if (introActive && (typeof settings === 'undefined' || settings.sound !== false)) {
+      try { audioCtx(); } catch (_) {}
     }
     if (introActive) { insideHouse = true; interiorPlayer.x = KID_SPAWN.x; interiorPlayer.y = KID_SPAWN.y; interiorPlayer.facing = KID_SPAWN.facing; }
     window.addEventListener('keydown', onKeyDown, true);

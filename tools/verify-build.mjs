@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = process.argv[2] ? path.resolve(process.argv[2]) : fileURLToPath(new URL('../', import.meta.url));
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+assert.match(html, /<script\s+defer\s+src="\.\/world\.js"\s*><\/script>/, 'Game must load the same-site runtime directly');
 for (const [i, match] of [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].entries()) {
   new vm.Script(match[1], { filename: `index.html inline script ${i + 1}` });
 }
@@ -28,6 +29,7 @@ const marker = '  return { init, update, draw, stop,';
 assert(js.includes(marker), 'Could not locate runtime data for validation');
 new vm.Script(js.replace(marker, `
   window.buildData = { REGIONS, SCENE_MOBS, MOB_TYPES, STORY_DEFAULTS, LORE, FIRES, SFX_BANK, MUSIC_FILES, BOSS_FORMS, BOSS_LINES };
+  window.bloodTest = { bloodDrops, spawnBlood, updateBlood, setBloodEffects };
 ${marker}`), { filename: 'world.js' }).runInNewContext(context);
 const { REGIONS, SCENE_MOBS, MOB_TYPES, STORY_DEFAULTS, LORE, FIRES, SFX_BANK, MUSIC_FILES, BOSS_FORMS, BOSS_LINES } = context.window.buildData;
 const unique = (rows, name) => assert.equal(new Set(rows.map(row => row.id)).size, rows.length, `Duplicate ${name} IDs`);
@@ -68,4 +70,21 @@ for (const content of [html, js]) {
   for (const [, name] of content.matchAll(/['"]((?:\.\/)?assets\/[^'"\r\n]+\.(?:png|jpe?g|b64|mp3))['"]/gi)) ref(name);
 }
 for (const name of refs) assert(fs.statSync(path.join(root, name)).size > 0, `Empty runtime asset: ${name}`);
+
+const { bloodDrops, spawnBlood, updateBlood, setBloodEffects } = context.window.bloodTest;
+spawnBlood(64, 96, 1, false);
+const lightCount = bloodDrops.length;
+assert(lightCount > 0, 'A direct hit should create blood particles');
+for (let tick = 0; tick < 36; tick++) updateBlood(1 / 60, [{ x: 0, y: 115, w: 160 }]);
+assert(bloodDrops.some(p => p.settled && p.y === 114), 'Blood should settle on raised platforms');
+for (let tick = 0; tick < 100; tick++) updateBlood(1 / 60, []);
+assert.equal(bloodDrops.length, 0, 'Blood splashes should expire');
+spawnBlood(64, 96, 1, true);
+assert(bloodDrops.length > lightCount, 'Heavy hits should create a larger burst');
+for (let hit = 0; hit < 20; hit++) spawnBlood(64, 96, 1, true);
+assert(bloodDrops.length <= 128, 'Keep the particle budget bounded');
+setBloodEffects(false);
+spawnBlood(64, 96, 1, true);
+assert.equal(bloodDrops.length, 0, 'Turning blood off clears existing blood and suppresses new bursts');
+
 console.log(`Verified ${Object.keys(REGIONS).length} regions, ${LORE.length} lore entries, ${FIRES.length} campfires, ${Object.keys(MOB_TYPES).length} monster types, and ${refs.size} runtime asset references.`);

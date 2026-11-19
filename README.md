@@ -37,7 +37,7 @@ own epilogue. Existing Chapter 4 saves keep their original ledger progress.
 
 - All seven bosses now reveal a second form at half health. The short cutscene can be skipped with the same controls as the first entrance; combat resumes with a brief grace period.
 - Skarn, Mourn and Tidemaw use their own pixel art. Both opening moon shots show the fracture, and each outdoor region has its own set of scenery and lighting accents. See `assets/ASSET-CREDITS.txt` for the scenery source.
-- Blood particles are optional. Switch them off in either the title settings or the in-game pause menu.
+- Hits on living enemies and the player leave short-lived pixel blood sprays and splashes. Shield blocks and enemies like skeletons and ghosts don't bleed. Switch Blood Effects off in either the title settings or the in-game pause menu.
 - Choose **Account → Create Account**, enter an email, password and player name, then follow the email confirmation link before signing in. If an old link failed, try signing in first, then use **Resend confirmation** if your email is still unconfirmed. Guest saves are separate from account saves. Existing cloud saves are read from the same Supabase project.
 - If the cloud service cannot load a slot, retry or sign out to play as a guest. The game does not silently replace a cloud slot with a guest save.
 - Deployment setup: in the Supabase project's **Authentication → URL Configuration**, set the Site URL and allowed redirect URL to `https://clever.is-local.org/`. The default confirmation email should link to `{{ .ConfirmationURL }}`. Previously sent links retain their original settings.
@@ -122,6 +122,8 @@ No build step is required.
 3. Start a new save slot to see the intro. Existing saves continue from their saved location.
 
 Some browser features, audio playback, and account/cloud functions may behave differently when opening the file directly; using a local web server is recommended for development.
+
+On ChromeOS and other browsers, guest mode loads the game from the same site without contacting the GitHub API or the account server. If your browser disallows website storage, guest saves last only until you close or reload the page. The pre-alpha access code is separate. If a device or network policy blocks the game site itself, ask the administrator whether it can be approved.
 
 ## Save data
 

@@ -147,6 +147,11 @@
   #account-submit { background: #684832 !important; }
   #account-dialog :focus-visible { outline: 2px solid #ffdca1; outline-offset: 2px; }
   #account-feedback { color: #ffdb9c; min-height: 1.5em; }
+  #game-load-error {
+    position: fixed; z-index: 10000; bottom: 1rem; left: 1rem; right: 1rem; margin: 0;
+    padding: .75rem; background: #25131c; color: #ffe4e4; border: 1px solid #ba6269;
+    text-align: center; font: 16px system-ui;
+  }
 </style>
 </head>
 <body>
@@ -213,36 +218,13 @@
     </div>
   </div>
 </div>
+<p id="game-load-error" role="alert" hidden>PixelQuest could not load its game files. Refresh to retry.</p>
+<script defer src="./world.js"></script>
 <script>
-(async function pixelquestUpdateLoader(){
-  const repoApi = 'https://api.github.com/repos/jasoncoker010101-cmd/pixelquest/branches/main';
-  const official = location.hostname === 'jasoncoker010101-cmd.github.io';
-  const params = new URLSearchParams(location.search);
-  const currentRev = params.get('pqrev') || '';
-  async function getLatestRevision(){
-    try {
-      const response = await fetch(repoApi, { cache: 'no-store', headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(3500) });
-      if (!response.ok) throw new Error('GitHub update check failed');
-      const data = await response.json();
-      return data && data.commit && data.commit.sha ? data.commit.sha : '';
-    } catch (_) { return ''; }
-  }
-  const latest = official ? await getLatestRevision() : '';
-  // Only select a runtime asset revision. Never reload the page or interrupt play.
-  window.PQ_REV = latest || currentRev || String(Date.now());
-  const gameScript = document.createElement('script');
-  gameScript.src = 'world.js?rev=' + encodeURIComponent(window.PQ_REV);
-  gameScript.onerror = () => {
-    // If GitHub's API is unavailable, still bypass the browser's cached script.
-    const fallback = document.createElement('script');
-    fallback.src = 'world.js?reload=' + Date.now();
-    fallback.onerror = () => { message = 'GAME COULD NOT LOAD. REFRESH TO RETRY.'; };
-    document.body.appendChild(fallback);
-  };
-  document.body.appendChild(gameScript);
-})();
-</script>
-<script>
+// Core gameplay only requires files on this site. Account calls happen on demand.
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('game-load-error').hidden = typeof Overworld !== 'undefined';
+});
 const tvShell = document.getElementById('tvShell');
 const tvFullscreenButton = document.getElementById('tvFullscreen');
 async function toggleTVFullscreen() {
