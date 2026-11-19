@@ -14,7 +14,8 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
 - **Wildlife:** fish jump in the water, rabbits run away when approached, and wolves appear at night.
 - **Wolf encounters:** wolves can trigger a battle when you get close. Choose to fight or attempt to run.
 - **Player stats:** health, stamina, level, strength, defense, steps, and play time.
-- **Inventory:** view your current berries, wood, and fish counts.
+- **Inventory:** full-screen bag with ITEMS / GEAR / STATS / QUEST tabs. Use berries, fish, or tonics to heal; goblins drop coins, fangs, and tonics.
+- **Combat:** tap attack for a 3-hit combo (slash, slash, heavy finisher), attack while sprinting for a dash thrust, or attack in the air. Hits have hit-pause, knockback, sparks, damage numbers, and XP/level-ups.
 - **Saving:** browser save slots; optional account sign-in enables cloud saves.
 - **Device support:** keyboard controls and on-screen touch controls for phones and tablets.
 
@@ -29,6 +30,7 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
 | Back / close | Escape | ○ Circle | — |
 | Run | Hold Shift | Hold L1, R1, or L2 | RUN |
 | Inventory | I | △ Triangle | BAG |
+| Inventory: select / use / switch tab | Arrows / E / Q, R, Tab | D-pad / ✕ / L1, R1 | — |
 | Stats | C | Touchpad or Create | STATS |
 | Pause | Escape / P | Options | — |
 | Fight / escape encounter | 1 / 2 | ✕ or □ / ○ | FIGHT / RUN |

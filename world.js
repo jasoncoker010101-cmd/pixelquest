@@ -23,7 +23,7 @@ const Overworld = (() => {
   let dadNoteRead = false;
   let armorTutorialPending = false;
   let armorQuestActive = false;
-  const sidePlayer = { x: 410, y: SIDE_GROUND_Y, vx: 0, vy: 0, onGround: true, facing: 1, moving: false, walk: 0, attackTime: 0, attackCooldown: 0, hurtTime: 0, invulnTime: 0, deadTime: 0 };
+  const sidePlayer = { x: 410, y: SIDE_GROUND_Y, vx: 0, vy: 0, onGround: true, facing: 1, moving: false, walk: 0, attackTime: 0, attackCooldown: 0, hurtTime: 0, invulnTime: 0, deadTime: 0, atk: null, deathAge: 0 };
   const HOUSE_SIDE_PLATFORMS = [
     { x: 0, y: SIDE_GROUND_Y, w: HOUSE_SIDE_WIDTH, h: 44 },
     { x: 24, y: 160, w: 82, h: 10 },
@@ -52,9 +52,12 @@ const Overworld = (() => {
     { x: 3670, y: 136, w: 126, h: 10 }
   ];
   const sideGoblins = [
-    { x: 1370, home: 1370, min: 1280, max: 1470, dir: -1, patrolDir: -1, runUntil: 0, phase: 0, hp: 3, maxHp: 3, attackCooldown: 0, attackTime: 0, attackHit: false, hurtTime: 0, deadTime: 0, dead: false, respawn: 0, moving: false },
-    { x: 2760, home: 2760, min: 2660, max: 2860, dir: 1, patrolDir: 1, runUntil: 0, phase: 2.7, hp: 3, maxHp: 3, attackCooldown: 0, attackTime: 0, attackHit: false, hurtTime: 0, deadTime: 0, dead: false, respawn: 0, moving: false }
-  ];
+    { x: 1370, home: 1370, min: 1280, max: 1470, dir: -1, patrolDir: -1, phase: 0 },
+    { x: 2050, home: 2050, min: 1960, max: 2140, dir: 1, patrolDir: 1, phase: 1.3 },
+    { x: 2760, home: 2760, min: 2660, max: 2860, dir: 1, patrolDir: 1, phase: 2.7 },
+    { x: 3350, home: 3350, min: 3260, max: 3440, dir: -1, patrolDir: -1, phase: 4.1 },
+    { x: 3560, home: 3560, min: 3500, max: 3620, dir: 1, patrolDir: 1, phase: 5.2 }
+  ].map(gob => Object.assign(gob, { runUntil: 0, hp: 5, maxHp: 5, attackCooldown: 0, attackTime: 0, attackHit: false, hurtTime: 0, deadTime: 0, dead: false, respawn: 0, moving: false, kvx: 0, flash: 0, walk: 0, showHpUntil: 0 }));
 
   // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
   let introActive = false, introTime = 0, introAudio = null, introSoundChar = 0, introTextSegment = '', introLastReveal = 0, introWolfHowlOne = false, introWolfHowlTwo = false, introWolfHowlEcho = false;
@@ -1132,6 +1135,8 @@ const Overworld = (() => {
     image.src = pqAsset('./assets/knight/' + name + '.png');
     knightSprites[name.toLowerCase()] = image;
   });
+  knightSprites.air = new Image();
+  knightSprites.air.src = pqAsset('./assets/knight/attack_from_air.png');
   // Goblin Scout sheet: five horizontal animation rows, each made of
   // 600x500 cells. The werewolf sheets remain reserved for the intro.
   const goblinScoutSheet = new Image();
@@ -1167,10 +1172,10 @@ const Overworld = (() => {
   sideForestBackground.onerror = () => { sideForestBackgroundReady = false; };
   sideForestBackground.src = pqAsset('./assets/free_forest/Free Pixel Art Forest/Preview/Background.png');
 
-  const inventory = { berries: 3, wood: 0, fish: 0 };
+  const inventory = { berries: 3, wood: 0, fish: 0, fang: 0, tonic: 0, coins: 0 };
   // Dad's armor is a cosmetic outfit set. It is saved with the player and shown in the world and inventory.
   const equipment = { armor: false };
-  const stats = { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0 };
+  const stats = { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0, xp: 0, kills: 0 };
 
   const bunnies = [
     { x: 17 * TILE, y: 10 * TILE, vx: 0, vy: 0, flee: 0, hop: 0 },
@@ -2479,7 +2484,481 @@ const Overworld = (() => {
     sideCameraX += (target - sideCameraX) * Math.min(1, dt * 7);
   }
 
+  // ---------------------------------------------------------------------------
+  // Knight combat: frame-accurate moves taken from assets/knight/Attacks.png
+  // (8 x 5 grid of 128 x 64 cells, knight faces right) and attack_from_air.png.
+  // Each move lists the frames it plays, which of those frames deal damage,
+  // its reach, damage, knockback, forward lunge, and the move it chains into.
+  // ---------------------------------------------------------------------------
+  const KNIGHT_MOVES = {
+    slash1:   { sheet: 'attacks', cols: 8, frames: [1, 2, 3, 4, 5], fps: 20, active: [2, 3], reach: 50, dmg: 1, knock: 95, lunge: 60, next: 'slash2', stamina: 6 },
+    slash2:   { sheet: 'attacks', cols: 8, frames: [6, 7, 8, 9], fps: 18, active: [1, 2], reach: 50, dmg: 1, knock: 110, lunge: 60, next: 'finisher', stamina: 6 },
+    finisher: { sheet: 'attacks', cols: 8, frames: [15, 16, 17, 18, 19, 20, 21, 22], fps: 17, active: [2, 3, 4], reach: 64, dmg: 2, knock: 230, lunge: 95, next: null, shake: 3, stop: 0.09, recover: 0.18, stamina: 10 },
+    thrust:   { sheet: 'attacks', cols: 8, frames: [10, 11, 12, 13, 14], fps: 16, active: [1, 2, 3], reach: 56, dmg: 2, knock: 170, lunge: 190, next: 'slash2', shake: 1.5, stamina: 12 },
+    air:      { sheet: 'air', cols: 2, frames: [2, 3, 4, 5, 6], fps: 16, active: [1, 2, 3], reach: 52, dmg: 2, knock: 90, lunge: 0, next: null, air: true, stamina: 8 }
+  };
+  const ITEM_DEFS = {
+    berries: { name: 'Wild Berries', type: 'CONSUMABLE', desc: ['Sweet and juicy berries', 'from the meadow.'], heal: 4, icon: 'berry' },
+    fish:    { name: 'River Fish', type: 'CONSUMABLE', desc: ['Fresh from the lake.', 'Hearty and filling.'], heal: 8, icon: 'fish' },
+    tonic:   { name: 'Red Tonic', type: 'CONSUMABLE', desc: ['A bubbling goblin brew.', 'Restores all health.'], heal: 999, icon: 'tonic' },
+    wood:    { name: 'Firewood', type: 'MATERIAL', desc: ['Dry split logs. Useful', 'for a campfire later.'], icon: 'wood' },
+    fang:    { name: 'Goblin Fang', type: 'TROPHY', desc: ['Proof you bested a', 'goblin scout.'], icon: 'fang' }
+  };
+  const ITEM_ORDER = ['berries', 'fish', 'tonic', 'wood', 'fang'];
+  const INV_TABS = ['ITEMS', 'GEAR', 'STATS', 'QUEST'];
+  const ARMOR_DEFENSE = 3, SWORD_ATTACK = 2;
+  let invTab = 0, invSel = 0, gearSel = 0, invOpenTime = 0;
+  let hitStop = 0, screenShake = 0, comboTimer = 0, lastMove = null, landTime = 0;
+  const combatFx = [], damageNumbers = [], pickups = [];
+  let levelUpUntil = 0;
+
+  function xpForNext(level) { return 20 + level * 15; }
+  function totalDefense() { return stats.defense + (equipment.armor ? ARMOR_DEFENSE : 0); }
+  function totalAttack() { return stats.strength + (equipment.armor ? SWORD_ATTACK : 0); }
+
+  // Short synthesized sound effects so combat has weight even before the
+  // licensed sword/footstep packs are wired in. Kept quiet on purpose.
+  function sfx(name) {
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) return;
+    if (typeof settings !== 'undefined' && settings && settings.sound === false) return;
+    try {
+      if (!introAudio) introAudio = new AudioCtor();
+      if (introAudio.state === 'suspended') introAudio.resume();
+      const ac = introAudio, now = ac.currentTime;
+      const out = ac.createGain(); out.connect(ac.destination);
+      const noise = (dur) => {
+        const buf = ac.createBuffer(1, Math.ceil(ac.sampleRate * dur), ac.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        const src = ac.createBufferSource(); src.buffer = buf; return src;
+      };
+      if (name === 'swoosh' || name === 'swooshBig') {
+        const big = name === 'swooshBig', dur = big ? 0.22 : 0.15;
+        const src = noise(dur), bp = ac.createBiquadFilter();
+        bp.type = 'bandpass'; bp.Q.value = 1.4;
+        bp.frequency.setValueAtTime(big ? 2600 : 2200, now);
+        bp.frequency.exponentialRampToValueAtTime(big ? 380 : 600, now + dur);
+        out.gain.setValueAtTime(0.0001, now);
+        out.gain.exponentialRampToValueAtTime(big ? 0.11 : 0.07, now + 0.03);
+        out.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+        src.connect(bp); bp.connect(out); src.start(now); src.stop(now + dur);
+      } else if (name === 'hit' || name === 'hitBig') {
+        const big = name === 'hitBig';
+        const osc = ac.createOscillator(); osc.type = 'triangle';
+        osc.frequency.setValueAtTime(big ? 170 : 210, now);
+        osc.frequency.exponentialRampToValueAtTime(big ? 45 : 70, now + 0.14);
+        const og = ac.createGain(); og.gain.setValueAtTime(big ? 0.22 : 0.16, now);
+        og.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+        osc.connect(og); og.connect(out); osc.start(now); osc.stop(now + 0.17);
+        const src = noise(0.07), hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
+        const ng = ac.createGain(); ng.gain.setValueAtTime(0.09, now); ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+        src.connect(hp); hp.connect(ng); ng.connect(out); src.start(now); src.stop(now + 0.07);
+        out.gain.value = 1;
+      } else if (name === 'hurt') {
+        const osc = ac.createOscillator(); osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(220, now); osc.frequency.exponentialRampToValueAtTime(90, now + 0.2);
+        const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+        out.gain.setValueAtTime(0.08, now); out.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+        osc.connect(lp); lp.connect(out); osc.start(now); osc.stop(now + 0.23);
+      } else if (name === 'pickup' || name === 'use' || name === 'level' || name === 'tick') {
+        const notes = name === 'level' ? [523, 659, 784, 1046] : name === 'use' ? [440, 660] : name === 'tick' ? [880] : [880, 1320];
+        const step = name === 'level' ? 0.09 : 0.06;
+        notes.forEach((f, i) => {
+          const osc = ac.createOscillator(); osc.type = name === 'tick' ? 'square' : 'sine';
+          const g = ac.createGain(), t = now + i * step;
+          const vol = name === 'tick' ? 0.025 : 0.07;
+          g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + (name === 'tick' ? 0.04 : 0.14));
+          osc.frequency.value = f; osc.connect(g); g.connect(out); osc.start(t); osc.stop(t + 0.16);
+        });
+        out.gain.value = 1;
+      }
+    } catch (err) { /* audio is optional */ }
+  }
+
+  function spawnSparks(x, y, dir, count, palette) {
+    for (let i = 0; i < count; i++) {
+      const a = (Math.random() - 0.5) * 1.6 + (dir > 0 ? 0 : Math.PI);
+      const sp = 70 + Math.random() * 150;
+      combatFx.push({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, life: 0.22 + Math.random() * 0.2, max: 0.4, color: palette[i % palette.length] });
+    }
+    combatFx.push({ kind: 'ring', x, y, life: 0.16, max: 0.16 });
+  }
+  function spawnDust(x, y, count) {
+    for (let i = 0; i < count; i++) {
+      combatFx.push({ kind: 'dust', x: x + (Math.random() - 0.5) * 14, y: y - 1, vx: (Math.random() - 0.5) * 50, vy: -10 - Math.random() * 25, life: 0.35 + Math.random() * 0.2, max: 0.55, color: '#b8a98a' });
+    }
+  }
+  function addDamageNumber(x, y, text, color) {
+    damageNumbers.push({ x, y, text: String(text), color, life: 0.8, vy: -48 });
+  }
+
+  function chooseOpeningMove() {
+    if (!sidePlayer.onGround) return 'air';
+    if (comboTimer > 0 && lastMove && KNIGHT_MOVES[lastMove].next) return KNIGHT_MOVES[lastMove].next;
+    if (Math.abs(sidePlayer.vx) > 132) return 'thrust';
+    return 'slash1';
+  }
+
+  function startKnightMove(name) {
+    const move = KNIGHT_MOVES[name];
+    let dir = 0;
+    if (keys.has('arrowleft') || keys.has('a')) dir -= 1;
+    if (keys.has('arrowright') || keys.has('d')) dir += 1;
+    if (dir) sidePlayer.facing = dir;
+    sidePlayer.atk = { name, t: 0, hit: new Set(), queued: null, swooshed: false };
+    if (sidePlayer.onGround && move.lunge) sidePlayer.vx = sidePlayer.facing * move.lunge;
+    if (move.air && sidePlayer.vy > 0) sidePlayer.vy *= 0.35;
+    stats.stamina = Math.max(0, stats.stamina - (move.stamina || 0));
+    comboTimer = 0;
+  }
+
+  function updateKnightAttack(dt) {
+    if (sideAttackQueued) {
+      sideAttackQueued = false;
+      if (sidePlayer.atk) {
+        const move = KNIGHT_MOVES[sidePlayer.atk.name];
+        if (move.next) sidePlayer.atk.queued = move.next;
+      } else if (sidePlayer.attackCooldown <= 0 && !panel && sidePlayer.hurtTime <= 0) {
+        startKnightMove(chooseOpeningMove());
+      }
+    }
+    const atk = sidePlayer.atk;
+    if (!atk) { sidePlayer.attackTime = 0; return; }
+    const move = KNIGHT_MOVES[atk.name];
+    atk.t += dt;
+    const idx = Math.floor(atk.t * move.fps);
+    if (!atk.swooshed && idx >= move.active[0]) {
+      atk.swooshed = true;
+      sfx(atk.name === 'finisher' || atk.name === 'thrust' ? 'swooshBig' : 'swoosh');
+    }
+    // Landing ends an air attack early so the knight never slides on the ground mid-dive.
+    if (move.air && sidePlayer.onGround && atk.t > 0.06) { sidePlayer.atk = null; sidePlayer.attackCooldown = 0.08; return; }
+    if (idx >= move.frames.length) {
+      const queued = atk.queued;
+      sidePlayer.atk = null;
+      if (queued && sidePlayer.onGround) { startKnightMove(queued); return; }
+      lastMove = atk.name;
+      comboTimer = move.next ? 0.32 : 0;
+      sidePlayer.attackCooldown = move.recover || 0.05;
+      return;
+    }
+    sidePlayer.attackTime = 1;
+    if (platformScene === 'forest' && move.active.includes(idx)) knightHitCheck(atk, move);
+  }
+
+  function knightHitCheck(atk, move) {
+    const f = sidePlayer.facing;
+    const near = sidePlayer.x + f * 4, far = sidePlayer.x + f * move.reach;
+    const lo = Math.min(near, far) - 12, hi = Math.max(near, far) + 12;
+    const vertical = move.air ? 62 : 34;
+    sideGoblins.forEach((goblin, i) => {
+      if (goblin.dead || atk.hit.has(i)) return;
+      if (goblin.x < lo || goblin.x > hi) return;
+      if (Math.abs(sidePlayer.y - SIDE_GROUND_Y) > vertical) return;
+      atk.hit.add(i);
+      const bonus = Math.floor((totalAttack() - 5) / 4);
+      const crit = Math.random() < 0.12;
+      const dmg = move.dmg + bonus + (crit ? 1 : 0);
+      goblin.hp = Math.max(0, goblin.hp - dmg);
+      goblin.hurtTime = 0.3; goblin.flash = 0.07;
+      goblin.kvx = f * move.knock;
+      goblin.attackTime = 0; goblin.attackHit = true;
+      goblin.attackCooldown = Math.max(goblin.attackCooldown, 0.55);
+      goblin.showHpUntil = time + 3;
+      goblin.dir = -f;
+      const big = atk.name === 'finisher' || atk.name === 'thrust' || crit;
+      hitStop = move.stop || (big ? 0.075 : 0.05);
+      screenShake = Math.max(screenShake, move.shake || 1.2);
+      spawnSparks(goblin.x - f * 8, SIDE_GROUND_Y - 30, f, big ? 12 : 7, ['#fff6d0', '#ffd27a', '#ff9a4a']);
+      addDamageNumber(goblin.x, SIDE_GROUND_Y - 72, crit ? dmg + '!' : dmg, crit ? '#ffdf6b' : '#ffffff');
+      sfx(big ? 'hitBig' : 'hit');
+      padRumble(big ? 0.7 : 0.35, big ? 0.9 : 0.6, big ? 140 : 80);
+      if (goblin.hp <= 0) defeatGoblin(goblin, f);
+    });
+  }
+
+  function defeatGoblin(goblin, f) {
+    goblin.dead = true; goblin.deadTime = 0; goblin.respawn = 22; goblin.attackTime = 0;
+    goblin.kvx = f * 160;
+    hitStop = 0.11; screenShake = Math.max(screenShake, 3.5);
+    stats.kills = (stats.kills || 0) + 1;
+    const coins = 2 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < coins; i++) pickups.push({ type: 'coin', amount: 1, x: goblin.x, y: SIDE_GROUND_Y - 30, vx: (Math.random() - 0.5) * 140, vy: -150 - Math.random() * 90, age: 0 });
+    if (Math.random() < 0.7) pickups.push({ type: 'fang', amount: 1, x: goblin.x, y: SIDE_GROUND_Y - 30, vx: f * 60, vy: -190, age: 0 });
+    if (Math.random() < 0.25) pickups.push({ type: 'tonic', amount: 1, x: goblin.x, y: SIDE_GROUND_Y - 30, vx: -f * 50, vy: -210, age: 0 });
+    gainXp(12);
+  }
+
+  function gainXp(amount) {
+    stats.xp = (stats.xp || 0) + amount;
+    addDamageNumber(sidePlayer.x, sidePlayer.y - 64, '+' + amount + ' XP', '#9be37a');
+    while (stats.xp >= xpForNext(stats.level)) {
+      stats.xp -= xpForNext(stats.level);
+      stats.level++;
+      stats.maxHealth += 4; stats.strength += 1;
+      if (stats.level % 2 === 0) stats.defense += 1;
+      stats.health = stats.maxHealth; stats.stamina = stats.maxStamina;
+      levelUpUntil = time + 2.4;
+      notice = 'LEVEL UP! You reached level ' + stats.level + '.'; noticeUntil = time + 2.6;
+      sfx('level'); padRumble(0.4, 0.4, 260);
+      if (onSave) onSave(getSaveData());
+    }
+  }
+
+  function hurtSidePlayer(amount, fromDir) {
+    stats.health = Math.max(0, stats.health - amount);
+    sidePlayer.hurtTime = 0.36; sidePlayer.invulnTime = 1.1;
+    sidePlayer.atk = null; sidePlayer.attackTime = 0; comboTimer = 0;
+    sidePlayer.vx = fromDir * 150; sidePlayer.vy = -120; sidePlayer.onGround = false;
+    hitStop = 0.06; screenShake = Math.max(screenShake, 2.5);
+    addDamageNumber(sidePlayer.x, sidePlayer.y - 58, amount, '#ff6b6b');
+    spawnSparks(sidePlayer.x, sidePlayer.y - 28, fromDir, 6, ['#ff8a8a', '#ffffff']);
+    sfx('hurt');
+    padRumble(0.9, 0.5, stats.health <= 0 ? 420 : 200);
+    if (stats.health <= 0) {
+      sidePlayer.deadTime = 1.9; sidePlayer.deathAge = 0;
+      notice = 'You were overwhelmed. Returning to the trail...'; noticeUntil = time + 2.2;
+    } else { notice = 'A goblin hit you!'; noticeUntil = time + 1.2; }
+  }
+
+  function updateCombatFx(dt) {
+    screenShake = Math.max(0, screenShake - dt * 14);
+    comboTimer = Math.max(0, comboTimer - dt);
+    landTime = Math.max(0, landTime - dt);
+    for (let i = combatFx.length - 1; i >= 0; i--) {
+      const p = combatFx[i];
+      p.life -= dt;
+      if (p.kind !== 'ring') { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += (p.kind === 'dust' ? 30 : 420) * dt; }
+      if (p.life <= 0) combatFx.splice(i, 1);
+    }
+    for (let i = damageNumbers.length - 1; i >= 0; i--) {
+      const d = damageNumbers[i];
+      d.life -= dt; d.y += d.vy * dt; d.vy *= Math.max(0, 1 - dt * 4);
+      if (d.life <= 0) damageNumbers.splice(i, 1);
+    }
+    for (let i = pickups.length - 1; i >= 0; i--) {
+      const p = pickups[i];
+      p.age += dt;
+      const dx = sidePlayer.x - p.x, dy = (sidePlayer.y - 20) - p.y;
+      const dist = Math.hypot(dx, dy);
+      if (p.age > 0.55 && dist < 70 && sidePlayer.deadTime <= 0) {
+        const pull = 420 / Math.max(12, dist);
+        p.vx += dx * pull * dt; p.vy += dy * pull * dt;
+        p.vx *= 0.9; p.vy *= 0.9;
+        p.x += p.vx * dt; p.y += p.vy * dt;
+      } else {
+        p.vy += 640 * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+        if (p.y > SIDE_GROUND_Y - 4) { p.y = SIDE_GROUND_Y - 4; p.vy = -Math.abs(p.vy) * 0.35; p.vx *= 0.6; if (Math.abs(p.vy) < 25) p.vy = 0; }
+      }
+      if (p.age > 0.55 && dist < 13) {
+        if (p.type === 'coin') { inventory.coins = (inventory.coins || 0) + p.amount; sfx('tick'); }
+        else {
+          inventory[p.type] = (inventory[p.type] || 0) + p.amount;
+          notice = '+1 ' + ITEM_DEFS[p.type].name; noticeUntil = time + 1.6; sfx('pickup');
+        }
+        pickups.splice(i, 1);
+      } else if (p.age > 30) pickups.splice(i, 1);
+    }
+  }
+
+  function drawCombatFx() {
+    ctx.save();
+    combatFx.forEach(p => {
+      const a = Math.max(0, p.life / p.max);
+      if (p.kind === 'ring') {
+        ctx.strokeStyle = 'rgba(255,240,200,' + a + ')'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 4 + (1 - a) * 14, 0, Math.PI * 2); ctx.stroke();
+      } else {
+        ctx.globalAlpha = p.kind === 'dust' ? a * 0.6 : a;
+        ctx.fillStyle = p.color;
+        const s = p.kind === 'dust' ? 2 : (a > 0.5 ? 2 : 1);
+        ctx.fillRect(Math.round(p.x), Math.round(p.y), s, s);
+        ctx.globalAlpha = 1;
+      }
+    });
+    pickups.forEach(p => {
+      const bob = p.vy === 0 ? Math.sin(time * 5 + p.x) * 1.5 : 0;
+      if (p.type === 'coin') {
+        const w = Math.max(1, Math.round(Math.abs(Math.cos(time * 7 + p.x)) * 5));
+        ctx.fillStyle = '#7a4a12'; ctx.fillRect(Math.round(p.x - w / 2) - 1, Math.round(p.y + bob) - 3, w + 2, 7);
+        ctx.fillStyle = '#f2c14e'; ctx.fillRect(Math.round(p.x - w / 2), Math.round(p.y + bob) - 2, w, 5);
+        ctx.fillStyle = '#fff1a8'; ctx.fillRect(Math.round(p.x - w / 2), Math.round(p.y + bob) - 2, 1, 2);
+      } else {
+        ctx.fillStyle = 'rgba(255,230,150,' + (0.25 + Math.sin(time * 6) * 0.1) + ')';
+        ctx.fillRect(Math.round(p.x) - 8, Math.round(p.y + bob) - 8, 16, 16);
+        drawItemIcon(ITEM_DEFS[p.type].icon, Math.round(p.x) - 6, Math.round(p.y + bob) - 6, 1);
+      }
+    });
+    ctx.textAlign = 'center'; ctx.font = 'bold 8px monospace';
+    damageNumbers.forEach(d => {
+      ctx.globalAlpha = Math.min(1, d.life / 0.3);
+      ctx.fillStyle = '#120c14'; ctx.fillText(d.text, Math.round(d.x) + 1, Math.round(d.y) + 1);
+      ctx.fillStyle = d.color; ctx.fillText(d.text, Math.round(d.x), Math.round(d.y));
+    });
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 12 x 12 pixel-art item icons (drawn at 1x for pickups, 2x in the inventory).
+  // ---------------------------------------------------------------------------
+  const ICON_PALETTE = {
+    k: '#1b1420', y: '#f2c14e', Y: '#fff1a8', o: '#b9802a',
+    r: '#c8324a', R: '#ff8090', p: '#74173a', g: '#4f9a3a', G: '#9bd96f',
+    b: '#7a4a2a', B: '#ad7444', l: '#e3bd84', d: '#4b2b18',
+    c: '#4f8fd1', C: '#a9d6ff', n: '#28487f', w: '#f4efe0', W: '#ffffff', s: '#a89c84',
+    m: '#7b8e9c', M: '#d3dde0', h: '#45586a', u: '#c49a55', t: '#5a3a24', v: '#8fd0ff'
+  };
+  const ICONS = {
+    berry: [
+      '.....gg.....',
+      '....gGg.....',
+      '...kkgkkk...',
+      '..krRkkrRk..',
+      '.krRrrkrRrk.',
+      '.krrrpkrrpk.',
+      '..kpkkrRkk..',
+      '...kkrRrrk..',
+      '....krrrpk..',
+      '....kpppk...',
+      '.....kkk....',
+      '............'],
+    wood: [
+      '............',
+      '............',
+      '..kkkkkkkk..',
+      '.kBBBBBBBkk.',
+      'kbbbbbbbkllk',
+      'kBBBBBBBkldk',
+      'kbbbbbbbkllk',
+      '.kkkkkkkkkk.',
+      '.kBBBBBkllk.',
+      'kbbbbbbkldk.',
+      '.kkkkkkkkk..',
+      '............'],
+    fish: [
+      '............',
+      '............',
+      '....kkkk....',
+      '..kkCCCCk.kk',
+      '.kCCWkcCCkck',
+      'kccckccccckk',
+      'kcnccccccckk',
+      '.kcnnnnnckck',
+      '..kknnnnk.kk',
+      '....kkkk....',
+      '............',
+      '............'],
+    tonic: [
+      '....kkkk....',
+      '....kttk....',
+      '....kkkk....',
+      '.....kvk....',
+      '....kvvvk...',
+      '...kRrrrrk..',
+      '..kRWrrrrpk.',
+      '..kRrrrrrpk.',
+      '..krrrrrrpk.',
+      '..kprrrrppk.',
+      '...kkppkkk..',
+      '....kkkk....'],
+    fang: [
+      '............',
+      '...kkkkk....',
+      '..kWwwwwk...',
+      '..kwwwwwsk..',
+      '...kwwwwsk..',
+      '....kwwwsk..',
+      '....kwwsk...',
+      '.....kwsk...',
+      '.....kwk....',
+      '.....kk.....',
+      '............',
+      '............'],
+    coin: [
+      '............',
+      '....kkkk....',
+      '..kkyyyykk..',
+      '.kyYyyyyyok.',
+      '.kYyykkyyok.',
+      'kyYyk..kyyok',
+      'kyyyk..kyyok',
+      '.kyyykkyyok.',
+      '.kyyyyyyook.',
+      '..kkooookk..',
+      '....kkkk....',
+      '............'],
+    helm: [
+      '....kkkk....',
+      '..kkMMmmkk..',
+      '.kMMmmmmmhk.',
+      '.kMmmmmmmhk.',
+      'kMmmmmmmmmhk',
+      'kmkkkkkkkkhk',
+      'kmk.k..k.khk',
+      'kmmkkkkkkmhk',
+      'kmmmmuummmhk',
+      '.khmmmmmmhk.',
+      '..kkkkkkkk..',
+      '............'],
+    armor: [
+      '..kk....kk..',
+      '.kMmkkkkmhk.',
+      'kMmmmMMmmmhk',
+      'kmmmMmmmmmhk',
+      'kkmmMmmumhkk',
+      '.kmmmmuummk.',
+      '.kmmmmmmmhk.',
+      '.khkkkkkkhk.',
+      '.kmmuummmhk.',
+      '.kmmmmmmmhk.',
+      '..khhhhhhk..',
+      '...kkkkkk...'],
+    legs: [
+      '............',
+      '..kkkkkkkk..',
+      '..kmmukummk.',
+      '..kMmkkMmhk.',
+      '..kMmk.kMhk.',
+      '..kMmk.kMhk.',
+      '..kmhk.kmhk.',
+      '..kMmk.kMhk.',
+      '..kmhk.kmhk.',
+      '.kmmhk.kmmhk',
+      '.kkkkk.kkkkk',
+      '............'],
+    sword: [
+      '..........kk',
+      '.........kMk',
+      '........kMhk',
+      '.......kMhk.',
+      '......kMhk..',
+      '.....kMhk...',
+      '.kk.kMhk....',
+      '.kukMhk.....',
+      '..kuhk......',
+      '.ktkuuk.....',
+      'ktk..kk.....',
+      'kk..........']
+  };
+  function drawItemIcon(name, x, y, scale = 2) {
+    const art = ICONS[name];
+    if (!art) return;
+    for (let r = 0; r < 12; r++) {
+      const row = art[r];
+      for (let c = 0; c < 12; c++) {
+        const ch = row[c];
+        if (!ch || ch === '.') continue;
+        ctx.fillStyle = ICON_PALETTE[ch] || '#ff00ff';
+        ctx.fillRect(x + c * scale, y + r * scale, scale, scale);
+      }
+    }
+  }
+
   function updatePlatformer(dt) {
+    if (hitStop > 0) { hitStop -= dt; sideGoblins.forEach(g => { g.flash = Math.max(0, (g.flash || 0) - dt); }); updateSideCamera(dt); return; }
     time += dt;
     saveTimer += dt;
     if (saveTimer >= 5) {
@@ -2491,12 +2970,16 @@ const Overworld = (() => {
     sidePlayer.attackTime = Math.max(0, sidePlayer.attackTime - dt);
     sidePlayer.hurtTime = Math.max(0, sidePlayer.hurtTime - dt);
     sidePlayer.invulnTime = Math.max(0, sidePlayer.invulnTime - dt);
+    updateCombatFx(dt);
     if (sidePlayer.deadTime > 0) {
-      sidePlayer.deadTime -= dt;
-      sidePlayer.vx = 0; sidePlayer.vy = 0;
+      sidePlayer.deadTime -= dt; sidePlayer.deathAge = (sidePlayer.deathAge || 0) + dt;
+      sidePlayer.vx *= Math.max(0, 1 - dt * 8);
+      sidePlayer.x = clamp(sidePlayer.x + sidePlayer.vx * dt, 16, sideWorldWidth() - 16);
+      if (sidePlayer.y < SIDE_GROUND_Y) { sidePlayer.vy += 820 * dt; sidePlayer.y = Math.min(SIDE_GROUND_Y, sidePlayer.y + sidePlayer.vy * dt); } else sidePlayer.vy = 0;
       if (sidePlayer.deadTime <= 0) {
         sidePlayer.x = 72; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0;
-        sidePlayer.onGround = true; sidePlayer.invulnTime = 1.6;
+        sidePlayer.onGround = true; sidePlayer.invulnTime = 1.6; sidePlayer.atk = null; sidePlayer.hurtTime = 0; sidePlayer.facing = 1;
+        pickups.length = 0;
         stats.health = Math.max(1, Math.ceil(stats.maxHealth * 0.65));
         notice = 'You made it back to the forest entrance.'; noticeUntil = time + 2.5;
       }
@@ -2508,8 +2991,21 @@ const Overworld = (() => {
       updateSideCamera(dt);
       return;
     }
+    // Menus pause the action so goblins cannot attack while the bag is open.
+    if (panel) {
+      sidePlayer.vx = 0; sidePlayer.moving = false;
+      sideJumpQueued = false; sideAttackQueued = false;
+      updateSideCamera(dt);
+      return;
+    }
 
-    if (!panel) {
+    if (!panel && (sidePlayer.atk || sidePlayer.hurtTime > 0)) {
+      // Committed: attacks carry their own lunge and hits knock the knight back.
+      const friction = sidePlayer.onGround ? 10 : 2;
+      sidePlayer.vx *= Math.max(0, 1 - dt * friction);
+      sidePlayer.moving = false;
+      stats.stamina = Math.min(stats.maxStamina, stats.stamina + 6 * dt);
+    } else if (!panel) {
       let direction = 0;
       if (keys.has('arrowleft') || keys.has('a')) direction -= 1;
       if (keys.has('arrowright') || keys.has('d')) direction += 1;
@@ -2523,20 +3019,17 @@ const Overworld = (() => {
       if (sideJumpQueued && sidePlayer.onGround) {
         sidePlayer.vy = -292;
         sidePlayer.onGround = false;
+        spawnDust(sidePlayer.x, sidePlayer.y, 4);
       }
       if (sprinting) stats.stamina = Math.max(0, stats.stamina - 20 * dt);
       else stats.stamina = Math.min(stats.maxStamina, stats.stamina + 13 * dt);
-      if (sidePlayer.moving) sidePlayer.walk += dt * (sprinting ? 13 : 9);
+      if (sidePlayer.moving) sidePlayer.walk += Math.abs(sidePlayer.vx) * dt / 7.5;
     } else {
       sidePlayer.vx *= Math.max(0, 1 - dt * 18);
       sidePlayer.moving = false;
     }
     sideJumpQueued = false;
-    if (sideAttackQueued && sidePlayer.attackCooldown <= 0 && !panel) {
-      sidePlayer.attackTime = 0.34;
-      sidePlayer.attackCooldown = 0.52;
-      sideAttackQueued = false;
-    } else if (sideAttackQueued) sideAttackQueued = false;
+    updateKnightAttack(dt);
 
     const oldFeet = sidePlayer.y;
     const nextX = clamp(sidePlayer.x + sidePlayer.vx * dt, 16, sideWorldWidth() - 16);
@@ -2553,6 +3046,7 @@ const Overworld = (() => {
       }
     }
     if (landing) {
+      if (!sidePlayer.onGround && sidePlayer.vy > 180) { landTime = 0.08; spawnDust(sidePlayer.x, landing.y, 5); }
       sidePlayer.y = landing.y;
       sidePlayer.vy = 0;
       sidePlayer.onGround = true;
@@ -2641,29 +3135,22 @@ const Overworld = (() => {
     pixel(18, 28, 3, 2, steel);
   }
 
+  const GOBLIN_ATTACK_TIME = 0.72;
   function updateForestCombat(dt) {
-    const playerCenterY = sidePlayer.y - 22;
-    // The player's swing has a short active window; the hitbox follows facing direction.
-    if (sidePlayer.attackTime > 0.12 && sidePlayer.attackTime < 0.27) {
-      const hitX = sidePlayer.x + sidePlayer.facing * 39;
-      for (const goblin of sideGoblins) {
-        if (goblin.dead || goblin.hurtTime > 0.1) continue;
-        const dx = goblin.x - hitX;
-        const dy = Math.abs((SIDE_GROUND_Y - 23) - playerCenterY);
-        if (Math.abs(dx) < 37 && dy < 36 && Math.sign(goblin.x - sidePlayer.x) === sidePlayer.facing) {
-          goblin.hp = Math.max(0, goblin.hp - 1);
-          goblin.hurtTime = 0.28;
-          padRumble(0.35, 0.6, 90);
-          goblin.moving = false;
-          if (goblin.hp <= 0) { goblin.dead = true; goblin.deadTime = 0; goblin.respawn = 7; goblin.attackTime = 0; }
-        }
-      }
-    }
     for (const goblin of sideGoblins) {
+      goblin.flash = Math.max(0, (goblin.flash || 0) - dt);
+      // Knockback slides the scout back and bleeds off quickly.
+      if (goblin.kvx) {
+        goblin.x += goblin.kvx * dt;
+        goblin.kvx *= Math.max(0, 1 - dt * 9);
+        if (Math.abs(goblin.kvx) < 4) goblin.kvx = 0;
+        goblin.x = clamp(goblin.x, 30, FOREST_SIDE_WIDTH - 30);
+      }
       if (goblin.dead) {
         goblin.deadTime += dt; goblin.respawn -= dt;
-        if (goblin.respawn <= 0) {
-          goblin.dead = false; goblin.deadTime = 0; goblin.hp = goblin.maxHp;
+        // Respawn out of sight so a scout never pops in on top of the player.
+        if (goblin.respawn <= 0 && Math.abs(sidePlayer.x - goblin.home) > 220) {
+          goblin.dead = false; goblin.deadTime = 0; goblin.hp = goblin.maxHp; goblin.kvx = 0;
           goblin.x = goblin.home; goblin.attackCooldown = 1.2; goblin.moving = false;
         }
         continue;
@@ -2673,112 +3160,197 @@ const Overworld = (() => {
       goblin.hurtTime = Math.max(0, goblin.hurtTime - dt);
       const dx = sidePlayer.x - goblin.x;
       const distance = Math.abs(dx);
-      goblin.dir = dx < 0 ? -1 : 1;
       goblin.moving = false;
-      if (goblin.hurtTime <= 0 && distance < 230) {
+      const playerAlive = sidePlayer.deadTime <= 0;
+      if (goblin.hurtTime > 0 || goblin.kvx) {
+        // Staggered: no movement or new attacks.
+      } else if (goblin.attackTime > 0) {
+        // Commit to the swing direction once the wind-up starts.
+      } else if (playerAlive && distance < 230) {
+        goblin.dir = dx < 0 ? -1 : 1;
         goblin.runUntil = Math.max(goblin.runUntil, time + 0.25);
-        if (distance > 43) {
-          goblin.x += goblin.dir * 76 * dt;
+        if (distance > 40) {
+          const speed = 74;
+          goblin.x += goblin.dir * speed * dt;
+          goblin.walk = (goblin.walk || 0) + speed * dt / 6;
           goblin.moving = true;
-        } else if (goblin.attackCooldown <= 0 && goblin.attackTime <= 0) {
-          goblin.attackTime = 0.56; goblin.attackCooldown = 1.35; goblin.attackHit = false;
+        } else if (goblin.attackCooldown <= 0) {
+          goblin.attackTime = GOBLIN_ATTACK_TIME; goblin.attackCooldown = 1.5 + Math.random() * 0.5; goblin.attackHit = false;
         }
-      } else if (goblin.hurtTime <= 0) {
-        const speed = time < goblin.runUntil ? 90 : 18;
+      } else {
+        const speed = time < goblin.runUntil ? 90 : 20;
         goblin.dir = goblin.patrolDir;
         goblin.x += goblin.patrolDir * speed * dt;
+        goblin.walk = (goblin.walk || 0) + speed * dt / 6;
         goblin.moving = true;
         if (goblin.x < goblin.min) { goblin.x = goblin.min; goblin.patrolDir = 1; goblin.dir = 1; }
         if (goblin.x > goblin.max) { goblin.x = goblin.max; goblin.patrolDir = -1; goblin.dir = -1; }
       }
-      // The scout's contact hit activates once near the middle of its attack animation.
-      if (goblin.attackTime > 0.22 && goblin.attackTime < 0.34 && !goblin.attackHit) {
-        goblin.attackHit = true;
-        if (distance < 58 && sidePlayer.invulnTime <= 0 && sidePlayer.deadTime <= 0) {
-          stats.health = Math.max(0, stats.health - Math.max(1, 3 - stats.defense));
-          sidePlayer.hurtTime = 0.28; sidePlayer.invulnTime = 0.9;
-          padRumble(0.9, 0.5, stats.health <= 0 ? 420 : 200);
-          sidePlayer.vx = -goblin.dir * 78;
-          if (stats.health <= 0) { sidePlayer.deadTime = 0.95; sidePlayer.attackTime = 0; notice = 'You were overwhelmed. Returning to the trail...'; noticeUntil = time + 2; }
-          else { notice = 'A goblin hit you!'; noticeUntil = time + 1.2; }
+      // The dagger connects on the attack's 4th-5th frame, after a readable wind-up.
+      const elapsed = GOBLIN_ATTACK_TIME - goblin.attackTime;
+      if (goblin.attackTime > 0 && elapsed > 0.4 && elapsed < 0.52 && !goblin.attackHit) {
+        const facingPlayer = Math.sign(sidePlayer.x - goblin.x) === goblin.dir || distance < 10;
+        if (distance < 50 && facingPlayer && Math.abs(sidePlayer.y - SIDE_GROUND_Y) < 26 && sidePlayer.invulnTime <= 0 && playerAlive) {
+          goblin.attackHit = true;
+          const dmg = Math.max(1, 4 - Math.floor(totalDefense() / 2));
+          hurtSidePlayer(dmg, goblin.dir);
         }
       }
-      // Keep the player from walking through a living scout; the attack hitbox is separate.
+      if (goblin.attackTime <= 0 || elapsed >= 0.52) goblin.attackHit = true;
+      // Keep the player from walking through a living scout.
       const bodyGap = sidePlayer.x - goblin.x;
-      if (Math.abs(bodyGap) < 22 && Math.abs(sidePlayer.y - SIDE_GROUND_Y) < 8) {
-        sidePlayer.x = goblin.x + (bodyGap < 0 ? -22 : 22);
+      if (Math.abs(bodyGap) < 20 && Math.abs(sidePlayer.y - SIDE_GROUND_Y) < 8 && !sidePlayer.atk) {
+        sidePlayer.x = goblin.x + (bodyGap < 0 ? -20 : 20);
         sidePlayer.vx = 0;
       }
     }
   }
 
-  function drawKnightFrame(sheet, frame, columns, rows, x, y, width = 56, height = 56, flip = false) {
+  // Draws one full 128 x 64 knight cell. The knight's body sits at x ~62 in
+  // every cell with feet on the bottom row, so anchoring there keeps the
+  // whole sword arc visible and the body steady between animations.
+  function drawKnightCell(sheet, frame, cols, x, y, facing, scale = 1) {
     if (!sheet || !sheet.complete || !sheet.naturalWidth) return false;
-    const cellW = sheet.naturalWidth / columns, cellH = sheet.naturalHeight / rows;
-    const col = frame % columns, row = Math.floor(frame / columns) % rows;
-    const cropX = Math.max(0, Math.floor((cellW - cellH) / 2));
-    ctx.save(); ctx.imageSmoothingEnabled = false;
-    if (flip) { ctx.translate(x + width, 0); ctx.scale(-1, 1); x = 0; }
-    ctx.drawImage(sheet, col * cellW + cropX, row * cellH, Math.min(cellH, cellW), cellH, x, y, width, height);
-    ctx.restore(); return true;
+    const rows = Math.max(1, Math.round(sheet.naturalHeight / 64));
+    const col = frame % cols, row = Math.floor(frame / cols) % rows;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(Math.round(x), Math.round(y));
+    ctx.scale(facing < 0 ? -scale : scale, scale);
+    ctx.drawImage(sheet, col * 128, row * 64, 128, 64, -62, -64, 128, 64);
+    ctx.restore();
+    return true;
+  }
+
+  function knightPose() {
+    const ks = knightSprites;
+    if (sidePlayer.deadTime > 0) {
+      return { sheet: ks.death, cols: 2, frame: Math.min(3, Math.floor((sidePlayer.deathAge || 0) * 7)) };
+    }
+    if (sidePlayer.hurtTime > 0) {
+      return { sheet: ks.hurt, cols: 2, frame: Math.min(2, Math.floor((0.36 - sidePlayer.hurtTime) / 0.36 * 3)) };
+    }
+    if (sidePlayer.atk) {
+      const move = KNIGHT_MOVES[sidePlayer.atk.name];
+      const idx = Math.min(move.frames.length - 1, Math.floor(sidePlayer.atk.t * move.fps));
+      return { sheet: move.sheet === 'air' ? ks.air : ks.attacks, cols: move.cols, frame: move.frames[idx] };
+    }
+    if (!sidePlayer.onGround) {
+      const vy = sidePlayer.vy;
+      const frame = vy < -170 ? 1 : vy < -50 ? 2 : vy < 30 ? 3 : vy < 120 ? 4 : vy < 230 ? 5 : 6;
+      return { sheet: ks.jump, cols: 2, frame };
+    }
+    if (landTime > 0) return { sheet: ks.jump, cols: 2, frame: 7 };
+    if (sidePlayer.moving) return { sheet: ks.run, cols: 2, frame: Math.floor(sidePlayer.walk) % 8 };
+    return { sheet: ks.idle, cols: 2, frame: Math.floor(time * 7) % 8 };
   }
 
   function drawSidePlayer() {
     const x = Math.round(sidePlayer.x);
     const y = Math.round(sidePlayer.y);
-    if (equipment.armor && knightSprites.idle && knightSprites.idle.complete && knightSprites.idle.naturalWidth) {
-      const sheet = sidePlayer.deadTime > 0 ? knightSprites.death : sidePlayer.hurtTime > 0 ? knightSprites.hurt : sidePlayer.attackTime > 0 ? knightSprites.attacks : !sidePlayer.onGround ? knightSprites.jump : sidePlayer.moving ? knightSprites.run : knightSprites.idle;
-      let frame = 0, cols = 2, rows = 4;
-      if (sheet === knightSprites.attacks) { cols = 8; rows = 5; frame = Math.min(7, Math.floor((0.34 - sidePlayer.attackTime) / 0.34 * 8)); }
-      else if (sheet === knightSprites.death || sheet === knightSprites.hurt) { cols = 2; rows = 2; frame = Math.min(3, Math.floor(time * 7)); }
-      else { frame = Math.floor(time * (sheet === knightSprites.run ? 9 : 3)) % 8; }
-      if (sidePlayer.facing < 0) {
-        drawKnightFrame(sheet, frame, cols, rows, x - 29, y - 57, 58, 58, true);
-      } else drawKnightFrame(sheet, frame, cols, rows, x - 29, y - 57, 58, 58, false);
+    // The knight sheets are used whenever they are loaded so attacks always
+    // animate; the story requires Dad's armor before the forest anyway.
+    const useKnight = (equipment.armor || platformScene === 'forest') && knightSprites.idle && knightSprites.idle.complete && knightSprites.idle.naturalWidth;
+    // Ground shadow shrinks while airborne.
+    const air = Math.max(0, SIDE_GROUND_Y - y);
+    const groundBelow = sidePlayer.onGround ? y : SIDE_GROUND_Y;
+    const shadowW = Math.max(6, 22 - air * 0.12);
+    ctx.fillStyle = 'rgba(0,0,0,.28)';
+    ctx.fillRect(Math.round(x - shadowW / 2), groundBelow - 1, Math.round(shadowW), 2);
+    if (useKnight) {
+      // Blink while invulnerable after being hit.
+      if (sidePlayer.invulnTime > 0 && sidePlayer.deadTime <= 0 && sidePlayer.hurtTime <= 0 && Math.floor(time * 18) % 2 === 0) return;
+      const pose = knightPose();
+      if (!pose.sheet || !pose.sheet.complete || !pose.sheet.naturalWidth) pose.sheet = knightSprites.idle;
+      drawKnightCell(pose.sheet, pose.frame, pose.cols, x, y + 1, sidePlayer.facing);
       return;
     }
     if (!playerSheetReady) {
-      ctx.fillStyle = 'rgba(0,0,0,.25)';
-      ctx.fillRect(x - 9, y - 1, 19, 3);
       ctx.fillStyle = '#342c39'; ctx.fillRect(x - 7, y - 27, 14, 26);
       ctx.fillStyle = '#9d513e'; ctx.fillRect(x - 7, y - 19, 14, 12);
       ctx.fillStyle = '#e0b27a'; ctx.fillRect(x - 6, y - 30, 12, 10);
       ctx.fillStyle = '#292331'; ctx.fillRect(x - 7, y - 31, 13, 4);
-      if (equipment.armor) drawKnightArmorOverlay(x - 16, y - 32);
       return;
     }
     const frame = sidePlayer.moving ? Math.floor(sidePlayer.walk * 0.75) % 6 : Math.floor(time * 2) % 2;
     const row = sidePlayer.moving ? 3 : 2;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    ctx.fillStyle = 'rgba(0,0,0,.24)';
-    ctx.fillRect(x - 8, y - 1, 16, 2);
     if (sidePlayer.facing < 0) {
       ctx.translate(x + 16, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(playerSheet, frame * 32, row * 32, 32, 32, 0, y - 32, 32, 32);
-      if (equipment.armor) drawKnightArmorOverlay(0, y - 32);
     } else {
       ctx.drawImage(playerSheet, frame * 32, row * 32, 32, 32, x - 16, y - 32, 32, 32);
-      if (equipment.armor) drawKnightArmorOverlay(x - 16, y - 32);
     }
     ctx.restore();
   }
 
-  function drawInventoryCharacterPreview() {
-    const x = 62, y = 79;
+  // Offscreen buffer used to flash goblins white on impact.
+  let flashCanvas = null, flashCtx = null;
+  function drawGoblinSprite(sx, sy, x, dir, size, alpha, flash) {
     ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(Math.round(x), 0);
+    ctx.scale(dir < 0 ? -1 : 1, 1);
     ctx.imageSmoothingEnabled = false;
-    if (equipment.armor && knightSprites.idle && knightSprites.idle.complete && knightSprites.idle.naturalWidth) {
-      drawKnightFrame(knightSprites.idle, 0, 2, 4, x + 4, y + 3, 56, 56, false);
-    } else if (playerSheetReady) {
-      ctx.drawImage(playerSheet, 0, 2 * 32, 32, 32, x, y, 64, 64);
-    } else {
-      ctx.fillStyle = '#342c39'; ctx.fillRect(x + 18, y + 18, 28, 42);
-      ctx.fillStyle = '#e0b27a'; ctx.fillRect(x + 21, y + 5, 22, 17);
-      ctx.fillStyle = '#292331'; ctx.fillRect(x + 18, y + 3, 28, 7);
+    ctx.drawImage(goblinScoutSheet, sx, sy, 500, GOBLIN_FRAME_HEIGHT, -size / 2, SIDE_GROUND_Y - size, size, size);
+    if (flash > 0) {
+      if (!flashCanvas) { flashCanvas = document.createElement('canvas'); flashCanvas.width = 72; flashCanvas.height = 72; flashCtx = flashCanvas.getContext('2d'); }
+      flashCtx.globalCompositeOperation = 'source-over';
+      flashCtx.clearRect(0, 0, 72, 72);
+      flashCtx.imageSmoothingEnabled = false;
+      flashCtx.drawImage(goblinScoutSheet, sx, sy, 500, GOBLIN_FRAME_HEIGHT, 0, 0, 72, 72);
+      flashCtx.globalCompositeOperation = 'source-in';
+      flashCtx.fillStyle = '#ffffff'; flashCtx.fillRect(0, 0, 72, 72);
+      ctx.globalAlpha = alpha * Math.min(1, flash / 0.06);
+      ctx.drawImage(flashCanvas, -size / 2, SIDE_GROUND_Y - size, size, size);
     }
     ctx.restore();
+  }
+
+  function drawSideGoblins() {
+    if (!(goblinScoutSheet.complete && goblinScoutSheet.naturalWidth >= GOBLIN_FRAME_WIDTH * 9)) return;
+    sideGoblins.forEach(goblin => {
+      if (goblin.dead && goblin.deadTime > 2.2) return;
+      if (goblin.x < sideCameraX - 60 || goblin.x > sideCameraX + canvas.width + 60) return;
+      let animation = GOBLIN_ANIMATIONS.idle;
+      let frame = Math.floor(time * 7 + goblin.phase) % animation.frames;
+      if (goblin.dead) {
+        animation = GOBLIN_ANIMATIONS.death;
+        frame = Math.min(animation.frames - 1, Math.floor(goblin.deadTime * 9));
+      } else if (goblin.hurtTime > 0) {
+        animation = GOBLIN_ANIMATIONS.hit;
+        frame = Math.min(animation.frames - 1, Math.floor((0.3 - goblin.hurtTime) / 0.3 * animation.frames));
+      } else if (goblin.attackTime > 0) {
+        animation = GOBLIN_ANIMATIONS.attack;
+        frame = Math.min(animation.frames - 1, Math.floor((GOBLIN_ATTACK_TIME - goblin.attackTime) / GOBLIN_ATTACK_TIME * animation.frames));
+      } else if (goblin.moving) {
+        animation = GOBLIN_ANIMATIONS.walk;
+        frame = Math.floor(goblin.walk || 0) % animation.frames;
+      }
+      const alpha = goblin.dead ? Math.max(0, Math.min(1, (2.2 - goblin.deadTime) / 0.6)) : 1;
+      ctx.fillStyle = 'rgba(0,0,0,' + (0.26 * alpha) + ')';
+      ctx.fillRect(Math.round(goblin.x) - 11, SIDE_GROUND_Y - 1, 22, 2);
+      drawGoblinSprite(frame * GOBLIN_FRAME_WIDTH + 50, animation.row * GOBLIN_FRAME_HEIGHT, goblin.x, goblin.dir, 72, alpha, goblin.flash || 0);
+
+      // Attack wind-up tell: a small spark over the scout's head.
+      if (!goblin.dead && goblin.attackTime > GOBLIN_ATTACK_TIME - 0.3) {
+        const blink = Math.floor(time * 20) % 2 === 0;
+        ctx.fillStyle = blink ? '#ffef9a' : '#ff8a4a';
+        ctx.fillRect(Math.round(goblin.x) - 1, SIDE_GROUND_Y - 80, 2, 6);
+        ctx.fillRect(Math.round(goblin.x) - 1, SIDE_GROUND_Y - 72, 2, 2);
+      }
+      const near = Math.abs(sidePlayer.x - goblin.x) < 150;
+      if (!goblin.dead && (near || time < (goblin.showHpUntil || 0))) {
+        const bx = Math.round(goblin.x) - 14, by = SIDE_GROUND_Y - 66;
+        ctx.fillStyle = '#120c14'; ctx.fillRect(bx - 1, by - 1, 30, 5);
+        ctx.fillStyle = '#4a1d22'; ctx.fillRect(bx, by, 28, 3);
+        ctx.fillStyle = goblin.hp / goblin.maxHp > 0.4 ? '#e2584f' : '#ff9a3c';
+        ctx.fillRect(bx, by, Math.round(28 * goblin.hp / goblin.maxHp), 3);
+        ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(bx, by, Math.round(28 * goblin.hp / goblin.maxHp), 1);
+      }
+    });
   }
 
   function drawDadArmorStand(x, groundY) {
@@ -2942,52 +3514,14 @@ const Overworld = (() => {
     ctx.restore();
 
     ctx.save();
-    ctx.translate(-sideCameraX, 0);
+    const shakeX = screenShake > 0 ? Math.round((Math.random() - 0.5) * screenShake * 2) : 0;
+    const shakeY = screenShake > 0 ? Math.round((Math.random() - 0.5) * screenShake * 1.4) : 0;
+    ctx.translate(-sideCameraX + shakeX, shakeY);
     // The supplied background already contains the forest floor. Only draw
     // the separate raised platforms here; keep the continuous ground invisible.
     FOREST_SIDE_PLATFORMS.slice(1).forEach(drawSidePlatform);
 
-    // Use the uploaded Goblin Scout sheet for every forest enemy. Its rows are
-    // idle, attack, hit, walk, and death, with the original frame spacing intact.
-    if (goblinScoutSheet.complete && goblinScoutSheet.naturalWidth >= GOBLIN_FRAME_WIDTH * 9) {
-      sideGoblins.forEach(goblin => {
-        let animation = GOBLIN_ANIMATIONS.idle;
-        let frame = Math.floor(time * 2 + goblin.phase) % animation.frames;
-        if (goblin.dead) {
-          animation = GOBLIN_ANIMATIONS.death;
-          frame = Math.min(animation.frames - 1, Math.floor(goblin.deadTime * 7));
-        } else if (goblin.hurtTime > 0) {
-          animation = GOBLIN_ANIMATIONS.hit;
-          frame = Math.min(animation.frames - 1, Math.floor((0.28 - goblin.hurtTime) / 0.28 * animation.frames));
-        } else if (goblin.attackTime > 0) {
-          animation = GOBLIN_ANIMATIONS.attack;
-          frame = Math.min(animation.frames - 1, Math.floor((0.56 - goblin.attackTime) / 0.56 * animation.frames));
-        } else if (goblin.moving) {
-          animation = GOBLIN_ANIMATIONS.walk;
-          const chasing = Math.abs(sidePlayer.x - goblin.x) < 230;
-          frame = Math.floor(time * (chasing ? 9 : 5) + goblin.phase) % animation.frames;
-        }
-
-        const sourceX = frame * GOBLIN_FRAME_WIDTH + 50;
-        const sourceY = animation.row * GOBLIN_FRAME_HEIGHT;
-        const drawSize = 72;
-        ctx.save();
-        ctx.translate(goblin.x, 0);
-        ctx.scale(goblin.dir < 0 ? -1 : 1, 1);
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(
-          goblinScoutSheet,
-          sourceX, sourceY, 500, GOBLIN_FRAME_HEIGHT,
-          -drawSize / 2, SIDE_GROUND_Y - drawSize, drawSize, drawSize
-        );
-        ctx.restore();
-
-        if (!goblin.dead) {
-          ctx.fillStyle = 'rgba(10,10,18,.78)'; ctx.fillRect(goblin.x - 20, SIDE_GROUND_Y - 75, 40, 5);
-          ctx.fillStyle = '#d65b57'; ctx.fillRect(goblin.x - 19, SIDE_GROUND_Y - 74, 38 * (goblin.hp / goblin.maxHp), 3);
-        }
-      });
-    }
+    drawSideGoblins();
 
     // A quiet trail marker signals the far side without abruptly ending the level.
     ctx.fillStyle = '#4c443b'; ctx.fillRect(3852, 126, 7, 70);
@@ -2997,7 +3531,17 @@ const Overworld = (() => {
     ctx.fillText('FAR SIDE', 3888, 149);
 
     drawSidePlayer();
+    drawCombatFx();
     ctx.restore();
+    if (sidePlayer.deadTime > 0 && sidePlayer.deadTime < 0.7) {
+      ctx.fillStyle = 'rgba(0,0,0,' + (1 - sidePlayer.deadTime / 0.7) + ')'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    if (stats.health > 0 && stats.health <= stats.maxHealth * 0.25) {
+      const pulse = 0.18 + Math.sin(time * 6) * 0.08;
+      const vg = ctx.createRadialGradient(160, 120, 90, 160, 120, 200);
+      vg.addColorStop(0, 'rgba(160,0,0,0)'); vg.addColorStop(1, 'rgba(160,0,0,' + pulse + ')');
+      ctx.fillStyle = vg; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
 
     ctx.fillStyle = 'rgba(10,10,18,.72)';
     ctx.fillRect(218, 4, 98, 17);
@@ -3006,7 +3550,7 @@ const Overworld = (() => {
     ctx.fillStyle = 'rgba(8,9,16,.72)';
     ctx.fillRect(0, 226, canvas.width, 14);
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-    ctx.fillText(dadNoteRead ? (equipment.armor ? 'QUEST COMPLETE: DAD\'S ARMOR EQUIPPED' : 'QUEST: FIND AND EQUIP DAD\'S ARMOR') : (inputMode === 'pad' ? 'STICK MOVE   ✕ JUMP / USE   □ ATTACK   △ BAG' : 'A/D MOVE  SPACE JUMP  J ATTACK  E INTERACT'), 5, 236);
+    ctx.fillText(inputMode === 'pad' ? 'STICK MOVE  ✕ JUMP  □ ATTACK (TAP x3 COMBO)  △ BAG' : 'A/D MOVE  SPACE JUMP  J ATTACK (x3 COMBO)  I BAG', 5, 236);
 
     if (sidePlayer.x < 100) {
       ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(6, 180, 102, 13);
@@ -3022,12 +3566,33 @@ const Overworld = (() => {
   }
 
   function drawSideHUD() {
-    ctx.fillStyle = 'rgba(9,10,20,.78)';
-    ctx.fillRect(4, 4, 132, 27);
-    ctx.fillStyle = '#f7e9c7'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-    ctx.fillText('LV ' + stats.level + '   HP ' + stats.health + '/' + stats.maxHealth, 9, 14);
-    ctx.fillText('SP', 9, 25);
-    drawBar(25, 18, 105, 7, stats.stamina, stats.maxStamina, '#71b86c');
+    ctx.fillStyle = 'rgba(9,10,20,.8)'; ctx.fillRect(4, 4, 136, 33);
+    ctx.fillStyle = '#d6b477'; ctx.fillRect(4, 4, 136, 1); ctx.fillRect(4, 36, 136, 1);
+    ctx.fillStyle = levelUpUntil > time && Math.floor(time * 8) % 2 ? '#fff1c4' : '#d6b477'; ctx.fillRect(7, 8, 21, 25);
+    ctx.fillStyle = '#2a1a12'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('LV', 17.5, 16); ctx.font = 'bold 9px monospace'; ctx.fillText(String(stats.level), 17.5, 28);
+    ctx.textAlign = 'left'; ctx.font = '6px monospace'; ctx.fillStyle = '#f0a29a'; ctx.fillText('HP', 32, 14);
+    drawBar(43, 9, 70, 7, stats.health, stats.maxHealth, stats.health <= stats.maxHealth * 0.25 ? '#ff7a3c' : '#e2584f');
+    ctx.fillStyle = '#f7e9c7'; ctx.fillText(stats.health + '/' + stats.maxHealth, 116, 15);
+    ctx.fillStyle = '#a6e39a'; ctx.fillText('SP', 32, 24);
+    drawBar(43, 19, 70, 6, stats.stamina, stats.maxStamina, '#71b86c');
+    ctx.fillStyle = '#3b2e14'; ctx.fillRect(43, 28, 70, 3);
+    ctx.fillStyle = '#f2c14e'; ctx.fillRect(43, 28, Math.round(70 * clamp((stats.xp || 0) / xpForNext(stats.level), 0, 1)), 3);
+    ctx.fillStyle = '#f2d38a'; ctx.fillText('XP', 32, 32);
+    ctx.fillStyle = '#f2c14e'; ctx.fillRect(117, 27, 5, 5); ctx.fillStyle = '#fff1a8'; ctx.fillRect(118, 28, 1, 2);
+    ctx.fillStyle = '#ffe3a1'; ctx.fillText(String(inventory.coins || 0), 124, 32);
+    if (comboTimer > 0 || (sidePlayer.atk && sidePlayer.atk.name !== 'slash1')) {
+      const step = sidePlayer.atk ? ({ slash1: 1, slash2: 2, finisher: 3, thrust: 1, air: 1 })[sidePlayer.atk.name] : ({ slash1: 1, slash2: 2 })[lastMove] || 0;
+      if (step >= 2) { ctx.fillStyle = '#ffe3a1'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'left'; ctx.fillText(step + ' HIT' + (step === 3 ? '!' : ''), 8, 48); }
+    }
+    if (levelUpUntil > time) {
+      const a = Math.min(1, (levelUpUntil - time) / 0.5);
+      ctx.globalAlpha = a; ctx.textAlign = 'center';
+      ctx.font = 'bold 14px monospace'; ctx.fillStyle = '#2a1a12'; ctx.fillText('LEVEL UP', 161, 71);
+      ctx.fillStyle = '#ffe3a1'; ctx.fillText('LEVEL UP', 160, 70);
+      ctx.font = '7px monospace'; ctx.fillStyle = '#f7e9c7'; ctx.fillText('MAX HP +4   STR +1', 160, 82);
+      ctx.globalAlpha = 1;
+    }
     if (notice && time < noticeUntil) {
       ctx.fillStyle = 'rgba(12,10,20,.9)';
       ctx.fillRect(48, 205, 224, 17);
@@ -3062,7 +3627,7 @@ const Overworld = (() => {
   function startArmorQuestFromInventory() {
     armorTutorialPending = false;
     armorQuestActive = !equipment.armor;
-    panel = 'inventory';
+    openPanel('inventory', 3);
     sidePlayer.vx = 0; sidePlayer.moving = false;
     if (onSave) onSave(getSaveData());
   }
@@ -3103,6 +3668,7 @@ const Overworld = (() => {
         return;
       }
       if (Math.abs(sidePlayer.x - 930) < 58) {
+        if (!equipment.armor) { notice = "Dad said to take his armor first."; noticeUntil = time + 2.4; return; }
         platformScene = 'forest';
         insideHouse = false;
         sidePlayer.x = 72; sidePlayer.y = SIDE_GROUND_Y;
@@ -3259,6 +3825,8 @@ const Overworld = (() => {
 
   function drawPanel() {
     if (!panel) return;
+    if (panel === 'stats') { panel = 'inventory'; invTab = 2; }
+    if (panel === 'inventory') { drawInventoryScreen(); return; }
     ctx.fillStyle = 'rgba(10, 12, 22, 0.94)';
     ctx.fillRect(43, 37, 234, 164);
     ctx.strokeStyle = '#d9b56b'; ctx.lineWidth = 2;
@@ -3336,6 +3904,329 @@ const Overworld = (() => {
       const secs = Math.floor(stats.playTime % 60);
       ctx.fillText(mins + ':' + String(secs).padStart(2, '0'), 252, 120);
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Full-screen inventory: ITEMS / GEAR / STATS / QUEST tabs.
+  // ---------------------------------------------------------------------------
+  function ownedItems() { return ITEM_ORDER.filter(k => (inventory[k] || 0) > 0); }
+
+  function openPanel(name, tab) {
+    if (name === 'stats') { panel = 'inventory'; invTab = 2; }
+    else if (name === 'inventory') { panel = 'inventory'; if (typeof tab === 'number') invTab = tab; }
+    else panel = name;
+    invOpenTime = time;
+    keys.clear();
+    sidePlayer.atk = null; sideAttackQueued = false;
+  }
+  function togglePanel(name) {
+    const wantTab = name === 'stats' ? 2 : null;
+    if (panel === 'inventory' && (wantTab === null || invTab === wantTab)) { closeCurrentPanel(); return; }
+    openPanel(name, wantTab === null ? invTab : wantTab);
+  }
+
+  function useSelectedItem() {
+    if (invTab !== 0) return;
+    const items = ownedItems();
+    const key = items[invSel];
+    if (!key) return;
+    const def = ITEM_DEFS[key];
+    if (!def.heal) { notice = def.name + ' cannot be used right now.'; noticeUntil = time + 1.6; sfx('tick'); return; }
+    if (stats.health >= stats.maxHealth) { notice = 'You are already at full health.'; noticeUntil = time + 1.6; sfx('tick'); return; }
+    const before = stats.health;
+    stats.health = Math.min(stats.maxHealth, stats.health + def.heal);
+    inventory[key]--;
+    notice = 'Used ' + def.name + ' (+' + (stats.health - before) + ' HP)'; noticeUntil = time + 1.8;
+    invUseFlash = time;
+    sfx('use'); padRumble(0.1, 0.3, 80);
+    const left = ownedItems();
+    if (invSel >= left.length) invSel = Math.max(0, left.length - 1);
+    if (onSave) onSave(getSaveData());
+  }
+  let invUseFlash = -10;
+
+  function inventoryNavigate(dx, dy) {
+    if (invTab === 0) {
+      const count = Math.max(1, ownedItems().length);
+      const cols = 6;
+      let col = invSel % cols, row = Math.floor(invSel / cols);
+      col = clamp(col + dx, 0, cols - 1); row = clamp(row + dy, 0, 2);
+      const next = row * cols + col;
+      invSel = Math.min(next, count - 1);
+    } else if (invTab === 1) {
+      gearSel = clamp(gearSel + dy + dx, 0, 3);
+    }
+    sfx('tick');
+  }
+  function inventoryTab(step) {
+    invTab = (invTab + step + INV_TABS.length) % INV_TABS.length;
+    sfx('tick');
+  }
+
+  // Returns true when the key was consumed by the open inventory.
+  function inventoryKey(k) {
+    if (k === 'arrowleft' || k === 'a') inventoryNavigate(-1, 0);
+    else if (k === 'arrowright' || k === 'd') inventoryNavigate(1, 0);
+    else if (k === 'arrowup' || k === 'w') inventoryNavigate(0, -1);
+    else if (k === 'arrowdown' || k === 's') inventoryNavigate(0, 1);
+    else if (k === 'q') inventoryTab(-1);
+    else if (k === 'r' || k === 'tab') inventoryTab(1);
+    else if (k === 'e' || k === 'enter' || k === ' ') useSelectedItem();
+    else if (k === 'i') closeCurrentPanel();
+    else if (k === 'c') { if (invTab === 2) closeCurrentPanel(); else invTab = 2; }
+    return true;
+  }
+
+  function invBox(x, y, w, h, fill = '#1d1824', edge = '#5a4a3e') {
+    ctx.fillStyle = '#0d0a10'; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+    ctx.fillStyle = fill; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = edge; ctx.fillRect(x, y, w, 1); ctx.fillRect(x, y, 1, h);
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(x, y + h - 1, w, 1); ctx.fillRect(x + w - 1, y, 1, h);
+  }
+  function invBar(x, y, w, h, value, max, color, dark) {
+    ctx.fillStyle = '#0d0a10'; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+    ctx.fillStyle = dark; ctx.fillRect(x, y, w, h);
+    const fw = Math.round(w * clamp(value / Math.max(1, max), 0, 1));
+    ctx.fillStyle = color; ctx.fillRect(x, y, fw, h);
+    ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.fillRect(x, y, fw, 1);
+  }
+  function invText(text, x, y, color = '#f3e7c9', font = '7px monospace', align = 'left') {
+    ctx.font = font; ctx.textAlign = align;
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillText(text, x + 1, y + 1);
+    ctx.fillStyle = color; ctx.fillText(text, x, y);
+  }
+  function invCursor(x, y, w, h) {
+    const p = Math.floor(time * 4) % 2;
+    ctx.strokeStyle = p ? '#ffe9a6' : '#f2c14e'; ctx.lineWidth = 1;
+    ctx.strokeRect(x - 1.5, y - 1.5, w + 3, h + 3);
+    ctx.fillStyle = '#ffe9a6';
+    const o = 2 + p;
+    [[x - o, y - o], [x + w + o - 3, y - o], [x - o, y + h + o - 3], [x + w + o - 3, y + h + o - 3]].forEach(([cx, cy], i) => {
+      ctx.fillRect(cx, cy + (i < 2 ? 0 : 2), 3, 1);
+      ctx.fillRect(cx + (i % 2 ? 2 : 0), cy, 1, 3);
+    });
+  }
+
+  function drawInventoryCharacterPreview(cx, baseY) {
+    ctx.save();
+    // Spotlight and pedestal.
+    const g = ctx.createRadialGradient(cx, baseY - 40, 4, cx, baseY - 40, 52);
+    g.addColorStop(0, 'rgba(255,214,140,.22)'); g.addColorStop(1, 'rgba(255,214,140,0)');
+    ctx.fillStyle = g; ctx.fillRect(cx - 50, baseY - 96, 100, 100);
+    ctx.fillStyle = '#3a2d2a'; ctx.fillRect(cx - 26, baseY, 52, 5);
+    ctx.fillStyle = '#5c463a'; ctx.fillRect(cx - 24, baseY, 48, 2);
+    ctx.fillStyle = '#251c1c'; ctx.fillRect(cx - 22, baseY + 5, 44, 3);
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(cx - 14, baseY - 1, 28, 2);
+    ctx.imageSmoothingEnabled = false;
+    if (knightSprites.idle && knightSprites.idle.complete && knightSprites.idle.naturalWidth && equipment.armor) {
+      // 2x crop of the knight's body from the idle cell.
+      const f = Math.floor(time * 6) % 8, col = f % 2, row = Math.floor(f / 2);
+      ctx.drawImage(knightSprites.idle, col * 128 + 44, row * 64 + 16, 40, 48, cx - 40 + 4, baseY - 96, 80, 96);
+    } else if (playerSheetReady) {
+      const f = Math.floor(time * 2) % 2;
+      ctx.drawImage(playerSheet, f * 32, 0, 32, 32, cx - 48, baseY - 92, 96, 96);
+    } else {
+      ctx.fillStyle = '#342c39'; ctx.fillRect(cx - 14, baseY - 60, 28, 60);
+      ctx.fillStyle = '#e0b27a'; ctx.fillRect(cx - 11, baseY - 78, 22, 18);
+    }
+    ctx.restore();
+  }
+
+  function drawInventoryScreen() {
+    const W = canvas.width, H = canvas.height;
+    ctx.save();
+    ctx.fillStyle = 'rgba(4,5,10,.86)'; ctx.fillRect(0, 0, W, H);
+    // Outer frame: dark wood with gold trim.
+    ctx.fillStyle = '#2b1d18'; ctx.fillRect(6, 6, W - 12, H - 12);
+    ctx.fillStyle = '#4a3328'; ctx.fillRect(8, 8, W - 16, H - 16);
+    for (let x = 12; x < W - 12; x += 9) { ctx.fillStyle = '#3d2a21'; ctx.fillRect(x, 9, 4, 1); ctx.fillRect(x + 3, H - 10, 4, 1); }
+    ctx.fillStyle = '#d6b477'; ctx.fillRect(11, 11, W - 22, 1); ctx.fillRect(11, H - 12, W - 22, 1);
+    ctx.fillRect(11, 11, 1, H - 22); ctx.fillRect(W - 12, 11, 1, H - 22);
+    ctx.fillStyle = '#151119'; ctx.fillRect(13, 13, W - 26, H - 26);
+    // Gold corner studs.
+    [[9, 9], [W - 14, 9], [9, H - 14], [W - 14, H - 14]].forEach(([x, y]) => {
+      ctx.fillStyle = '#7a5a22'; ctx.fillRect(x, y, 5, 5);
+      ctx.fillStyle = '#f2d38a'; ctx.fillRect(x + 1, y + 1, 3, 3);
+      ctx.fillStyle = '#fff1c4'; ctx.fillRect(x + 1, y + 1, 1, 1);
+    });
+
+    // Tabs.
+    const tabW = 40, tabX0 = 125;
+    INV_TABS.forEach((name, i) => {
+      const x = tabX0 + i * (tabW + 3), active = i === invTab;
+      ctx.fillStyle = active ? '#d6b477' : '#2a2230'; ctx.fillRect(x, 17, tabW, 14);
+      ctx.fillStyle = active ? '#f7e2a8' : '#3a3042'; ctx.fillRect(x, 17, tabW, 1);
+      if (active) { ctx.fillStyle = '#d6b477'; ctx.fillRect(x, 31, tabW, 3); }
+      invText(name, x + tabW / 2, 27, active ? '#2a1a12' : '#a99f9a', 'bold 7px monospace', 'center');
+    });
+    const pad = inputMode === 'pad';
+    invText(pad ? 'L1' : 'Q', tabX0 - 3, 27, '#8f8478', '6px monospace', 'right');
+    invText(pad ? 'R1' : 'R', tabX0 + 4 * (tabW + 3) - 1, 27, '#8f8478', '6px monospace', 'left');
+    ctx.fillStyle = '#d6b477'; ctx.fillRect(116, 34, W - 132, 1);
+
+    // Left: hero card.
+    invBox(18, 17, 92, 190, '#1b1621', '#4b3d35');
+    invText('ROWAN', 64, 29, '#ffe3a1', 'bold 9px monospace', 'center');
+    invText(equipment.armor ? 'KNIGHT  LV ' + stats.level : 'VILLAGER  LV ' + stats.level, 64, 38, '#b3a796', '6px monospace', 'center');
+    drawInventoryCharacterPreview(64, 140);
+    invText('HP', 23, 157, '#f0a29a', '6px monospace');
+    invBar(36, 152, 68, 5, stats.health, stats.maxHealth, '#e2584f', '#4a1d22');
+    invText(stats.health + '/' + stats.maxHealth, 104, 165, '#e8d9c4', '6px monospace', 'right');
+    invText('SP', 23, 174, '#a6e39a', '6px monospace');
+    invBar(36, 169, 68, 5, stats.stamina, stats.maxStamina, '#71b86c', '#1f3a22');
+    invText('XP', 23, 189, '#f2d38a', '6px monospace');
+    invBar(36, 184, 68, 5, stats.xp || 0, xpForNext(stats.level), '#f2c14e', '#3b2e14');
+    // Coin purse.
+    drawItemIcon('coin', 23, 193, 1);
+    invText(String(inventory.coins || 0), 38, 203, '#ffe3a1', 'bold 7px monospace');
+    invText('ATK ' + totalAttack() + ' DEF ' + totalDefense(), 104, 203, '#b3a796', '6px monospace', 'right');
+
+    const RX = 118, RY = 40, RW = 186;
+    if (invTab === 0) drawItemsTab(RX, RY, RW);
+    else if (invTab === 1) drawGearTab(RX, RY, RW);
+    else if (invTab === 2) drawStatsTab(RX, RY, RW);
+    else drawQuestTab(RX, RY, RW);
+
+    // Footer hints.
+    ctx.fillStyle = '#0f0c13'; ctx.fillRect(116, 211, W - 132, 14);
+    const hint = pad
+      ? (invTab === 0 ? '✥ SELECT   ✕ USE   L1/R1 TAB   ○ CLOSE' : 'L1/R1 SWITCH TAB    ○ / △ CLOSE')
+      : (invTab === 0 ? 'ARROWS SELECT  E USE  Q/R TAB  I CLOSE' : 'Q/R SWITCH TAB    I / ESC CLOSE');
+    invText(hint, 116 + (W - 132) / 2, 221, '#c9bca6', '6px monospace', 'center');
+    ctx.restore();
+  }
+
+  function drawItemsTab(x, y, w) {
+    const items = ownedItems();
+    invSel = clamp(invSel, 0, Math.max(0, items.length - 1));
+    const cols = 6, slot = 28, gap = 3;
+    const gx = x + Math.floor((w - (cols * slot + (cols - 1) * gap)) / 2);
+    for (let i = 0; i < 18; i++) {
+      const sx = gx + (i % cols) * (slot + gap), sy = y + 2 + Math.floor(i / cols) * (slot + gap);
+      const key = items[i];
+      invBox(sx, sy, slot, slot, key ? '#2a2231' : '#1d1824', key ? '#5c4c56' : '#2c2430');
+      ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(sx + 3, sy + slot - 5, slot - 6, 2);
+      if (key) {
+        const lift = i === invSel ? Math.round(Math.sin(time * 6) * 1) : 0;
+        drawItemIcon(ITEM_DEFS[key].icon, sx + 2, sy + 2 + lift, 2);
+        const qty = String(inventory[key]);
+        ctx.fillStyle = '#0d0a10'; ctx.fillRect(sx + slot - 4 - qty.length * 4, sy + slot - 8, qty.length * 4 + 3, 7);
+        invText(qty, sx + slot - 2, sy + slot - 2, '#ffffff', 'bold 6px monospace', 'right');
+      }
+    }
+    if (items.length) {
+      const sx = gx + (invSel % cols) * (slot + gap), sy = y + 2 + Math.floor(invSel / cols) * (slot + gap);
+      invCursor(sx, sy, slot, slot);
+    }
+    // Description card.
+    const dy = y + 100;
+    invBox(x + 2, dy, w - 4, 66, '#201a26', '#4b3d35');
+    const key = items[invSel];
+    if (!key) {
+      invText('Your pack is empty.', x + w / 2, dy + 30, '#a99f9a', '7px monospace', 'center');
+      invText('Defeat goblins to find loot.', x + w / 2, dy + 42, '#7f766f', '6px monospace', 'center');
+      return;
+    }
+    const def = ITEM_DEFS[key];
+    ctx.fillStyle = '#151119'; ctx.fillRect(x + 8, dy + 7, 28, 28);
+    drawItemIcon(def.icon, x + 10, dy + 9, 2);
+    invText(def.name.toUpperCase(), x + 42, dy + 15, '#ffe3a1', 'bold 8px monospace');
+    const tagColor = def.type === 'CONSUMABLE' ? '#71b86c' : def.type === 'TROPHY' ? '#d6b477' : '#8fa6c9';
+    ctx.fillStyle = tagColor; ctx.fillRect(x + 42, dy + 19, def.type.length * 4 + 6, 9);
+    invText(def.type, x + 45, dy + 26, '#141018', 'bold 6px monospace');
+    invText('x' + inventory[key], x + w - 10, dy + 15, '#c9bca6', '7px monospace', 'right');
+    def.desc.forEach((line, i) => invText(line, x + 10, dy + 46 + i * 9, '#d9cdb8', '7px monospace'));
+    if (def.heal) {
+      const heal = def.heal >= 999 ? 'FULL' : '+' + def.heal;
+      const flash = time - invUseFlash < 0.3;
+      invText((inputMode === 'pad' ? '✕' : 'E') + ' USE  ' + heal + ' HP', x + w - 10, dy + 30, flash ? '#ffffff' : '#9be37a', 'bold 6px monospace', 'right');
+    }
+  }
+
+  function drawGearTab(x, y, w) {
+    const on = equipment.armor;
+    const slots = [
+      { label: 'HEAD', icon: 'helm', name: 'Steel Helm', stat: 'DEF +1' },
+      { label: 'BODY', icon: 'armor', name: "Dad's Armor", stat: 'DEF +2' },
+      { label: 'LEGS', icon: 'legs', name: 'Iron Greaves', stat: 'SPD  -' },
+      { label: 'WEAPON', icon: 'sword', name: 'Knight Sword', stat: 'ATK +2' }
+    ];
+    slots.forEach((s, i) => {
+      const sy = y + 2 + i * 33;
+      invBox(x + 2, sy, w - 4, 30, i === gearSel ? '#2c2433' : '#211b28', '#4b3d35');
+      ctx.fillStyle = '#151119'; ctx.fillRect(x + 6, sy + 3, 24, 24);
+      if (on) drawItemIcon(s.icon, x + 6, sy + 3, 2);
+      else { ctx.globalAlpha = 0.18; drawItemIcon(s.icon, x + 6, sy + 3, 2); ctx.globalAlpha = 1; }
+      invText(s.label, x + 36, sy + 11, '#8f8478', '6px monospace');
+      invText(on ? s.name : 'Empty', x + 36, sy + 22, on ? '#f3e7c9' : '#6f6670', 'bold 7px monospace');
+      if (on) invText(s.stat, x + w - 10, sy + 19, s.stat.startsWith('ATK') ? '#ffb27a' : '#9fd3ff', 'bold 7px monospace', 'right');
+      if (i === gearSel) invCursor(x + 2, sy, w - 4, 30);
+    });
+    invText(on ? 'Dad\'s old knight set. It still fits.' : 'Find Dad\'s armor stand in his room.', x + w / 2, y + 144, on ? '#a9c8a0' : '#e8b07a', '6px monospace', 'center');
+  }
+
+  function drawStatsTab(x, y, w) {
+    const rows = [
+      ['LEVEL', String(stats.level)],
+      ['STRENGTH', stats.strength + (equipment.armor ? '  (+' + SWORD_ATTACK + ')' : '')],
+      ['DEFENSE', stats.defense + (equipment.armor ? '  (+' + ARMOR_DEFENSE + ')' : '')],
+      ['GOBLINS DEFEATED', String(stats.kills || 0)],
+      ['STEPS', String(stats.steps)],
+      ['PLAY TIME', Math.floor(stats.playTime / 60) + ':' + String(Math.floor(stats.playTime % 60)).padStart(2, '0')]
+    ];
+    invBox(x + 2, y + 2, w - 4, 52, '#201a26', '#4b3d35');
+    invText('HEALTH', x + 10, y + 14, '#f0a29a', '7px monospace');
+    invText(stats.health + ' / ' + stats.maxHealth, x + w - 10, y + 14, '#f3e7c9', '7px monospace', 'right');
+    invBar(x + 10, y + 17, w - 20, 4, stats.health, stats.maxHealth, '#e2584f', '#4a1d22');
+    invText('STAMINA', x + 10, y + 30, '#a6e39a', '7px monospace');
+    invText(Math.round(stats.stamina) + ' / ' + stats.maxStamina, x + w - 10, y + 30, '#f3e7c9', '7px monospace', 'right');
+    invBar(x + 10, y + 33, w - 20, 4, stats.stamina, stats.maxStamina, '#71b86c', '#1f3a22');
+    invText('EXPERIENCE', x + 10, y + 46, '#f2d38a', '7px monospace');
+    invText((stats.xp || 0) + ' / ' + xpForNext(stats.level), x + w - 10, y + 46, '#f3e7c9', '7px monospace', 'right');
+    invBar(x + 10, y + 49, w - 20, 3, stats.xp || 0, xpForNext(stats.level), '#f2c14e', '#3b2e14');
+    rows.forEach(([label, value], i) => {
+      const ry = y + 60 + i * 17;
+      ctx.fillStyle = i % 2 ? '#1d1824' : '#231d2a'; ctx.fillRect(x + 2, ry, w - 4, 15);
+      invText(label, x + 10, ry + 10, '#b9ad9c', '7px monospace');
+      invText(value, x + w - 10, ry + 10, '#ffe3a1', 'bold 7px monospace', 'right');
+    });
+  }
+
+  function drawQuestTab(x, y, w) {
+    const inForest = platformScene === 'forest' && !insideHouse;
+    const farSide = inForest && sidePlayer.x > FOREST_SIDE_WIDTH - 260;
+    const steps = [
+      ['Read the note from Dad', dadNoteRead],
+      ["Equip Dad's armor", equipment.armor],
+      ['Head out into the forest', inForest || (stats.kills || 0) > 0],
+      ['Reach the far side', farSide]
+    ];
+    invBox(x + 2, y + 2, w - 4, 92, '#201a26', '#4b3d35');
+    invText('MAIN QUEST', x + 10, y + 13, '#d6b477', 'bold 6px monospace');
+    invText('Meet Dad Beyond the Forest', x + 10, y + 24, '#ffe3a1', 'bold 8px monospace');
+    const current = steps.findIndex(s => !s[1]);
+    steps.forEach(([label, done], i) => {
+      const sy = y + 34 + i * 14;
+      ctx.fillStyle = '#0d0a10'; ctx.fillRect(x + 10, sy, 9, 9);
+      ctx.fillStyle = done ? '#71b86c' : i === current ? '#3a3042' : '#211b28'; ctx.fillRect(x + 11, sy + 1, 7, 7);
+      if (done) { ctx.fillStyle = '#e9ffd9'; ctx.fillRect(x + 12, sy + 4, 2, 2); ctx.fillRect(x + 14, sy + 5, 1, 1); ctx.fillRect(x + 15, sy + 2, 2, 3); }
+      const color = done ? '#8f8478' : i === current ? '#fff4d8' : '#6f6670';
+      invText(label, x + 25, sy + 8, color, (i === current ? 'bold ' : '') + '7px monospace');
+      if (done) { ctx.font = '7px monospace'; ctx.fillStyle = '#8f8478'; ctx.fillRect(x + 25, sy + 5, Math.round(ctx.measureText(label).width), 1); }
+      if (i === current) {
+        const ax = x + w - 14 - (Math.floor(time * 3) % 2);
+        ctx.fillStyle = '#f2c14e';
+        for (let k = 0; k < 4; k++) ctx.fillRect(ax + k, sy + 4 - k, 1, k * 2 + 1);
+      }
+    });
+    const kills = Math.min(5, stats.kills || 0);
+    invBox(x + 2, y + 100, w - 4, 66, '#201a26', '#4b3d35');
+    invText('SIDE QUEST', x + 10, y + 111, '#d6b477', 'bold 6px monospace');
+    invText('Goblin Trouble', x + 10, y + 122, '#ffe3a1', 'bold 8px monospace');
+    invText('Defeat 5 goblin scouts on the trail.', x + 10, y + 134, '#d9cdb8', '6px monospace');
+    invBar(x + 10, y + 142, w - 52, 5, kills, 5, kills >= 5 ? '#71b86c' : '#e2584f', '#3a1d22');
+    invText(kills + ' / 5', x + w - 10, y + 147, kills >= 5 ? '#9be37a' : '#f3e7c9', 'bold 7px monospace', 'right');
+    if (kills >= 5) invText('COMPLETE', x + w / 2, y + 160, '#9be37a', 'bold 7px monospace', 'center');
   }
 
   function drawPauseMenu() {
@@ -3482,6 +4373,11 @@ const Overworld = (() => {
         return;
       }
       if (nearFrontDoor()) {
+        if (platformMode && !equipment.armor) {
+          notice = dadNoteRead ? "Dad said to take his armor first. It's in his room." : 'You should check the note on your desk first.';
+          noticeUntil = time + 2.6;
+          return;
+        }
         if (platformMode) {
           insideHouse = false;
           platformScene = 'forest';
@@ -3559,10 +4455,10 @@ const Overworld = (() => {
     player.x = SPAWN.x * TILE; player.y = SPAWN.y * TILE; player.facing = 'down';
     insideHouse = false;
     interiorPlayer.x = KID_SPAWN.x; interiorPlayer.y = KID_SPAWN.y; interiorPlayer.facing = KID_SPAWN.facing; interiorPlayer.moving = false; interiorPlayer.walk = 0;
-    inventory.berries = 3; inventory.wood = 0; inventory.fish = 0;
+    inventory.berries = 3; inventory.wood = 0; inventory.fish = 0; inventory.fang = 0; inventory.tonic = 0; inventory.coins = 0;
     equipment.armor = false;
     armorTutorialPending = false; armorQuestActive = false; dadNoteRead = false;
-    Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0 });
+    Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0, xp: 0, kills: 0 });
     stepDistance = 0;
     worldClock = 0.28;
     // A genuinely new slot begins in the kid's bedroom.
@@ -3589,7 +4485,7 @@ const Overworld = (() => {
       armorTutorialPending = true;
     }
     if (saveData.inventory && typeof saveData.inventory === 'object') {
-      ['berries', 'wood', 'fish'].forEach(k => {
+      ['berries', 'wood', 'fish', 'fang', 'tonic', 'coins'].forEach(k => {
         if (Number.isFinite(saveData.inventory[k])) inventory[k] = Math.max(0, Math.floor(saveData.inventory[k]));
       });
     }
@@ -3698,6 +4594,10 @@ const Overworld = (() => {
       e.stopPropagation();
       return;
     }
+    if (panel === 'inventory') {
+      if (!e.repeat || k.startsWith('arrow')) inventoryKey(k);
+      e.preventDefault(); e.stopPropagation(); return;
+    }
     if ((k === 'j' || k === 'k' || k === 'f') && platformMode && platformScene === 'forest') {
       if (!e.repeat && !panel) sideAttackQueued = true;
       e.preventDefault(); e.stopPropagation(); return;
@@ -3705,7 +4605,7 @@ const Overworld = (() => {
     if (k === 'i' || k === 'c') {
       if (e.repeat) return;
       if (k === 'i' && panel === 'dad-note') { closeCurrentPanel(); e.preventDefault(); return; }
-      panel = panel === (k === 'i' ? 'inventory' : 'stats') ? null : (k === 'i' ? 'inventory' : 'stats');
+      togglePanel(k === 'i' ? 'inventory' : 'stats');
       e.preventDefault();
       return;
     }
@@ -3760,8 +4660,9 @@ const Overworld = (() => {
     sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
     sidePlayer.facing = 1; sidePlayer.moving = false; sidePlayer.walk = 0;
     dadNoteRead = !!(saveData && saveData.sideNoteRead);
-    sideJumpQueued = false; sideAttackQueued = false; sidePlayer.attackTime = 0; sidePlayer.attackCooldown = 0; sidePlayer.hurtTime = 0; sidePlayer.invulnTime = 0; sidePlayer.deadTime = 0;
-    sideGoblins.forEach((goblin, i) => { goblin.x = goblin.home; goblin.hp = goblin.maxHp; goblin.dead = false; goblin.deadTime = 0; goblin.respawn = 0; goblin.attackTime = 0; goblin.attackCooldown = 0.7 + i * 0.4; goblin.hurtTime = 0; goblin.attackHit = false; goblin.patrolDir = i === 0 ? -1 : 1; goblin.dir = goblin.patrolDir; goblin.moving = false; });
+    sideJumpQueued = false; sideAttackQueued = false; sidePlayer.attackTime = 0; sidePlayer.attackCooldown = 0; sidePlayer.hurtTime = 0; sidePlayer.invulnTime = 0; sidePlayer.deadTime = 0; sidePlayer.atk = null;
+    combatFx.length = 0; damageNumbers.length = 0; pickups.length = 0; hitStop = 0; screenShake = 0; comboTimer = 0;
+    sideGoblins.forEach((goblin, i) => { goblin.x = goblin.home; goblin.hp = goblin.maxHp; goblin.dead = false; goblin.deadTime = 0; goblin.respawn = 0; goblin.attackTime = 0; goblin.attackCooldown = 0.7 + i * 0.4; goblin.hurtTime = 0; goblin.attackHit = false; goblin.patrolDir = i % 2 ? 1 : -1; goblin.dir = goblin.patrolDir; goblin.moving = false; goblin.kvx = 0; goblin.flash = 0; });
     sideCameraX = Math.max(0, sidePlayer.x - canvas.width * 0.43);
     insideHouse = platformScene === 'house';
     introActive = !saveData || typeof saveData !== 'object';
@@ -3839,13 +4740,21 @@ const Overworld = (() => {
       return;
     }
 
+    if (panel === 'inventory') {
+      if (action === 'primary') useSelectedItem();
+      else if (action === 'back' || action === 'inventory') closeCurrentPanel();
+      else if (action === 'stats') { if (invTab === 2) closeCurrentPanel(); else invTab = 2; }
+      else if (action === 'tabPrev') inventoryTab(-1);
+      else if (action === 'tabNext') inventoryTab(1);
+      return;
+    }
     if (panel) {
       // Any of ✕, ○, or the panel's own button closes it.
       if (action === 'primary' || action === 'back' ||
           (action === 'inventory' && (panel === 'inventory' || panel === 'dad-note')) ||
           (action === 'stats' && panel === 'stats')) closeCurrentPanel();
-      else if (action === 'inventory') panel = 'inventory';
-      else if (action === 'stats') panel = 'stats';
+      else if (action === 'inventory') openPanel('inventory');
+      else if (action === 'stats') openPanel('stats');
       return;
     }
 
@@ -3859,8 +4768,8 @@ const Overworld = (() => {
       else interact();
       return;
     }
-    if (action === 'inventory') { panel = 'inventory'; return; }
-    if (action === 'stats') { panel = 'stats'; return; }
+    if (action === 'inventory') { openPanel('inventory'); return; }
+    if (action === 'stats') { openPanel('stats'); return; }
     // ○ with nothing open does nothing, so it never pauses by accident.
   }
   return { init, update, draw, stop, controllerAction, setInputMode };

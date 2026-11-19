@@ -962,7 +962,7 @@ function pollGamepad(now) {
   }
   gamepadState.held = next;
   const actions = [[0, 'primary'], [2, 'attack'], [7, 'attack'], [1, 'back'], [3, 'inventory'],
-                   [17, 'stats'], [8, 'stats'], [9, 'pause']];
+                   [17, 'stats'], [8, 'stats'], [9, 'pause'], [4, 'tabPrev'], [5, 'tabNext']];
   for (const [button, action] of actions) {
     const down = pressed(button), wasDown = gamepadState.actions.has(button);
     if (down && !wasDown) {
