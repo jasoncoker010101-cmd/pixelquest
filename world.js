@@ -747,7 +747,19 @@ const Overworld = (() => {
 
   const MAILBOX = { x: 15.4 * TILE, y: 12.4 * TILE };
   // The note rests on the dresser in Dad's bedroom.
-  const DAD_NOTE = { x: 100, y: 184 };
+  // Dad's dresser (with the note) sits below his bed, leaving the doorway side of the room open.
+  const DAD_NOTE = { x: 55, y: 186 };
+  // Dad's armor stand in the lower-left corner of Dad's top-down bedroom.
+  const DAD_ARMOR = { x: 105, y: 200 };
+  function nearDadArmor() {
+    return Math.hypot(interiorPlayer.x + 8 - DAD_ARMOR.x, interiorPlayer.y + 12 - DAD_ARMOR.y) < 20;
+  }
+  function nearDadNote() {
+    return Math.hypot(interiorPlayer.x - DAD_NOTE.x, interiorPlayer.y - DAD_NOTE.y) < 35;
+  }
+  function nearFrontDoor() {
+    return Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 28;
+  }
 
   function rng(seed) {
     let s = seed >>> 0;
@@ -876,8 +888,10 @@ const Overworld = (() => {
       [198,39,241,72], [230,70,258,94], [266,34,293,67], [270,72,292,91],
       // Separate bathroom fixtures opening onto the hallway.
       [210,111,237,136], [254,111,282,136],
-      [38,138,76,178], [78,145,91,160], [89,139,115,172], [87,180,113,202],
-      [244,164,282,204], [224,165,239,180], [224,185,248,205], [257,185,283,205]
+      [38,138,76,178], [78,145,91,160], [89,139,115,172], [42,182,68,204],
+      [244,164,282,204], [224,165,239,180], [224,185,248,205], [257,185,283,205],
+      // Dad's armor stand base.
+      [96,198,114,212]
     ];
 
     return walls.concat(furniture).some(([x1, y1, x2, y2]) =>
@@ -1665,7 +1679,7 @@ const Overworld = (() => {
     drawInteriorArt(16, 48, 47, 49, 38, 138, 38, 40);
     drawInteriorArt(224, 282, 47, 40, 78, 145, 13, 15);
     drawInteriorArt(336, 38, 50, 57, 89, 139, 26, 33);
-    drawInteriorArt(224, 282, 47, 40, 87, 180, 26, 22);
+    drawInteriorArt(224, 282, 47, 40, 42, 182, 26, 22);
 
     drawInteriorArt(16, 48, 47, 49, 244, 164, 38, 40);
     drawInteriorArt(224, 282, 47, 40, 224, 165, 14, 15);
@@ -1674,6 +1688,7 @@ const Overworld = (() => {
 
     // A folded paper note on Dad's dresser.
     ctx.save();
+    ctx.translate(-45, 2);
     ctx.fillStyle = 'rgba(35,18,24,.35)'; ctx.fillRect(92, 181, 17, 13);
     ctx.fillStyle = '#77513c'; ctx.fillRect(91, 178, 17, 13);
     ctx.fillStyle = '#eadbb3'; ctx.fillRect(92, 178, 15, 11);
@@ -1683,6 +1698,8 @@ const Overworld = (() => {
     ctx.fillStyle = '#f7ebca'; ctx.fillRect(103, 179, 2, 2);
     ctx.restore();
 
+    drawTopDownArmorStand(DAD_ARMOR.x, 208);
+
     // Draw the player in the same top-down view used by the rest of the house.
     const oldFacing = player.facing, oldMoving = player.moving, oldWalk = player.walk;
     player.facing = interiorPlayer.facing;
@@ -1691,7 +1708,14 @@ const Overworld = (() => {
     drawPlayer(Math.round(interiorPlayer.x), Math.round(interiorPlayer.y));
     player.facing = oldFacing; player.moving = oldMoving; player.walk = oldWalk;
 
-    if (!panel && Math.hypot(interiorPlayer.x - DAD_NOTE.x, interiorPlayer.y - DAD_NOTE.y) < 35) {
+    const showArmorPrompt = !panel && nearDadArmor() && (!nearDadNote() ||
+      Math.hypot(interiorPlayer.x + 8 - DAD_ARMOR.x, interiorPlayer.y + 12 - DAD_ARMOR.y) < Math.hypot(interiorPlayer.x - DAD_NOTE.x, interiorPlayer.y - DAD_NOTE.y));
+    if (showArmorPrompt) {
+      ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(30, 163, 110, 14);
+      ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(30.5, 163.5, 109, 13);
+      ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+      ctx.fillText(equipment.armor ? 'ARMOR EQUIPPED' : '[ E ] EQUIP ARMOR', 85, 173);
+    } else if (!panel && nearDadNote()) {
       ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(73, 163, 108, 14);
       ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(73.5, 163.5, 107, 13);
       ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
@@ -1705,6 +1729,41 @@ const Overworld = (() => {
     }
     ctx.restore();
   }
+  function drawTopDownArmorStand(x, baseY) {
+    // Small top-down version of Dad's armor display (the side-view one is far too tall here).
+    ctx.save();
+    ctx.translate(x, baseY);
+    ctx.scale(0.26, 0.26);
+    ctx.translate(-x, -baseY);
+    if (equipment.armor) {
+      // Empty stand once the armor has been taken.
+      ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(x - 29, baseY - 2, 58, 4);
+      ctx.fillStyle = '#4b3027'; ctx.fillRect(x - 3, baseY - 69, 6, 65); ctx.fillRect(x - 18, baseY - 5, 36, 4);
+      ctx.fillRect(x - 22, baseY - 69, 44, 6);
+      ctx.fillStyle = '#80533a'; ctx.fillRect(x - 24, baseY - 3, 48, 3);
+    } else {
+      drawDadArmorStand(x, baseY);
+    }
+    ctx.restore();
+  }
+
+  function drawHouseHUD() {
+    if (notice && time < noticeUntil) {
+      ctx.fillStyle = 'rgba(12,10,20,.9)';
+      ctx.fillRect(48, 205, 224, 17);
+      ctx.strokeStyle = '#d9b56b'; ctx.strokeRect(48.5, 205.5, 223, 16);
+      ctx.fillStyle = '#fff0c8'; ctx.textAlign = 'center'; ctx.font = '7px monospace';
+      ctx.fillText(notice, 160, 216);
+    } else if (dadNoteRead) {
+      const text = equipment.armor ? "QUEST: GO OUTSIDE AND CROSS THE FOREST" : "QUEST: EQUIP DAD'S ARMOR (DAD'S ROOM)";
+      ctx.font = '7px monospace';
+      const w = ctx.measureText(text).width + 10;
+      ctx.fillStyle = 'rgba(12,10,20,.82)'; ctx.fillRect(4, 4, w, 13);
+      ctx.fillStyle = '#ffe6b2'; ctx.textAlign = 'left';
+      ctx.fillText(text, 9, 13);
+    }
+  }
+
   function drawBattle() {
     ctx.fillStyle='#17233a'; ctx.fillRect(0,0,canvas.width,canvas.height);
     // Distant forest silhouettes and a moonlit clearing
@@ -2397,8 +2456,10 @@ const Overworld = (() => {
     if (sidePlayer.x < 112) {
       platformScene = 'house';
       insideHouse = true;
-      interiorPlayer.x = 208; interiorPlayer.y = 184;
+      // Come back in through the front door at the bottom of the hallway.
+      interiorPlayer.x = 160; interiorPlayer.y = 194;
       interiorPlayer.facing = 'up'; interiorPlayer.moving = false; interiorPlayer.walk = 0;
+      keys.clear(); sideJumpQueued = false;
       sidePlayer.x = 880; sidePlayer.y = SIDE_GROUND_Y;
       sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
       sideCameraX = Math.max(0, HOUSE_SIDE_WIDTH - canvas.width);
@@ -2433,6 +2494,8 @@ const Overworld = (() => {
     if (battle) { updateBattle(dt); return; }
     if (insideHouse) {
       stats.playTime += dt;
+      sideJumpQueued = false;
+      if (armorTutorialPending || panel) { interiorPlayer.moving = false; return; }
       let ix = 0, iy = 0;
       if (keys.has('arrowleft') || keys.has('a')) ix -= 1;
       if (keys.has('arrowright') || keys.has('d')) ix += 1;
@@ -2687,7 +2750,7 @@ const Overworld = (() => {
     if (introActive) { drawIntro(); return; }
     if (platformMode && platformScene === 'forest') { drawPlatformer(); return; }
     if (battle) { drawBattle(); if (paused) drawPauseMenu(); return; }
-    if (insideHouse) { drawHouseInterior(); drawPanel(); if (paused) drawPauseMenu(); return; }
+    if (insideHouse) { drawHouseInterior(); drawHouseHUD(); drawPanel(); if (armorTutorialPending) drawArmorInventoryPrompt(); if (paused) drawPauseMenu(); return; }
     ctx.fillStyle = '#1b1f3a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     const x0 = Math.max(0, Math.floor(camX / TILE));
@@ -2730,20 +2793,42 @@ const Overworld = (() => {
   }
 
   function interact() {
-    if (platformMode) { interactPlatformer(); return; }
+    // The house is top-down; only the forest uses side-view interaction.
+    if (platformMode && platformScene === 'forest') { interactPlatformer(); return; }
     if (insideHouse) {
-      if (Math.hypot(interiorPlayer.x - DAD_NOTE.x, interiorPlayer.y - DAD_NOTE.y) < 35) {
+      const noteDist = Math.hypot(interiorPlayer.x - DAD_NOTE.x, interiorPlayer.y - DAD_NOTE.y);
+      const armorDist = Math.hypot(interiorPlayer.x + 8 - DAD_ARMOR.x, interiorPlayer.y + 12 - DAD_ARMOR.y);
+      if (nearDadNote() && (!nearDadArmor() || noteDist <= armorDist)) {
         panel = 'dad-note';
+        dadNoteRead = true;
+        if (onSave) onSave(getSaveData());
         return;
       }
-      if (Math.hypot(interiorPlayer.x - 160, interiorPlayer.y - 207) < 28) {
+      if (nearDadArmor()) {
+        if (!equipment.armor) {
+          const completingArmorQuest = armorQuestActive || dadNoteRead;
+          equipment.armor = true;
+          armorQuestActive = false;
+          armorTutorialPending = false;
+          notice = completingArmorQuest ? "Quest complete! Dad's armor equipped." : "You equipped Dad's armor.";
+          noticeUntil = time + 2.5;
+          if (onSave) onSave(getSaveData());
+        } else {
+          notice = "Dad's armor is already equipped.";
+          noticeUntil = time + 2;
+        }
+        return;
+      }
+      if (nearFrontDoor()) {
         if (platformMode) {
           insideHouse = false;
           platformScene = 'forest';
           sidePlayer.x = 72; sidePlayer.y = SIDE_GROUND_Y;
           sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
           sidePlayer.facing = 1; sideCameraX = 0;
+          sideJumpQueued = false; sideAttackQueued = false;
           keys.clear();
+          if (onSave) onSave(getSaveData());
           notice = 'The forest path begins here.';
           noticeUntil = time + 2.5;
           return;
