@@ -2488,17 +2488,18 @@ const Overworld = (() => {
       const slots = [
         { label: 'HEAD', value: equipment.armor ? 'STEEL HELM' : 'EMPTY' },
         { label: 'BODY', value: equipment.armor ? "DAD'S ARMOR" : 'EMPTY' },
-        { label: 'LEGS', value: equipment.armor ? 'GREAVES' : 'EMPTY' }
+        { label: 'LEGS', value: equipment.armor ? 'GREAVES' : 'EMPTY' },
+        { label: 'WEAPON', value: equipment.armor ? 'KNIGHT SWORD' : 'EMPTY' }
       ];
       slots.forEach((slot, i) => {
-        const y = 91 + i * 20;
-        ctx.fillStyle = '#332f40'; ctx.fillRect(147, y, 109, 16);
-        ctx.strokeStyle = '#5e536e'; ctx.strokeRect(147.5, y + 0.5, 108, 15);
+        const y = 88 + i * 16;
+        ctx.fillStyle = '#332f40'; ctx.fillRect(147, y, 109, 13);
+        ctx.strokeStyle = '#5e536e'; ctx.strokeRect(147.5, y + 0.5, 108, 12);
         ctx.textAlign = 'left'; ctx.font = '7px monospace'; ctx.fillStyle = '#b9b1a5';
-        ctx.fillText(slot.label, 153, y + 10);
+        ctx.fillText(slot.label, 153, y + 9);
         ctx.textAlign = 'right'; ctx.font = '7px monospace';
         ctx.fillStyle = equipment.armor ? '#c5d0d3' : '#a79eaa';
-        ctx.fillText(slot.value, 250, y + 10);
+        ctx.fillText(slot.value, 250, y + 9);
       });
       ctx.fillStyle = '#f3e7c9'; ctx.font = '7px monospace'; ctx.textAlign = 'center';
       ctx.fillText('BERRIES x' + inventory.berries + '   WOOD x' + inventory.wood + '   FISH x' + inventory.fish, 160, 174);
