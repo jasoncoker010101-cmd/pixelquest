@@ -21,6 +21,8 @@ const Overworld = (() => {
   let sideJumpQueued = false;
   let sideAttackQueued = false;
   let dadNoteRead = false;
+  let armorTutorialPending = false;
+  let armorQuestActive = false;
   const sidePlayer = { x: 410, y: SIDE_GROUND_Y, vx: 0, vy: 0, onGround: true, facing: 1, moving: false, walk: 0, attackTime: 0, attackCooldown: 0, hurtTime: 0, invulnTime: 0, deadTime: 0 };
   const HOUSE_SIDE_PLATFORMS = [
     { x: 0, y: SIDE_GROUND_Y, w: HOUSE_SIDE_WIDTH, h: 44 },
@@ -1755,6 +1757,13 @@ const Overworld = (() => {
       }
       sideAttackQueued = false; sideJumpQueued = false; updateSideCamera(dt); return;
     }
+    if (armorTutorialPending) {
+      sidePlayer.vx = 0; sidePlayer.moving = false;
+      sideJumpQueued = false; sideAttackQueued = false;
+      updateSideCamera(dt);
+      return;
+    }
+
     if (!panel) {
       let direction = 0;
       if (keys.has('arrowleft') || keys.has('a')) direction -= 1;
@@ -2017,17 +2026,36 @@ const Overworld = (() => {
   }
 
   function drawDadArmorStand(x, groundY) {
-    // Dad's display stand uses the actual knight idle sprite when its sheet is ready.
-    if (knightSprites.idle && knightSprites.idle.complete && knightSprites.idle.naturalWidth) {
-      ctx.save(); ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(x - 20, groundY - 1, 40, 3);
-      drawKnightFrame(knightSprites.idle, 0, 2, 4, x - 29, groundY - 62, 58, 58, false);
-      ctx.fillStyle = '#3b2c2b'; ctx.fillRect(x - 24, groundY - 69, 48, 7);
-      ctx.strokeStyle = '#c49a55'; ctx.strokeRect(x - 23.5, groundY - 68.5, 47, 6);
-      ctx.fillStyle = '#f3dfb7'; ctx.font = '5px monospace'; ctx.textAlign = 'center'; ctx.fillText("DAD'S ARMOR", x, groundY - 64);
-      ctx.restore(); return;
-    }
-    // Fallback while the image is loading; it remains a display stand, not an NPC.
+    // A large, unmistakable armor display in Dad's room (kept separate from the player).
     ctx.save();
+    ctx.fillStyle = 'rgba(255,211,125,.12)'; ctx.fillRect(x - 31, groundY - 101, 62, 99);
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(x - 29, groundY - 2, 58, 4);
+    ctx.fillStyle = '#4b3027'; ctx.fillRect(x - 3, groundY - 69, 6, 65);
+    ctx.fillRect(x - 18, groundY - 5, 36, 4);
+    ctx.fillStyle = '#80533a'; ctx.fillRect(x - 24, groundY - 3, 48, 3);
+    // Helmet and visor.
+    ctx.fillStyle = '#202b36'; ctx.fillRect(x - 13, groundY - 91, 26, 23);
+    ctx.fillStyle = '#718493'; ctx.fillRect(x - 10, groundY - 88, 20, 17);
+    ctx.fillStyle = '#c5d0d3'; ctx.fillRect(x - 8, groundY - 87, 8, 4);
+    ctx.fillStyle = '#26313b'; ctx.fillRect(x - 10, groundY - 77, 20, 4);
+    ctx.fillStyle = '#d9bd79'; ctx.fillRect(x - 2, groundY - 91, 4, 3);
+    // Chest plate, pauldrons, arm guards and greaves.
+    ctx.fillStyle = '#202b36'; ctx.fillRect(x - 19, groundY - 69, 38, 31);
+    ctx.fillStyle = '#718493'; ctx.fillRect(x - 15, groundY - 66, 30, 24);
+    ctx.fillStyle = '#c5d0d3'; ctx.fillRect(x - 12, groundY - 64, 10, 5);
+    ctx.fillStyle = '#435665'; ctx.fillRect(x + 3, groundY - 63, 8, 18);
+    ctx.fillStyle = '#c49a55'; ctx.fillRect(x - 3, groundY - 55, 6, 7);
+    ctx.fillStyle = '#202b36'; ctx.fillRect(x - 27, groundY - 68, 10, 24); ctx.fillRect(x + 17, groundY - 68, 10, 24);
+    ctx.fillStyle = '#8194a0'; ctx.fillRect(x - 25, groundY - 65, 6, 17); ctx.fillRect(x + 19, groundY - 65, 6, 17);
+    ctx.fillStyle = '#202b36'; ctx.fillRect(x - 15, groundY - 39, 12, 25); ctx.fillRect(x + 3, groundY - 39, 12, 25);
+    ctx.fillStyle = '#718493'; ctx.fillRect(x - 13, groundY - 36, 8, 19); ctx.fillRect(x + 5, groundY - 36, 8, 19);
+    ctx.fillStyle = '#202b36'; ctx.fillRect(x - 17, groundY - 15, 15, 12); ctx.fillRect(x + 2, groundY - 15, 15, 12);
+    ctx.fillStyle = '#aab8bd'; ctx.fillRect(x - 14, groundY - 12, 9, 7); ctx.fillRect(x + 5, groundY - 12, 9, 7);
+    // Name plaque above the display makes it easy to spot from the hallway.
+    ctx.fillStyle = '#39272b'; ctx.fillRect(x - 33, groundY - 105, 66, 9);
+    ctx.strokeStyle = '#d4ad68'; ctx.strokeRect(x - 32.5, groundY - 104.5, 65, 8);
+    ctx.fillStyle = '#fff0bd'; ctx.font = '6px monospace'; ctx.textAlign = 'center'; ctx.fillText("DAD'S ARMOR", x, groundY - 99);
+    ctx.restore();
     ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(x - 15, groundY - 1, 30, 3);
     ctx.fillStyle = '#4b3027';
     ctx.fillRect(x - 2, groundY - 39, 4, 38);
@@ -2139,7 +2167,7 @@ const Overworld = (() => {
     ctx.fillStyle = 'rgba(8,9,16,.72)';
     ctx.fillRect(0, 226, canvas.width, 14);
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-    ctx.fillText('A/D MOVE  SPACE JUMP  J ATTACK  E INTERACT', 5, 236);
+    ctx.fillText(armorQuestActive ? (equipment.armor ? 'QUEST COMPLETE: DAD\'S ARMOR EQUIPPED' : 'QUEST: FIND AND EQUIP DAD\'S ARMOR') : 'A/D MOVE  SPACE JUMP  J ATTACK  E INTERACT', 5, 236);
 
     const noteDistance = Math.hypot(sidePlayer.x - 144, sidePlayer.y - 164);
     const armorDistance = Math.hypot(sidePlayer.x - 181, sidePlayer.y - 164);
@@ -2242,7 +2270,7 @@ const Overworld = (() => {
     ctx.fillStyle = 'rgba(8,9,16,.72)';
     ctx.fillRect(0, 226, canvas.width, 14);
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-    ctx.fillText('A / D MOVE    SPACE OR ↑ JUMP    E INTERACT', 5, 236);
+    ctx.fillText(armorQuestActive ? (equipment.armor ? 'QUEST COMPLETE: DAD\'S ARMOR EQUIPPED' : 'QUEST: FIND AND EQUIP DAD\'S ARMOR') : 'A / D MOVE    SPACE OR ↑ JUMP    E INTERACT', 5, 236);
 
     if (sidePlayer.x < 100) {
       ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(6, 180, 102, 13);
@@ -2278,7 +2306,38 @@ const Overworld = (() => {
     else drawSideForest();
     drawSideHUD();
     drawPanel();
+    if (armorTutorialPending) drawArmorInventoryPrompt();
     if (paused) drawPauseMenu();
+  }
+
+  function drawArmorInventoryPrompt() {
+    ctx.fillStyle = 'rgba(6,8,16,.72)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#211a27'; ctx.fillRect(37, 77, 246, 86);
+    ctx.strokeStyle = '#d9b56b'; ctx.lineWidth = 2; ctx.strokeRect(38, 78, 244, 84);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#ffe6b2'; ctx.font = 'bold 12px monospace';
+    ctx.fillText('NEW OBJECTIVE', 160, 98);
+    ctx.fillStyle = '#fff4d8'; ctx.font = '9px monospace';
+    ctx.fillText('Press the INVENTORY button', 160, 119);
+    ctx.fillText('to check your quest.', 160, 133);
+    ctx.fillStyle = '#b8c9aa'; ctx.font = '7px monospace';
+    ctx.fillText('I / BAG / SQUARE', 160, 150);
+  }
+
+  function startArmorQuestFromInventory() {
+    armorTutorialPending = false;
+    armorQuestActive = !equipment.armor;
+    panel = 'inventory';
+    sidePlayer.vx = 0; sidePlayer.moving = false;
+    if (onSave) onSave(getSaveData());
+  }
+
+  function closeCurrentPanel() {
+    const wasDadNote = panel === 'dad-note';
+    panel = null;
+    if (wasDadNote && dadNoteRead && !equipment.armor && !armorQuestActive) {
+      armorTutorialPending = true;
+    }
+    if (onSave) onSave(getSaveData());
   }
 
   function interactPlatformer() {
@@ -2289,12 +2348,15 @@ const Overworld = (() => {
       if (nearDadObjects && Math.min(noteDistance, armorDistance) < 43 && noteDistance <= armorDistance) {
         panel = 'dad-note';
         dadNoteRead = true;
+        if (onSave) onSave(getSaveData());
         return;
       }
       if (nearDadObjects && armorDistance < 43) {
         if (!equipment.armor) {
           equipment.armor = true;
-          notice = "You equipped Dad's armor.";
+          armorQuestActive = false;
+          armorTutorialPending = false;
+          notice = armorQuestActive ? 'Quest complete! You equipped Dad\'s armor.' : "You equipped Dad's armor.";
           noticeUntil = time + 2.5;
           if (onSave) onSave(getSaveData());
         } else {
@@ -2706,8 +2768,10 @@ const Overworld = (() => {
 
   function getSaveData() {
     return {
-      version: 5,
+      version: 6,
       equipment: { ...equipment },
+      armorQuestActive,
+      armorTutorialPending,
       platformScene,
       sideX: sidePlayer.x,
       sideNoteRead: dadNoteRead,
@@ -2734,6 +2798,7 @@ const Overworld = (() => {
     interiorPlayer.x = 160; interiorPlayer.y = 194; interiorPlayer.facing = 'up'; interiorPlayer.moving = false; interiorPlayer.walk = 0;
     inventory.berries = 3; inventory.wood = 0; inventory.fish = 0;
     equipment.armor = false;
+    armorTutorialPending = false; armorQuestActive = false; dadNoteRead = false;
     Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0 });
     stepDistance = 0;
     worldClock = 0.28;
@@ -2752,6 +2817,10 @@ const Overworld = (() => {
     if (saveData.equipment && typeof saveData.equipment === 'object') {
       equipment.armor = saveData.equipment.armor === true;
     }
+    dadNoteRead = saveData.sideNoteRead === true;
+    if (typeof saveData.armorQuestActive === 'boolean') armorQuestActive = saveData.armorQuestActive;
+    else armorQuestActive = dadNoteRead && !equipment.armor;
+    armorTutorialPending = saveData.armorTutorialPending === true && !equipment.armor;
     if (saveData.inventory && typeof saveData.inventory === 'object') {
       ['berries', 'wood', 'fish'].forEach(k => {
         if (Number.isFinite(saveData.inventory[k])) inventory[k] = Math.max(0, Math.floor(saveData.inventory[k]));
@@ -2818,8 +2887,14 @@ const Overworld = (() => {
       return;
     }
 
+    if (armorTutorialPending) {
+      if (k === 'i') { startArmorQuestFromInventory(); e.preventDefault(); e.stopPropagation(); }
+      else { e.preventDefault(); e.stopPropagation(); }
+      return;
+    }
+
     if (k === 'escape' && panel) {
-      panel = null;
+      closeCurrentPanel();
       e.preventDefault();
       e.stopPropagation();
       return;
@@ -2858,13 +2933,14 @@ const Overworld = (() => {
     }
     if (k === 'i' || k === 'c') {
       if (e.repeat) return;
+      if (k === 'i' && panel === 'dad-note') { closeCurrentPanel(); e.preventDefault(); return; }
       panel = panel === (k === 'i' ? 'inventory' : 'stats') ? null : (k === 'i' ? 'inventory' : 'stats');
       e.preventDefault();
       return;
     }
     if (k === 'e' || k === 'enter') {
       if (!e.repeat) {
-        if (panel) panel = null;
+        if (panel) closeCurrentPanel();
         else interact();
       }
       e.preventDefault();
@@ -2872,7 +2948,7 @@ const Overworld = (() => {
       return;
     }
     if (panel) {
-      if (k === 'i' || k === 'c') panel = null;
+      if (k === 'i' || k === 'c') closeCurrentPanel();
       return;
     }
     if (GAME_KEYS.includes(k) || k === 'shift' || k === ' ') {
@@ -2946,8 +3022,13 @@ const Overworld = (() => {
     if (introActive) { finishIntro(); return; }
 
     // Back closes an open panel before it can pause the game.
+    if (armorTutorialPending) {
+      if (action === 'inventory') startArmorQuestFromInventory();
+      return;
+    }
+
     if (panel && action === 'back') {
-      panel = null;
+      closeCurrentPanel();
       return;
     }
 
@@ -2982,8 +3063,12 @@ const Overworld = (() => {
       else if (action === 'back') battleAction('run');
       return;
     }
-    if (action === 'primary') { if (panel) panel = null; else interact(); }
-    else if (action === 'inventory') panel = panel === 'inventory' ? null : 'inventory';
+    if (action === 'primary') { if (panel) closeCurrentPanel(); else interact(); }
+    else if (action === 'inventory') {
+      if (panel === 'dad-note') closeCurrentPanel();
+      else if (panel === 'inventory') closeCurrentPanel();
+      else panel = 'inventory';
+    }
     else if (action === 'stats') panel = panel === 'stats' ? null : 'stats';
     // No unsupported night-toggle action is assigned to a controller button.
   }
