@@ -164,7 +164,7 @@ const Overworld = (() => {
     const dir = i % 2 ? 1 : -1;
     return { type, T, x, y: SIDE_GROUND_Y - (T.fly || 0), home: x, min: x - range, max: x + range, dir, patrolDir: dir, phase: i * 1.3,
       runUntil: 0, hp: T.hp, maxHp: T.hp, attackCooldown: 0.8 + i * 0.3, attackTime: 0, attackHit: true, hurtTime: 0, deadTime: 0, dead: false,
-      respawn: 0, moving: false, kvx: 0, flash: 0, walk: 0, showHpUntil: 0, blockTime: 0, bob: Math.random() * 6 };
+      respawn: 0, moving: false, kvx: 0, flash: 0, walk: 0, showHpUntil: 0, blockTime: 0, retreatTime: 0, bob: Math.random() * 6 };
   }
   function loadSceneMobs(scene) {
     sideMobs = (SCENE_MOBS[scene] || []).filter(([type]) => (type !== 'reever' || !story.reeverDown) && (type !== 'seamFiend' || !story.seamCleared)).map(([type, x, range], i) => makeMob(type, x, range, i));
@@ -181,7 +181,7 @@ const Overworld = (() => {
     ch2Started: false, passEntered: false, metWren: false, passBossStarted: false, passBossDefeated: false, ch2Done: false,
     nickAmbushed: false, nickBossSeen: false, nickDefeated: false,
     gloamEntered: false, gloamGate: false, gloamBossStarted: false, gloamBossDefeated: false, ch3Done: false,
-    harborEntered: false, ferryOpened: false, courtEntered: false, ch4Done: false };
+    harborEntered: false, ferryOpened: false, courtEntered: false, ch4Done: false, trailCache: false };
   const story = Object.assign({}, STORY_DEFAULTS, { pages: [], fires: [], lastFire: null });
 
   // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
@@ -1325,6 +1325,21 @@ const Overworld = (() => {
   }
   Object.values(MOB_TYPES).forEach(T => Object.values(T.anims).forEach(an => { if (an) mobSheet(T, an); }));
   function loadImg(path) { const i = new Image(); i.src = './assets/' + path; return i; }
+  const paperArt = {
+    dialogue: loadImg('paper-ui/dialogue.png'), panel: loadImg('paper-ui/panel.png'),
+    ribbon: loadImg('paper-ui/ribbon.png'), button: loadImg('paper-ui/button.png'),
+    selected: loadImg('paper-ui/button-selected.png')
+  };
+  function prefersReducedMotion() {
+    return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  }
+  function drawPaper(key, x, y, w, h) {
+    const img = paperArt[key];
+    if (!imgReady(img)) return false;
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, x, y, w, h); ctx.restore();
+    return true;
+  }
   const hollowArt = {
     back: loadImg('hollow/back.png'), middle: loadImg('hollow/middle.png'), ground: loadImg('hollow/ground.png'), log: loadImg('hollow/log.png'),
     dadIdle: loadImg('hollow/dad-idle.png'), dadRun: loadImg('hollow/dad-run.png'), dadSlash: loadImg('hollow/dad-slash.png')
@@ -2760,6 +2775,11 @@ const Overworld = (() => {
     emberedge: { name: 'Ember Edge', atk: 4, icon: 'emberedge', arc: '255,170,90' }, moonsilver: { name: 'Moonsilver Blade', atk: 6, icon: 'moonsilver', arc: '140,210,255' } };
   function currentWeapon() { const w = equipment.weapon; return w !== 'sword' && WEAPONS[w] && inventory[w] > 0 ? w : 'sword'; }
   function ownedWeapons() { return Object.keys(WEAPONS).filter(w => w === 'sword' || inventory[w] > 0); }
+  WEAPONS.watchblade = { name: 'Watchrunner', atk: 4, icon: 'watchblade', arc: '143,230,188', rollCost: 13 };
+  ITEM_DEFS.watchblade = { ...WEAPONS.watchblade, rarity: 'rare', type: 'WEAPON', value: 0, bound: true,
+    desc: ['ATK +4. Rolls cost 13 stamina', 'instead of 18 while equipped.'], lore: 'A Watch courier’s blade, taken from the Hollow King’s hoard.' };
+  ITEM_ORDER.push('watchblade');
+  inventory.watchblade = 0;
   const RARITY_COLOR = { common: '#8a7a68', uncommon: '#5fbf6a', rare: '#5fa8ff', legend: '#f2c14e' };
   const INV_TABS = ['ITEMS', 'GEAR', 'STATS', 'QUEST', 'LORE', 'MAP', 'RELICS'];
   const ARMOR_DEFENSE = 3, SWORD_ATTACK = 2;
@@ -2822,7 +2842,9 @@ const Overworld = (() => {
   }
   let levelUpUntil = 0;
 
-  function xpForNext(level) { return 42 + level * 20 + 3 * (level - 1) ** 2; }
+  const MILESTONE_INTERVAL = 5;
+  function nextMilestone(level) { return (Math.floor(level / MILESTONE_INTERVAL) + 1) * MILESTONE_INTERVAL; }
+  function xpForNext(level) { return 42 + level * 20 + 3 * (level - 1) ** 2 + Math.max(0, level - 2) * 7; }
   function totalDefense() { return stats.defense + (stats.defUp || 0) + (stats.perkDef || 0) + (equipment.armor ? ARMOR_DEFENSE + tideDefense() : 0); }
   function totalAttack() { return stats.strength + (stats.atkUp || 0) + (stats.perkAtk || 0) + (equipment.armor ? WEAPONS[currentWeapon()].atk + (tide.forge[currentWeapon()] || 0) : 0); }
 
@@ -3197,11 +3219,11 @@ const Overworld = (() => {
   function downHitCheck(atk) {
     const x = sidePlayer.x, top = sidePlayer.y - 8, bottom = sidePlayer.y + 30;
     let struck = false;
-    sideMobs.forEach((m, i) => {
-      if (m.dead || m.dormant || atk.hit.has(i)) return;
+    sideMobs.forEach(m => {
+      if (m.dead || m.dormant || atk.hit.has(m)) return;
       if (Math.abs(m.x - x) > m.T.width / 2 + 16) return;
       if (m.y < top || mobTop(m) > bottom) return;
-      atk.hit.add(i); struck = true;
+      atk.hit.add(m); struck = true;
       const bonus = Math.floor((totalAttack() - 5) / 4), crit = Math.random() < 0.12;
       damageMob(m, KNIGHT_MOVES.down.dmg + bonus + (crit ? 1 : 0), m.x < x ? -1 : 1, KNIGHT_MOVES.down.knock, crit, crit);
     });
@@ -3283,11 +3305,11 @@ const Overworld = (() => {
       const step = (360 - w.age * 180) * dt;
       w.x += w.f * step; w.dist += step;
       if (Math.random() < dt * 60) combatFx.push({ kind: 'spark', x: w.x - w.f * 6, y: w.y + (Math.random() - 0.5) * 34, vx: -w.f * 40, vy: (Math.random() - 0.5) * 30, color: Math.random() < 0.5 ? '#8fd8ff' : '#ffffff', life: 0.3, max: 0.3 });
-      sideMobs.forEach((m, k) => {
-        if (m.dead || m.dormant || w.hit.has(k)) return;
+      sideMobs.forEach(m => {
+        if (m.dead || m.dormant || w.hit.has(m)) return;
         if (Math.abs(m.x - w.x) > m.T.width / 2 + 10) return;
         if (m.y < w.y - 30 || mobTop(m) > w.y + 30) return;
-        w.hit.add(k);
+        w.hit.add(m);
         const bonus = Math.floor((totalAttack() - 5) / 4);
         damageMob(m, (w.dmg || 4) + bonus, w.f, w.small ? 120 : 220, true, false);
       });
@@ -3334,7 +3356,8 @@ const Overworld = (() => {
     if (sidePlayer.roll || sidePlayer.deadTime > 0 || sidePlayer.hurtTime > 0 || !sidePlayer.onGround) return false;
     if ((sidePlayer.rollCooldown || 0) > 0) return false;
     if (sidePlayer.atk && KNIGHT_MOVES[sidePlayer.atk.name].air) return false;
-    if (stats.stamina < ROLL_STAMINA) { if (!quiet) { notice = 'Too tired to roll.'; noticeUntil = time + 1; } return quiet ? false : true; }
+    const cost = WEAPONS[currentWeapon()].rollCost || ROLL_STAMINA;
+    if (stats.stamina < cost) { if (!quiet) { notice = 'Too tired to roll.'; noticeUntil = time + 1; } return quiet ? false : true; }
     let dir = 0;
     if (keys.has('arrowleft') || keys.has('a')) dir -= 1;
     if (keys.has('arrowright') || keys.has('d')) dir += 1;
@@ -3342,7 +3365,7 @@ const Overworld = (() => {
     sidePlayer.facing = dir;
     sidePlayer.atk = null; sidePlayer.charge = null; sidePlayer.attackTime = 0; comboTimer = 0;
     sidePlayer.roll = { t: 0, dir, perfect: false, trail: [] };
-    stats.stamina = Math.max(0, stats.stamina - ROLL_STAMINA);
+    stats.stamina = Math.max(0, stats.stamina - cost);
     spawnDust(sidePlayer.x - dir * 6, sidePlayer.y, 6);
     sfx('roll');
     return true;
@@ -3370,7 +3393,7 @@ const Overworld = (() => {
     if (r && r.t < ROLL_IFRAMES) {
       if (!r.perfect) {
         r.perfect = true;
-        stats.stamina = Math.min(stats.maxStamina, stats.stamina + 14);
+        stats.stamina = Math.min(stats.maxStamina, stats.stamina + 14 + (hasRelic('breakwater') ? 12 : 0));
         addDamageNumber(sidePlayer.x, sidePlayer.y - 56, 'DODGE', '#8fd8ff');
         combatFx.push({ kind: 'ring', x: sidePlayer.x, y: sidePlayer.y - 22, blue: true, life: 0.3, max: 0.3, vx: 0, vy: 0 });
         hitStop = Math.max(hitStop, 0.06);
@@ -3383,9 +3406,16 @@ const Overworld = (() => {
 
   function mobTop(m) { return m.y - m.T.bodyH; }
   function weaponAttack() { return WEAPONS[currentWeapon()].atk; }
+  function strikeRing(m, death) {
+    const rgb = m.T.boss ? (BOSS_FORMS[m.type]?.[2] ? hexRgb(BOSS_FORMS[m.type][2]) : '230,190,135')
+      : m.T.spores ? '173,224,112' : DRY_MOBS.has(m.type) || m.T.fly ? '138,216,250' : '255,201,133';
+    const life = death ? .4 : .2;
+    combatFx.push({ kind: 'strikeRing', x: m.x, y: m.y - m.T.bodyH * .48, color: rgb,
+      radius: m.T.boss ? 30 : death ? 16 : 10, life, max: life, vx: 0, vy: 0 });
+  }
 
   function damageMob(m, dmg, f, knock, big, crit, companion = false) {
-    if (bossFight && (bossFight.phaseTwo || (m.T.boss && bossFight.intro))) return;
+    if (m.dead || m.dormant || (bossFight && (bossFight.phaseTwo || (m.T.boss && bossFight.intro)))) return;
     // Skeletons sometimes raise their shield against hits from the front.
     if (m.T.block && !m.dead && m.attackTime <= 0 && m.hurtTime <= 0 && Math.random() < m.T.block && Math.sign(sidePlayer.x - m.x) === m.dir) {
       m.blockTime = 0.4; m.flash = 0.04; m.kvx = f * knock * 0.4;
@@ -3410,6 +3440,7 @@ const Overworld = (() => {
     hitStop = big ? 0.075 : 0.05;
     screenShake = Math.max(screenShake, big ? 2.5 : 1.2);
     spawnSparks(m.x - f * 8, m.y - m.T.bodyH * 0.6, f, big ? 12 : 7, m.type === 'ghost' ? ['#d8fbff', '#7fe3ff', '#ffffff'] : ['#fff6d0', '#ffd27a', '#ff9a4a']);
+    if (big && dmg > 0) strikeRing(m, false);
     if (dmg > 0 && !DRY_MOBS.has(m.type)) spawnBlood(m.x, m.y - m.T.bodyH * 0.52, f, big || m.hp === 0);
     addDamageNumber(m.x, mobTop(m) - 10, crit ? dmg + '!' : dmg, crit ? '#ffdf6b' : '#ffffff');
     sfx(big ? 'hitBig' : 'hit');
@@ -3426,11 +3457,11 @@ const Overworld = (() => {
     const lo = Math.min(near, far) - 12, hi = Math.max(near, far) + 12;
     // The sword sweeps roughly the knight's own height: feet to helmet plus a little.
     const swingTop = sidePlayer.y - (move.upper ? 88 : move.fx === 'power' ? 58 : 46), swingBottom = sidePlayer.y + 4;
-    sideMobs.forEach((m, i) => {
-      if (m.dead || m.dormant || atk.hit.has(i)) return;
+    sideMobs.forEach(m => {
+      if (m.dead || m.dormant || atk.hit.has(m)) return;
       if (m.x + m.T.width / 2 < lo || m.x - m.T.width / 2 > hi) return;
       if (m.y < swingTop || mobTop(m) > swingBottom) return;
-      atk.hit.add(i);
+      atk.hit.add(m);
       const bonus = Math.floor((totalAttack() - 5) / 4);
       const crit = Math.random() < critChance();
       const big = atk.name === 'finisher' || atk.name === 'thrust' || atk.name === 'power' || crit;
@@ -3453,6 +3484,7 @@ const Overworld = (() => {
   }
 
   function defeatMob(m, f) {
+    if (m.dead) return;
     const T = m.T;
     m.dead = true; m.deadTime = 0; m.respawn = T.boss || m.arenaWave || ['reever', 'seamFiend'].includes(m.type) ? Infinity : 24; m.attackTime = 0;
     m.kvx = T.armor ? 0 : f * 160;
@@ -3460,12 +3492,19 @@ const Overworld = (() => {
     stats.kills = (stats.kills || 0) + 1;
     if (m.type === 'goblin') stats.goblinKills = (stats.goblinKills || 0) + 1;
     mobVoice(m, 'death');
+    strikeRing(m, true);
     if (!T.boss && !T.anims.death) spawnSparks(m.x, m.y - T.bodyH * 0.5, f, 10, ['#5a5060', '#8a8090', '#2a2430', T.light ? '#ffb347' : '#c8324a']);
     const dropY = m.y - T.bodyH * 0.6;
     const coinMul = (hasRelic('giltooth') ? 1.6 : 1) * (m.elite ? (m.elite.gold ? 4 : 2) : 1) * (bloodMoon ? 1.5 : 1) * blessCoins();
     const coins = Math.round((T.coins[0] + Math.floor(Math.random() * (T.coins[1] - T.coins[0] + 1))) * coinMul);
     for (let i = 0; i < coins; i++) pickups.push({ type: 'coin', amount: 1, x: m.x, y: dropY, vx: (Math.random() - 0.5) * 140, vy: -150 - Math.random() * 90, age: 0 });
     T.drops.forEach(([item, chance], k) => {
+      // A completed boss is saved immediately and cannot be fought again.
+      // Put unique guaranteed loot in the bag before writing that save.
+      if (T.boss && chance === 1 && (WEAPONS[item] || ITEM_DEFS[item]?.type === 'KEY ITEM')) {
+        if (!inventory[item]) tideGrant(item, 1);
+        return;
+      }
       if (Math.random() < chance) pickups.push({ type: item, amount: 1, x: m.x, y: dropY, vx: (k % 2 ? -1 : 1) * f * 60, vy: -190 - k * 20, age: 0 });
     });
     fortuneOnKill(m, dropY);
@@ -3483,6 +3522,7 @@ const Overworld = (() => {
   function gainXp(amount) {
     stats.xp = (stats.xp || 0) + amount;
     addDamageNumber(sidePlayer.x, sidePlayer.y - 64, '+' + amount + ' XP', '#9be37a');
+    let gainedLevel = false, milestone = false;
     while (stats.xp >= xpForNext(stats.level)) {
       stats.xp -= xpForNext(stats.level);
       stats.level++;
@@ -3490,9 +3530,17 @@ const Overworld = (() => {
       if (stats.level % 2 === 0) stats.defense += 1;
       stats.health = Math.min(stats.maxHealth, stats.health + 6);
       stats.stamina = Math.min(stats.maxStamina, stats.stamina + 30);
-      levelUpUntil = time + 2.4; pendingPerks++;
-      notice = 'LEVEL UP! You reached level ' + stats.level + '.'; noticeUntil = time + 2.6;
-      sfx('level'); padRumble(0.4, 0.4, 260);
+      gainedLevel = true;
+      if (stats.level % MILESTONE_INTERVAL === 0) {
+        pendingPerks.push({ level: stats.level, cards: [] });
+        milestone = true;
+      }
+    }
+    if (gainedLevel) {
+      levelUpUntil = time + 2.4;
+      notice = milestone ? 'Milestone blessing earned!' : 'Level ' + stats.level + ' reached.';
+      noticeUntil = time + 2.6;
+      sfx('level', milestone ? 1 : .55); padRumble(0.4, 0.4, 260);
       if (onSave) onSave(getSaveData());
     }
   }
@@ -3619,6 +3667,10 @@ const Overworld = (() => {
       } else if (p.kind === 'ring') {
         ctx.strokeStyle = p.blue ? 'rgba(140,215,255,' + a + ')' : 'rgba(255,240,200,' + a + ')'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(p.x, p.y, 4 + (1 - a) * 14, 0, Math.PI * 2); ctx.stroke();
+      } else if (p.kind === 'strikeRing') {
+        const r = 4 + (1 - a) * p.radius;
+        ctx.strokeStyle = 'rgba(' + p.color + ',' + (a * .85) + ')'; ctx.lineWidth = a > .65 ? 2 : 1;
+        ctx.beginPath(); ctx.ellipse(p.x, p.y, r, r * .7, 0, 0, Math.PI * 2); ctx.stroke();
       } else {
         ctx.globalAlpha = p.kind === 'dust' ? a * 0.6 : a;
         ctx.fillStyle = p.color;
@@ -4052,6 +4104,8 @@ const Overworld = (() => {
       'kk..........']
   };
   function drawItemIcon(name, x, y, scale = 2) {
+    const watchblade = name === 'watchblade';
+    if (watchblade) name = 'sword';
     const art = TIDE_ICONS[name] || ICONS[name];
     if (!art) return;
     for (let r = 0; r < 12; r++) {
@@ -4059,10 +4113,21 @@ const Overworld = (() => {
       for (let c = 0; c < 12; c++) {
         const ch = row[c];
         if (!ch || ch === '.') continue;
-        ctx.fillStyle = (TIDE_ICONS[name] ? TIDE_INK : ICON_PALETTE)[ch] || '#ff00ff';
+        ctx.fillStyle = (watchblade && ({ M: '#c2f6d6', h: '#56a290', u: '#ad8254' })[ch]) ||
+          (TIDE_ICONS[name] ? TIDE_INK : ICON_PALETTE)[ch] || '#ff00ff';
         ctx.fillRect(x + c * scale, y + r * scale, scale, scale);
       }
     }
+  }
+
+  function recoverAtCheckpoint() {
+    const fire = FIRES.find(f => f.id === story.lastFire && f.scene === platformScene);
+    Object.assign(sidePlayer, { x: fire ? fire.x - 30 : region().entry, y: SIDE_GROUND_Y, vx: 0, vy: 0,
+      roll: null, charge: null, onGround: true, invulnTime: 1.6, atk: null, hurtTime: 0, facing: 1 });
+    pickups.length = 0;
+    stats.health = Math.max(1, Math.ceil(stats.maxHealth * .65));
+    notice = fire ? 'You wake near ' + fire.name + '.' : 'You wake at the entrance.';
+    noticeUntil = time + 2.5;
   }
 
   function updatePlatformer(dt) {
@@ -4070,6 +4135,7 @@ const Overworld = (() => {
     if (nickScene) { time += dt; updateNickAmbush(dt); return; }
     if (hitStop > 0) { hitStop -= dt; sideMobs.forEach(g => { g.flash = Math.max(0, (g.flash || 0) - dt); }); updateSideCamera(dt); return; }
     time += dt;
+    updatePerkPanel();
     if (!panel && !dialogue && !bossFight?.cine) tide.mealTime = Math.max(0, tide.mealTime - dt);
     if (tideFishing) updateTideFishing(dt);
     saveTimer += dt;
@@ -4086,7 +4152,6 @@ const Overworld = (() => {
     updateCombatFx(dt);
     updateFortune(dt);
     updateDepths(dt);
-    updatePlayerWaves(dt);
     updateAmbient(dt);
     if (sidePlayer.deadTime > 0) {
       sidePlayer.deadTime -= dt; sidePlayer.deathAge = (sidePlayer.deathAge || 0) + dt;
@@ -4096,12 +4161,8 @@ const Overworld = (() => {
       if (sidePlayer.deadTime <= 0) {
         if (tideArena) { tideArena = null; loadSceneMobs(platformScene); }
         if (bossFight) endBossFight(false);
-        const lf = FIRES.find(f => f.id === story.lastFire && f.scene === platformScene);
-        sidePlayer.x = lf ? lf.x - 30 : region().entry; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.roll = null; sidePlayer.charge = null;
-        sidePlayer.onGround = true; sidePlayer.invulnTime = 1.6; sidePlayer.atk = null; sidePlayer.hurtTime = 0; sidePlayer.facing = 1;
-        pickups.length = 0;
-        stats.health = Math.max(1, Math.ceil(stats.maxHealth * 0.65));
-        notice = lf ? 'You wake by the embers at ' + lf.name + '.' : platformScene === 'forest' ? 'You made it back to the forest entrance.' : 'You wake at the edge of ' + region().name.toLowerCase().replace(/^the /, 'the ') + '.'; noticeUntil = time + 2.5;
+        recoverAtCheckpoint();
+        if (onSave) onSave(getSaveData());
       }
       sideAttackQueued = false; sideJumpQueued = false; updateSideCamera(dt); return;
     }
@@ -4130,6 +4191,8 @@ const Overworld = (() => {
     }
 
     maybeOpenPerks();
+    if (panel) { clearHeldInput(); sidePlayer.vx = 0; sidePlayer.moving = false; return; }
+    updatePlayerWaves(dt);
     if (sideRollQueued) { sideRollQueued = false; if (!tryRoll()) rollBuffer = 0.18; }
     else if (rollBuffer > 0) { rollBuffer -= dt; if (tryRoll(true)) rollBuffer = 0; }
     if (sidePlayer.pray) {
@@ -4367,19 +4430,29 @@ const Overworld = (() => {
       }
       const enraged = T.boss && !!m.enraged;
       if (T.ai) { updateBossAI(m, dt, enraged, playerAlive); continue; }
+      const swingWasActive = m.attackTime > 0;
       m.attackCooldown = Math.max(0, m.attackCooldown - dt);
       m.attackTime = Math.max(0, m.attackTime - dt);
       m.hurtTime = Math.max(0, m.hurtTime - dt);
-      const dx = sidePlayer.x - m.x;
-      const distance = Math.abs(dx);
+      let dx = sidePlayer.x - m.x;
+      let distance = Math.abs(dx);
       const speedMul = (enraged ? 1.45 : 1) * (m.elite && m.elite.spd || 1);
       m.moving = false;
+      if (swingWasActive && !m.attackTime && m.type === 'goblin') m.retreatTime = .28;
       if (m.hurtTime > 0 || m.kvx || m.blockTime > 0) {
         // Staggered.
       } else if (m.attackTime > 0) {
         if (T.fly && (m.type === 'eye' || T.dive)) m.x += m.dir * 60 * dt;   // the eye lunges through its bite
         if (T.pounce) { const p = 1 - m.attackTime / m.atkLen; if (p > 0.2 && p < 0.7) m.x += m.dir * T.pounce * dt; }
+        if (m.type === 'goblin') {
+          const p = 1 - m.attackTime / m.atkLen;
+          if (p > .48 && p < T.hit[0]) m.x += m.dir * 35 * dt;
+        }
+      } else if (m.retreatTime > 0 && playerAlive && distance < T.reach + 16 && !safeZone()) {
+        m.retreatTime = Math.max(0, m.retreatTime - dt);
+        m.x -= m.dir * 67 * dt; m.walk -= 11 * dt; m.moving = true;
       } else if (playerAlive && !safeZone() && distance < T.chase && Math.abs(sidePlayer.y - SIDE_GROUND_Y) < 120) {
+        m.retreatTime = 0;
         m.dir = dx < 0 ? -1 : 1;
         m.runUntil = Math.max(m.runUntil, time + 0.25);
         if (distance > T.reach - 8) {
@@ -4422,6 +4495,7 @@ const Overworld = (() => {
         m.y = SIDE_GROUND_Y - (m.lift || 0);
         if (T.pounce && m.attackTime > 0) { const p = 1 - m.attackTime / m.atkLen; m.y -= Math.max(0, Math.sin(Math.min(1, Math.max(0, (p - 0.15) / 0.6)) * Math.PI)) * 22; }
       }
+      dx = sidePlayer.x - m.x; distance = Math.abs(dx);
       // Damage window, measured as a share of the swing so animation and hit agree.
       if (m.attackTime > 0 && m.type === 'skarn') {
         updateSkarnSwing(m, playerAlive, distance, dx, enraged);
@@ -4696,7 +4770,7 @@ const Overworld = (() => {
       const f = m.type === 'skarn' ? skarnAttackFrame(t) : t * n;
       return [A.attack, clamp(Math.floor(f), 0, n - 1)];
     }
-    if (m.moving && !m.dormant) { const an = A.move; return [an, Math.floor(m.walk * an[2] / 14) % an[1]]; }
+    if (m.moving && !m.dormant) { const an = A.move; return [an, ((Math.floor(m.walk * an[2] / 14) % an[1]) + an[1]) % an[1]]; }
     return [A.idle, Math.floor(time * A.idle[2]) % A.idle[1]];
   }
   function drawMob(m) {
@@ -4878,8 +4952,45 @@ const Overworld = (() => {
     ctx.drawImage(pic, -Math.round(T.drawH * 0.55), -T.drawH, Math.round(T.drawH * 64 / 60), T.drawH);
     ctx.restore();
   }
+  function mobWarning(m) {
+    const T = m.T;
+    if (m.dead || m.dormant || bossFight?.cine) return null;
+    if (m.type === 'skarn' && m.attackTime > 0) {
+      const p = 1 - m.attackTime / m.atkLen;
+      if (m.enraged && p >= .49 && !m.waveDone && p < SKARN_SLAM) return { progress: (p - .49) / (SKARN_SLAM - .49), both: true };
+      if (p < SKARN_HEW) return { progress: p / SKARN_HEW };
+      return null;
+    }
+    if (T.boss && m.tele && ['windup', 'stomp', 'orbs', 'swoop'].includes(m.st)) {
+      return { progress: clamp((m.swoop?.t || m.stT) / (m.st === 'windup' ? (m.enraged ? .58 : .76) : .5), 0, 1),
+        both: m.st === 'stomp', ranged: m.st === 'orbs' || m.st === 'swoop', charge: m.st === 'windup' };
+    }
+    if (m.attackTime <= 0 || !m.atkLen || m.attackHit) return null;
+    const progress = (1 - m.attackTime / m.atkLen) / T.hit[0];
+    return progress >= 0 && progress < 1 ? { progress, ranged: T.ranged || T.volley } : null;
+  }
+  function drawMobWarning(m, w) {
+    const T = m.T, ranged = w.ranged || T.fly && !w.charge, x = Math.round(m.x);
+    const y = Math.round(mobTop(m) - (T.boss ? 12 : 10));
+    const color = T.boss ? '#ff9a79' : ranged ? '#a9dfff' : '#ffdc95';
+    ctx.save();
+    ctx.fillStyle = '#201524'; ctx.fillRect(x - 6, y - 7, 12, 8);
+    ctx.fillStyle = color; ctx.fillRect(x - 1, y - 6, 2, 3); ctx.fillRect(x - 1, y - 2, 2, 1);
+    ctx.fillRect(x - 6, y + 1, Math.max(1, Math.round(12 * w.progress)), 1);
+    if (!ranged) {
+      const reach = w.charge ? 90 : Math.min(76, T.reach + 4);
+      const start = w.both ? -reach : m.dir < 0 ? -reach : 8, end = w.both ? reach : m.dir < 0 ? -8 : reach;
+      const base = Math.min(SIDE_GROUND_Y, Math.round(m.y));
+      ctx.globalAlpha = .46 + .44 * w.progress;
+      for (let dx = start; dx < end; dx += 6) ctx.fillRect(x + dx, base - 2, 3, 1);
+      ctx.fillRect(x + (m.dir < 0 ? start : end), base - 5, 1, 4);
+      if (w.both) ctx.fillRect(x + (m.dir < 0 ? end : start), base - 5, 1, 4);
+    }
+    ctx.restore();
+  }
   function drawSideMobs() {
     sideMobs.forEach(m => {
+      if (m.x < sideCameraX - 170 || m.x > sideCameraX + canvas.width + 170) return;
       if (m.dead && m.deadTime > 3) return;
       // ground shadow
       const dist = SIDE_GROUND_Y - m.y;
@@ -4896,11 +5007,8 @@ const Overworld = (() => {
       if (m.enraged && !m.dead) drawBossForm(m, false);
       drawMob(m);
       if (m.enraged && !m.dead) drawBossForm(m, true);
-      // Telegraph: a red glint before a heavy swing.
-      if (!m.dead && m.attackTime > 0 && (1 - m.attackTime / m.atkLen) < m.T.hit[0] && Math.floor(time * 16) % 2) {
-        ctx.fillStyle = '#ff5050';
-        ctx.fillRect(Math.round(m.x + m.dir * (m.T.width / 2 + 2)), Math.round(mobTop(m) + 4), 2, 2);
-      }
+      const warning = mobWarning(m);
+      if (warning) drawMobWarning(m, warning);
       if (!m.dead && !m.T.boss && !m.dormant && (time < m.showHpUntil || m.hp < m.maxHp || m.elite)) {
         const bw = 22, bx = Math.round(m.x - bw / 2), by = Math.round(mobTop(m) - 7);
         ctx.fillStyle = '#120c14'; ctx.fillRect(bx - 1, by - 1, bw + 2, 4);
@@ -5260,7 +5368,7 @@ const Overworld = (() => {
     drawChests();
     drawSideMobs();
 
-    if (platformScene === 'forest') drawCamp();
+    if (platformScene === 'forest') { drawOpeningTrail(); drawCamp(); }
     drawLoreSpots();
     drawSidePlayer();
     drawPlayerWaves();
@@ -5446,8 +5554,10 @@ const Overworld = (() => {
     const x = 8, y = 157, w = 304, h = 68;
     ctx.save();
     ctx.fillStyle = 'rgba(6,5,10,.94)'; ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = '#d6b477'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-    ctx.strokeStyle = '#5a4535'; ctx.strokeRect(x + 2.5, y + 2.5, w - 5, h - 5);
+    const paper = drawPaper('dialogue', x, y - 6, w, h + 10);
+    if (!paper) {
+      ctx.strokeStyle = '#d6b477'; ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, w - 1, h - 1);
+    }
     drawPortrait(line.who, x + 8, y + 11);
     ctx.font = 'bold 7px monospace';
     const tw = ctx.measureText(sp.name).width + 10;
@@ -5457,13 +5567,16 @@ const Overworld = (() => {
     let left = Math.floor(dialogue.shown);
     line.rows.forEach((ln, i) => {
       const part = ln.slice(0, Math.max(0, left)); left -= ln.length + 1;
-      invText(part, x + 55, y + 14 + i * 11, '#f3e7c9', '8px monospace');
+      invText(part, x + 55, y + 14 + i * 11, paper ? '#352520' : '#f3e7c9', '8px monospace');
     });
-    ctx.fillStyle = '#4b3c38'; ctx.fillRect(x + 7, y + 53, w - 14, 1);
-    invText((dialogue.i + 1) + ' / ' + dialogue.lines.length, x + 10, y + 63, '#ae9dad', '7px monospace');
+    ctx.fillStyle = paper ? '#a68a6b' : '#4b3c38'; ctx.fillRect(x + 14, y + 53, w - 28, 1);
     const ready = dialogue.shown >= line.text.length;
     const action = !ready ? 'SHOW TEXT' : dialogue.i === dialogue.lines.length - 1 ? 'CLOSE' : 'CONTINUE';
-    invText(K('E') + ' / TAP  ' + action, x + w - 10, y + 63, ready ? '#ffe19c' : '#c6b6af', 'bold 7px monospace', 'right');
+    ctx.fillStyle = '#211a22';
+    ctx.fillRect(x + 13, y + 55, 34, 11);
+    ctx.fillRect(x + w - 113, y + 55, 102, 11);
+    invText((dialogue.i + 1) + ' / ' + dialogue.lines.length, x + 16, y + 63, '#e6d4b6', '7px monospace');
+    invText(K('E') + ' / TAP  ' + action, x + w - 15, y + 63, ready ? '#ffe19c' : '#e1d3c6', 'bold 7px monospace', 'right');
     ctx.restore();
   }
 
@@ -5527,10 +5640,15 @@ const Overworld = (() => {
     bloodidol:  { name: 'Blood Moon Idol', rarity: 'legend', icon: 'eye', pal: ['#1a0408', '#8a1020', '#ff3a4a', '#ffd0d0'],
                   desc: '+60% damage while under 35% HP.', lore: 'Carved by the cult of the red moon. It wants you close to death.' }
   };
+  RELICS.breakwater = { name: 'Breakwater Sigil', rarity: 'epic', icon: 'shield',
+    pal: ['#10242b', '#62bfac', '#bfefdc', '#dcb17a'], exclusive: true,
+    desc: 'Perfect dodges restore +12 stamina.',
+    lore: 'Awarded for holding the Breakwater through three waves.' };
   const RELIC_ORDER = Object.keys(RELICS);
+  const RELIC_COLS = 8;
   const fortune = { owned: [], equipped: [], slots: 2, phoenixUsed: false };
   const fortuneFx = [];
-  let relicReveal = null, relicSel = 0, pendingPerks = 0, perkOffer = null, wheel = null;
+  let relicReveal = null, relicSel = 0, pendingPerks = [], perkOffer = null, wheel = null;
   let bloodMoon = false, bloodMoonAt = -10, witchUntil = 0;
 
   function hasRelic(id) { return fortune.equipped.includes(id); }
@@ -5560,7 +5678,7 @@ const Overworld = (() => {
     return pool[pool.length - 1];
   }
   function randomRelic(rarity) {
-    const unowned = RELIC_ORDER.filter(id => !fortune.owned.includes(id));
+    const unowned = RELIC_ORDER.filter(id => !RELICS[id].exclusive && !fortune.owned.includes(id));
     if (!unowned.length) return null;
     const ri = RARITY_ORDER.indexOf(rarity);
     for (const d of [0, -1, 1, -2, 2, -3, 3]) {
@@ -5576,12 +5694,13 @@ const Overworld = (() => {
     pickups.push({ type: 'relic', relic: id, amount: 1, x, y, vx: (Math.random() - 0.5) * 40, vy: -230, age: 0 });
     sfx('gem', 0.7, 0.8);
   }
-  function grantRelic(id) {
+  function grantRelic(id, reveal = true) {
     if (fortune.owned.includes(id)) { inventory.coins = (inventory.coins || 0) + 30; return; }
     fortune.owned.push(id);
     const eq = fortune.equipped.length < fortune.slots;
     if (eq) fortune.equipped.push(id);
     relicSel = RELIC_ORDER.indexOf(id);
+    if (!reveal) return;
     relicReveal = { id, t: time, equipped: eq };
     openPanel('relic');
     sfx(RELICS[id].rarity === 'legend' || RELICS[id].rarity === 'epic' ? 'victory' : 'gem', 0.7); sfx('magic', 0.5);
@@ -5985,8 +6104,8 @@ const Overworld = (() => {
   // ---- Level-up blessings: pick 1 of 3 random cards ----
   const PERKS = [
     { id: 'vigor', name: 'VIGOR', rarity: 'common', icon: 'heart', pal: ['#2a0a0e', '#e2584f', '#ff9a90', '#fff'], desc: '+6 max HP and a full heal.', give: () => { stats.maxHealth += 6; stats.health = stats.maxHealth; } },
-    { id: 'might', name: 'MIGHT', rarity: 'common', icon: 'blade', pal: ['#1a1410', '#d6b477', '#fff1c4', '#8a5a34'], desc: '+3 attack.', give: () => { stats.perkAtk = (stats.perkAtk || 0) + 3; } },
-    { id: 'bulwark', name: 'BULWARK', rarity: 'common', icon: 'shield', pal: ['#14161e', '#6f7280', '#b9bcc8', '#5fa8ff'], desc: '+1 defense.', give: () => { stats.perkDef = (stats.perkDef || 0) + 1; } },
+    { id: 'might', name: 'MIGHT', rarity: 'common', icon: 'blade', pal: ['#1a1410', '#d6b477', '#fff1c4', '#8a5a34'], desc: '+4 attack.', give: () => { stats.perkAtk = (stats.perkAtk || 0) + 4; } },
+    { id: 'bulwark', name: 'BULWARK', rarity: 'common', icon: 'shield', pal: ['#14161e', '#6f7280', '#b9bcc8', '#5fa8ff'], desc: '+2 defense.', give: () => { stats.perkDef = (stats.perkDef || 0) + 2; } },
     { id: 'endure', name: 'ENDURANCE', rarity: 'common', icon: 'feather', pal: ['#0e2410', '#3f9a3a', '#9be37a', '#fff'], desc: '+20 max stamina.', give: () => { stats.maxStamina += 20; stats.stamina = stats.maxStamina; } },
     { id: 'gold', name: 'GOLD RUSH', rarity: 'common', icon: 'bag', pal: ['#3a2410', '#8a5a34', '#f2c14e', '#fff1a8'], desc: '+45 coins, right now.', give: () => { inventory.coins = (inventory.coins || 0) + 45; sfx('coins'); } },
     { id: 'keen', name: 'KEEN EYE', rarity: 'rare', icon: 'eye', pal: ['#1a1410', '#a8741a', '#ffe08a', '#1a0408'], desc: '+5% critical hit chance.', give: () => { stats.critUp = (stats.critUp || 0) + 1; }, max: () => (stats.critUp || 0) < 6 },
@@ -5994,7 +6113,7 @@ const Overworld = (() => {
     { id: 'thirst', name: 'BLOODTHIRST', rarity: 'rare', icon: 'rose', pal: ['#1a0a12', '#a0244a', '#ff6a8a', '#3f9a3a'], desc: 'Heal 1 HP for every kill.', give: () => { stats.thirst = (stats.thirst || 0) + 1; }, max: () => (stats.thirst || 0) < 3 },
     { id: 'moon', name: 'MOONBORN', rarity: 'rare', icon: 'moon', pal: ['#0a1430', '#7fb8ff', '#e6f6ff', '#fff'], desc: 'Moonblade charges 20% faster.', give: () => { stats.chargeUp = (stats.chargeUp || 0) + 1; }, max: () => (stats.chargeUp || 0) < 3 },
     { id: 'slot', name: 'RELIC SLOT', rarity: 'epic', icon: 'star', pal: ['#2a1a40', '#c77dff', '#f0d8ff', '#fff'], desc: 'Wear one more relic.', give: () => { fortune.slots = Math.min(4, fortune.slots + 1); }, max: () => fortune.slots < 4 },
-    { id: 'gamble', name: "GAMBLER'S COIN", rarity: 'epic', icon: 'coin', pal: ['#2a1a40', '#c77dff', '#f0d8ff', '#fff'], desc: 'Receive a random relic now.', give: () => { const id = randomRelic(rollRarity(0.6, 'rare')); if (id) setTimeout(() => grantRelic(id), 450); else inventory.coins = (inventory.coins || 0) + 80; }, max: () => fortune.owned.length < RELIC_ORDER.length }
+    { id: 'gamble', name: "GAMBLER'S COIN", rarity: 'epic', icon: 'coin', pal: ['#2a1a40', '#c77dff', '#f0d8ff', '#fff'], desc: 'Receive a random relic now.', give: () => { const id = randomRelic(rollRarity(0.6, 'rare')); if (id) grantRelic(id, false); else inventory.coins = (inventory.coins || 0) + 80; }, max: () => RELIC_ORDER.some(id => !RELICS[id].exclusive && !fortune.owned.includes(id)) }
   ];
   function rollPerks() {
     const L = luckValue(), w = { common: 55, rare: 33 * (1 + L * 0.5), epic: 12 * (1 + L) };
@@ -6007,18 +6126,28 @@ const Overworld = (() => {
     return out;
   }
   function openPerks() {
-    pendingPerks--;
-    perkOffer = { cards: rollPerks(), sel: 1, t: time, picked: -1, pickT: 0, level: stats.level - pendingPerks };
+    const reward = pendingPerks[0];
+    if (!reward) return;
+    const cards = reward.cards.length === 3 ? reward.cards.map(id => PERKS.find(p => p.id === id)) : rollPerks();
+    reward.cards = cards.map(p => p.id);
+    perkOffer = { cards, sel: 1, t: time, picked: -1, pickT: 0, level: reward.level };
     openPanel('perk');
     sfx('bookOpen', 0.7); sfx('magic', 0.5, 1.2);
+    if (onSave) onSave(getSaveData());
   }
   function pickPerk() {
     const o = perkOffer;
     if (!o || o.picked >= 0 || time - o.t < 0.9) return;
     o.picked = o.sel; o.pickT = time;
     o.cards[o.sel].give();
+    pendingPerks.shift();
+    if (onSave) onSave(getSaveData());
     sfx('level', 0.6); sfx('uiConfirm'); padRumble(0.4, 0.6, 180);
-    setTimeout(() => { if (panel === 'perk') { panel = null; perkOffer = null; if (onSave) onSave(getSaveData()); } }, 900);
+  }
+  function updatePerkPanel() {
+    if (panel === 'perk' && perkOffer?.picked >= 0 && time - perkOffer.pickT >= .9) {
+      panel = null; perkOffer = null;
+    }
   }
   function cardRect(i) { return { x: 160 + (i - 1) * 96 - 42, y: 64, w: 84, h: 116 }; }
   function drawPerkPanel() {
@@ -6031,7 +6160,8 @@ const Overworld = (() => {
     ctx.globalAlpha = ta;
     ctx.textAlign = 'center';
     ctx.font = 'bold 15px monospace'; ctx.fillStyle = '#2a1a12'; ctx.fillText('LEVEL ' + o.level, 161, 32 + (1 - ta) * -10);
-    ctx.fillStyle = '#ffe3a1'; ctx.fillText('LEVEL ' + o.level, 160, 31 + (1 - ta) * -10);
+    const paper = drawPaper('ribbon', 86, 15, 148, 23);
+    ctx.fillStyle = paper ? '#35251f' : '#ffe3a1'; ctx.fillText('LEVEL ' + o.level, 160, 31);
     ctx.font = '7px monospace'; ctx.fillStyle = '#d9cdb8'; ctx.fillText('THE MOON OFFERS A BLESSING. CHOOSE ONE.', 160, 45);
     ctx.fillStyle = '#d6b477'; ctx.fillRect(90, 50, 140, 1);
     ctx.globalAlpha = 1;
@@ -6240,11 +6370,15 @@ const Overworld = (() => {
     } else fortuneInput('ok');
   }
   function maybeOpenPerks() {
-    if (pendingPerks > 0 && !panel && !dialogue && !bossOutro && !(bossFight && (bossFight.cine || bossFight.intro)) && sidePlayer.deadTime <= 0 && !sidePlayer.pray) openPerks();
+    if (!pendingPerks.length || paused || panel || dialogue || bossOutro || bossFight ||
+        sidePlayer.deadTime > 0 || sidePlayer.hurtTime > 0 || !sidePlayer.onGround ||
+        sidePlayer.pray || sidePlayer.roll || sidePlayer.atk || sidePlayer.charge || tideArena) return;
+    if (!insideHouse && !safeZone() && sideMobs.some(m => !m.dead && !m.dormant && Math.abs(m.x - sidePlayer.x) < 125)) return;
+    openPerks();
   }
 
   // ---- Bag > RELICS tab ----
-  function relicSlotRect(i) { return { x: 122 + (i % 7) * 26, y: 84 + Math.floor(i / 7) * 26, w: 22, h: 22 }; }
+  function relicSlotRect(i) { return { x: 122 + (i % RELIC_COLS) * 23, y: 84 + Math.floor(i / RELIC_COLS) * 26, w: 20, h: 22 }; }
   function toggleRelic() {
     const id = RELIC_ORDER[relicSel];
     if (!fortune.owned.includes(id)) { sfx('uiError'); invShake = time; return; }
@@ -6995,11 +7129,13 @@ const Overworld = (() => {
     endBossFight(true);
     sideMobs.forEach(o => { if (o !== m && o.type !== 'reever' && !o.dead && o.x > BOSS_ARENA.left - 100) { o.hp = 0; defeatMob(o, 1); } });
     story[region().bossFlag] = true;
+    if (m.type === 'ogre' && !inventory.watchblade) tideGrant('watchblade', 1);
     if (m.type === 'saltStag') tideGrant('antler', 1);
     if (m.type === 'wellKeeper') tideGrant('wellglass', 1);
     if (m.type === 'nick') tideGrant('frostcore', 1);
     bossOutro = { t: 0, x: m.x, jingle: false, scene: platformScene };
-    notice = m.T.short + ' has fallen.'; noticeUntil = time + 3;
+    notice = m.type === 'ogre' ? 'Grukk has fallen. Watchrunner added to Gear.' : m.T.short + ' has fallen.';
+    noticeUntil = time + 3;
     if (onSave) onSave(getSaveData());
   }
   let wren = null;   // the Watch scout (same shape as dad)
@@ -7095,6 +7231,8 @@ const Overworld = (() => {
     if (dep) return dep;
     if (platformScene === 'forest') {
       if (x < 100) return { label: 'RETURN HOME', act: 'home' };
+      if (Math.abs(x - TRAIL.cache) < 27) return { label: story.trailCache ? 'READ TRAIL NOTE' : 'OPEN WATCH SUPPLY BOX', act: openTrailCache };
+      if (Math.abs(x - TRAIL.marker) < 26) return { label: 'READ THE TRAIL MARKER', act: readTrailMarker };
       if (Math.abs(x - CAMP.bram) < 28) return { label: 'TRADE WITH BRAM', act: openShop };
       if (x > CAMP.sign - 20) return { label: 'ENTER THE HOLLOW', act: () => enterRegion('hollow', 130, 1) };
     } else if (platformScene === 'hollow') {
@@ -7119,6 +7257,48 @@ const Overworld = (() => {
       return coastInteraction(x);
     }
     return null;
+  }
+  const TRAIL = { marker: 230, cache: 422 };
+  LORE.push({ id: 'trailcache', kind: 'page', title: 'The Watch Supply Box', where: 'Woodland trail',
+    hint: 'Look under the green trail ribbon west of Nell.',
+    text: 'Green ribbon means shelter or supplies. Red means the road isn’t safe. If you’re reading this, take what you need. Leave the ribbon for the next traveler. - A.' });
+  function readTrailMarker() {
+    startDialogue([{ who: 'rowan', text: 'Dad’s trail marks. Green ribbon: supplies. I can see another one ahead.' },
+      { who: 'rowan', text: 'A creature rears up before it strikes. Wait for the wind-up, then roll past it or step back.' }]);
+  }
+  function openTrailCache() {
+    const entry = LORE.find(l => l.id === 'trailcache');
+    const found = !story.trailCache;
+    if (found) {
+      story.trailCache = true; addLore(entry.id);
+      tideGrant('bread', 2); tideGrant('coins', 5);
+      sfx('pickup'); tidePersist();
+    }
+    startDialogue([{ who: 'rowan', text: entry.text },
+      ...(found ? [{ who: 'rowan', text: 'Two loaves and five coins. I can set bread as my quick item in the bag, then use it without stopping.' }] : [])]);
+  }
+  function drawOpeningTrail() {
+    const y = SIDE_GROUND_Y;
+    for (const x of [TRAIL.marker, TRAIL.cache]) {
+      if (x < sideCameraX - 24 || x > sideCameraX + canvas.width + 24) continue;
+      ctx.fillStyle = 'rgba(12,17,16,.55)'; ctx.fillRect(x - 13, y - 2, 27, 3);
+      ctx.fillStyle = '#342a2b'; ctx.fillRect(x - 2, y - 30, 4, 30);
+      ctx.fillStyle = '#805b40'; ctx.fillRect(x - 1, y - 30, 2, 27);
+      ctx.fillStyle = '#78aa76'; ctx.fillRect(x - 4, y - 27, 9, 3);
+      const tail = prefersReducedMotion() ? 0 : Math.round(Math.sin(time * 5 + x));
+      ctx.fillRect(x + 3, y - 24, 5 + tail, 2); ctx.fillRect(x + 4, y - 22, 3, 2);
+      if (x === TRAIL.cache) {
+        ctx.fillStyle = '#281e21'; ctx.fillRect(x - 11, y - 13, 22, 13);
+        ctx.fillStyle = '#795744'; ctx.fillRect(x - 10, y - 10, 20, 8);
+        ctx.fillStyle = '#524339'; ctx.fillRect(x - 9, y - 5, 18, 1);
+        ctx.fillStyle = '#b6955d'; ctx.fillRect(x - 2, y - 10, 4, 3);
+        ctx.fillStyle = story.trailCache ? '#392b2a' : '#a68052';
+        ctx.fillRect(x - 12, y - (story.trailCache ? 16 : 13), 24, 3);
+      } else {
+        ctx.fillStyle = '#543b33'; ctx.fillRect(x - 9, y - 18, 18, 7);
+        ctx.fillStyle = '#be9b69'; ctx.fillRect(x + 1, y - 15, 5, 1); ctx.fillRect(x + 4, y - 16, 2, 3);
+      }
+    }
   }
   function talkLore(l, extra = [], done) {
     if (!l?.speaker) return;
@@ -8238,7 +8418,9 @@ const Overworld = (() => {
         const a = tideArena;
         if (a.wave === 3) {
           tideArena = null; tide.arenaWins++; tideGrant('coins', tide.arenaWins === 1 ? 50 : 16); tideGrant('tonic', 1);
-          tideNotice('Breakwater cleared. Your purse is paid.', 'victory'); tidePersist();
+          const newSigil = !fortune.owned.includes('breakwater');
+          if (newSigil) grantRelic('breakwater', false);
+          tideNotice(newSigil ? 'Breakwater Sigil added to Relics.' : 'Breakwater cleared. Your purse is paid.', 'victory'); tidePersist();
         } else {
           const wave = [['hexer', 'hexer'], ['goblin', 'reever'], ['reever', 'hexer', 'hexer']][a.wave++];
           a.mobs = wave.map((type, i) => {
@@ -8971,12 +9153,22 @@ const Overworld = (() => {
     const [, scarf, coat] = WITNESS_APPEARANCE[who];
     ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.scale(direction * scale, scale);
     const bit = (color, x, y, w, h) => { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); };
+    const phase = time + who.charCodeAt(0) * .37, anim = scale < 1.5 && !prefersReducedMotion();
+    const blink = anim && phase % 4.7 > 4.56;
+    const hem = anim && Math.sin(phase * 3) > .6 ? 1 : 0;
     bit('#171624', -8, -22, 17, 20); bit('#171624', -6, -34, 13, 13);
     bit(coat, -7, -22, 14, 16); bit(coat, -5, -33, 11, 11);
-    bit('#e0af89', -1, -29, 7, 6); bit('#29202b', 3, -28, 2, 1);
-    bit(scarf, -6, -23, 13, 3); bit(scarf, -7, -20, 3, 8);
+    bit('#e0af89', -1, -29, 7, 6); if (!blink) bit('#29202b', 3, -28, 2, 1);
+    bit(scarf, -6, -23, 13, 3); bit(scarf, -7 - hem, -20, 3, 8);
     bit('#a27b64', -6, -10, 12, 2); bit('#292333', -6, -7, 5, 7); bit('#292333', 2, -7, 5, 7);
     bit('#342734', 8, -23, 2, 23); bit(scarf, 8, -24, 2, 3);
+    if (['nell', 'mira', 'mara'].includes(who)) {
+      bit('#291f24', -12, -16, 8, 8); bit('#946d47', -11, -15, 7, 6); bit('#c49562', -11, -15, 7, 1);
+    } else if (['hob', 'pike', 'calden', 'vey'].includes(who)) {
+      bit('#292536', -8, -33, 17, 3); bit(scarf, -6, -35, 11, 2);
+    } else if (['tamsin', 'keeper', 'novice', 'vi'].includes(who)) {
+      bit('#302630', -4, -19, 9, 10); bit(scarf, -2, -18, 1, 7); bit('#bb976a', 2, -13, 3, 2);
+    }
     ctx.restore();
   }
   function drawLoreSpots() {
@@ -8986,7 +9178,7 @@ const Overworld = (() => {
       ctx.fillStyle = 'rgba(10,11,20,.45)'; ctx.fillRect(x - 10, y - 1, 21, 2);
       drawWitnessBody(who, x, y, 1, sidePlayer.x < x ? -1 : 1);
       if (found || nickScene) return;
-      const bob = Math.round(Math.sin(time * 3 + x) * 2);
+      const bob = prefersReducedMotion() ? 0 : Math.round(Math.sin(time * 3 + x) * 2);
       ctx.fillStyle = '#191823'; ctx.fillRect(x - 7, y - 48 + bob, 14, 8);
       ctx.fillRect(x - 3, y - 40 + bob, 3, 2);
       ctx.fillStyle = SPEAKERS[who].color;
@@ -10052,7 +10244,7 @@ const Overworld = (() => {
       ctx.globalAlpha = a; ctx.textAlign = 'center';
       ctx.font = 'bold 14px monospace'; ctx.fillStyle = '#2a1a12'; ctx.fillText('LEVEL UP', 161, 71);
       ctx.fillStyle = '#ffe3a1'; ctx.fillText('LEVEL UP', 160, 70);
-      ctx.font = '7px monospace'; ctx.fillStyle = '#f7e9c7'; ctx.fillText('MAX HP +4   STR +1', 160, 82);
+      ctx.font = '7px monospace'; ctx.fillStyle = '#f7e9c7'; ctx.fillText('NEXT BLESSING: LV ' + nextMilestone(stats.level), 160, 82);
       ctx.globalAlpha = 1;
     }
     if (notice && time < noticeUntil && !dialogue) {
@@ -10205,6 +10397,8 @@ const Overworld = (() => {
     if (insideHouse) {
       stats.playTime += dt;
       sideJumpQueued = false;
+      updatePerkPanel();
+      if (!armorTutorialPending) maybeOpenPerks();
       if (armorTutorialPending || panel) { interiorPlayer.moving = false; return; }
       let ix = 0, iy = 0;
       if (keys.has('arrowleft') || keys.has('a')) ix -= 1;
@@ -10332,9 +10526,11 @@ const Overworld = (() => {
     ctx.fillText(inputMode === 'pad' ? (panel === 'inventory' ? 'Press △, ✕, or ○ to close' : panel === 'stats' ? 'Press TOUCHPAD, ✕, or ○ to close' : 'Press ✕ or ○ to close') : (panel === 'inventory' ? 'Press I, E, or ESC to close' : panel === 'stats' ? 'Press C, E, or ESC to close' : 'Press E, ENTER, or ESC to close'), 160, 190);
 
     if (panel === 'dad-note') {
-      ctx.fillStyle = '#eadbb3'; ctx.fillRect(69, 72, 182, 92);
-      ctx.fillStyle = '#76553d'; ctx.strokeStyle = '#c79b5d'; ctx.lineWidth = 1;
-      ctx.strokeRect(69.5, 72.5, 181, 91);
+      if (!drawPaper('dialogue', 66, 65, 188, 104)) {
+        ctx.fillStyle = '#eadbb3'; ctx.fillRect(69, 72, 182, 92);
+        ctx.strokeStyle = '#c79b5d'; ctx.lineWidth = 1;
+        ctx.strokeRect(69.5, 72.5, 181, 91);
+      }
       ctx.fillStyle = '#45332e'; ctx.textAlign = 'center'; ctx.font = 'bold 10px monospace';
       ctx.fillText('Son, meet me at the', 160, 96);
       ctx.fillText('other side of the forest.', 160, 116);
@@ -10529,7 +10725,7 @@ const Overworld = (() => {
     } else if (invTab === 5) {
       mapSel = clamp(mapSel + dy + dx, 0, Math.max(0, mapFires().length - 1));
     } else if (invTab === 6) {
-      relicSel = clamp(relicSel + dx + dy * 7, 0, RELIC_ORDER.length - 1);
+      relicSel = clamp(relicSel + dx + dy * RELIC_COLS, 0, RELIC_ORDER.length - 1);
     } else return;
     sfx('uiMove');
   }
@@ -10588,7 +10784,7 @@ const Overworld = (() => {
       if (time - invOpenTime > 1.5 && p.y >= 210) { panel = null; sfx('uiConfirm'); if (onSave) onSave(getSaveData()); }
       e.preventDefault(); return;
     }
-    if (!panel && platformMode && region().peaceful && nearbyInteraction() && p.y >= 144 && p.y < 172) {
+    if (!panel && platformMode && outdoorScene() && nearbyInteraction() && p.y >= 144 && p.y < 172) {
       interactPlatformer(); e.preventDefault(); return;
     }
     if (fortunePanel()) { fortunePointer(p); e.preventDefault(); return; }
@@ -10596,6 +10792,8 @@ const Overworld = (() => {
       SHOP_ITEMS.forEach((it, i) => { if (inside(66, 74 + i * 18, 188, 16)) { if (shopSel === i) buyShopItem(i); else { shopSel = i; sfx('uiMove'); } } });
       e.preventDefault(); return;
     }
+    if (panel === 'dad-note' && inside(43, 37, 234, 164)) { closeCurrentPanel(); e.preventDefault(); return; }
+    if (armorTutorialPending && inside(50, 80, 220, 80)) { startArmorQuestFromInventory(); e.preventDefault(); return; }
     if (panel !== 'inventory') return;
     e.preventDefault();
     if (invInspect) { invInspect = null; sfx('bookClose'); return; }
@@ -10607,7 +10805,7 @@ const Overworld = (() => {
       return;
     }
     for (let i = 0; i < INV_TABS.length; i++) {
-      if (inside(INV_TAB_X0 + i * (INV_TAB_W + 2), 17, INV_TAB_W, 14)) { if (invTab !== i) { invTab = i; sfx('uiTab'); } return; }
+      if (inside(INV_TAB_X0 + i * (INV_TAB_W + 2), 17, INV_TAB_W, 17)) { if (invTab !== i) { invTab = i; sfx('uiTab'); } return; }
     }
     if (invTab === 0) {
       const items = ownedItems();
@@ -10711,6 +10909,7 @@ const Overworld = (() => {
     for (let x = 12; x < W - 12; x += 9) { ctx.fillStyle = '#3d2a21'; ctx.fillRect(x, 9, 4, 1); ctx.fillRect(x + 3, H - 10, 4, 1); }
     ctx.fillStyle = '#d6b477'; ctx.fillRect(11, 11, W - 22, 1); ctx.fillRect(11, H - 12, W - 22, 1);
     ctx.fillRect(11, 11, 1, H - 22); ctx.fillRect(W - 12, 11, 1, H - 22);
+    drawPaper('panel', 5, 5, W - 10, H - 10);
     ctx.fillStyle = '#151119'; ctx.fillRect(13, 13, W - 26, H - 26);
     // Gold corner studs.
     [[9, 9], [W - 14, 9], [9, H - 14], [W - 14, H - 14]].forEach(([x, y]) => {
@@ -10726,7 +10925,7 @@ const Overworld = (() => {
       ctx.fillStyle = active ? '#d6b477' : '#2a2230'; ctx.fillRect(x, 17, tabW, 14);
       ctx.fillStyle = active ? '#f7e2a8' : '#3a3042'; ctx.fillRect(x, 17, tabW, 1);
       if (active) { ctx.fillStyle = '#d6b477'; ctx.fillRect(x, 31, tabW, 3); }
-      invText(name, x + tabW / 2, 27, active ? '#2a1a12' : '#a99f9a', 'bold 6px monospace', 'center');
+      invText(name, x + tabW / 2, 27, active ? '#2a1a12' : '#d2c5bd', 'bold 6px monospace', 'center');
       if (i === 4 && story.pages.some(id => !loreSeen.has(id))) { ctx.fillStyle = '#ff5a4a'; ctx.fillRect(x + tabW - 4, 18, 3, 3); }
     });
     const pad = inputMode === 'pad';
@@ -10854,7 +11053,7 @@ const Overworld = (() => {
   }
 
   function invMenuRect() {
-    const r = itemSlotRect(invSel);
+    const r = itemSlotRect(invSel - itemOffset());
     const h = invMenu.opts.length * 12 + 8, w = 70;
     let mx = r.x + r.w + 4, my = r.y;
     if (mx + w > 304) mx = r.x - w - 4;
@@ -10964,7 +11163,7 @@ const Overworld = (() => {
 
   function drawStatsTab(x, y, w) {
     const rows = [
-      ['LEVEL', String(stats.level)],
+      ['LEVEL / NEXT BLESSING', stats.level + ' / ' + nextMilestone(stats.level)],
       ['ATTACK', String(totalAttack())],
       ['DEFENSE', String(totalDefense())],
       ['MONSTERS / GOBLINS', (stats.kills || 0) + ' / ' + (stats.goblinKills || 0)],
@@ -11237,7 +11436,8 @@ const Overworld = (() => {
 
     ctx.textAlign = 'center';
     ctx.font = 'bold 17px monospace';
-    ctx.fillStyle = '#ffe4ae';
+    const paper = drawPaper('ribbon', 96, 65, 128, 23);
+    ctx.fillStyle = paper ? '#39261f' : '#ffe4ae';
     ctx.fillText('PAUSED', 160, 83);
     ctx.fillStyle = '#a9b6ae';
     ctx.font = '7px monospace';
@@ -11252,14 +11452,19 @@ const Overworld = (() => {
       ctx.strokeStyle = selected ? '#fff0bf' : '#80604a';
       ctx.lineWidth = 1;
       ctx.strokeRect(78.5, y + 0.5, 163, PAUSE_ROW_H - 3);
-      ctx.font = selected ? 'bold 9px monospace' : '9px monospace';
-      ctx.fillStyle = selected ? '#241a25' : '#ead9bb';
-      ctx.fillText((selected ? '> ' : '') + label, 160, y + 13);
+      const rowPaper = drawPaper(selected ? 'selected' : 'button', 78, y, 164, PAUSE_ROW_H - 2);
+      if (rowPaper) {
+        ctx.fillStyle = selected ? '#f3ddb2' : '#e7d5b5';
+        ctx.fillRect(106, y + 3, 108, 11);
+      }
+      ctx.font = selected ? 'bold 8px monospace' : '8px monospace';
+      ctx.fillStyle = selected || rowPaper ? '#241a25' : '#ead9bb';
+      ctx.fillText((selected ? '> ' : '') + label, 160, y + 12);
     });
 
     ctx.fillStyle = '#b7b3ad';
     ctx.font = '6px monospace';
-    ctx.fillText(inputMode === 'pad' ? '↑ / ↓ SELECT     ✕ CHOOSE' : '↑ / ↓ SELECT     ENTER CHOOSE', 160, 179);
+    ctx.fillText(inputMode === 'touch' ? 'TAP AN OPTION' : inputMode === 'pad' ? '↑ / ↓ SELECT     ✕ CHOOSE' : '↑ / ↓ SELECT     ENTER CHOOSE', 160, 181);
     ctx.restore();
   }
 
@@ -11414,7 +11619,7 @@ const Overworld = (() => {
 
   function getSaveData() {
     return {
-      version: 7,
+      version: 8,
       equipment: { ...equipment },
       armorQuestActive,
       armorTutorialPending,
@@ -11442,7 +11647,7 @@ const Overworld = (() => {
       newItems: Array.from(newItems),
       loreSeen: Array.from(loreSeen),
       relics: { owned: fortune.owned.slice(), equipped: fortune.equipped.slice(), slots: fortune.slots },
-      pendingPerks,
+      pendingPerks: pendingPerks.map(({ level, cards }) => ({ level, cards: cards.slice() })),
       depths: depthsSave(),
       tide: tideSave()
     };
@@ -11460,7 +11665,7 @@ const Overworld = (() => {
     dialogue = null; bossFight = null; bossOutro = null; nickScene = null; dad = null; bossWaves.length = 0;
     armorTutorialPending = false; armorQuestActive = false; dadNoteRead = false;
     Object.assign(stats, { level: 1, health: 20, maxHealth: 20, stamina: 100, maxStamina: 100, strength: 5, defense: 2, steps: 0, playTime: 0, xp: 0, kills: 0, goblinKills: 0, atkUp: 0, defUp: 0, perkAtk: 0, perkDef: 0, critUp: 0, luck: 0, thirst: 0, chargeUp: 0, elites: 0, chests: 0 });
-    fortune.owned = []; fortune.equipped = []; fortune.slots = 2; fortune.phoenixUsed = false; pendingPerks = 0; perkOffer = null; relicReveal = null; wheel = null;
+    fortune.owned = []; fortune.equipped = []; fortune.slots = 2; fortune.phoenixUsed = false; pendingPerks = []; perkOffer = null; relicReveal = null; wheel = null;
     bloodMoon = false; witchUntil = 0; Object.keys(chestRolls).forEach(k => delete chestRolls[k]); fortuneFx.length = 0; depthsReset();
     tideLoad(saveData?.tide);
     stepDistance = 0;
@@ -11499,7 +11704,6 @@ const Overworld = (() => {
       if (Array.isArray(saveData.relics.equipped)) fortune.equipped = saveData.relics.equipped.filter(id => fortune.owned.includes(id)).slice(0, fortune.slots);
     }
     depthsLoad(saveData.depths);
-    if (Number.isFinite(saveData.pendingPerks)) pendingPerks = clamp(Math.floor(saveData.pendingPerks), 0, 20);
     dadNoteRead = saveData.sideNoteRead === true;
     if (typeof saveData.armorQuestActive === 'boolean') armorQuestActive = saveData.armorQuestActive;
     else armorQuestActive = false;
@@ -11513,6 +11717,8 @@ const Overworld = (() => {
         if (Number.isFinite(saveData.inventory[k])) inventory[k] = Math.max(0, Math.floor(saveData.inventory[k]));
       });
     }
+    if (story.bossDefeated && !inventory.watchblade) tideGrant('watchblade', 1);
+    if (tide.arenaWins >= 1 && !fortune.owned.includes('breakwater')) grantRelic('breakwater', false);
     if (saveData.stats && typeof saveData.stats === 'object') {
       Object.keys(stats).forEach(k => {
         if (Number.isFinite(saveData.stats[k])) stats[k] = saveData.stats[k];
@@ -11522,11 +11728,27 @@ const Overworld = (() => {
       stats.health = clamp(stats.health, 0, stats.maxHealth);
       stats.stamina = clamp(stats.stamina, 0, stats.maxStamina);
     }
+    if (Array.isArray(saveData.pendingPerks)) {
+      const seen = new Set();
+      for (const reward of saveData.pendingPerks) {
+        if (!Number.isInteger(reward?.level) || reward.level < 2 || reward.level > stats.level || seen.has(reward.level)) continue;
+        seen.add(reward.level);
+        const cards = Array.isArray(reward.cards) && reward.cards.length === 3 && new Set(reward.cards).size === 3 &&
+          reward.cards.every(id => PERKS.some(p => p.id === id)) ? reward.cards.slice() : [];
+        pendingPerks.push({ level: reward.level, cards });
+      }
+      pendingPerks.sort((a, b) => a.level - b.level);
+    } else if (Number.isFinite(saveData.pendingPerks)) {
+      // Keep already-earned unclaimed rewards in pre-milestone saves.
+      const count = clamp(Math.floor(saveData.pendingPerks), 0, Math.min(20, stats.level - 1));
+      for (let level = stats.level - count + 1; level <= stats.level; level++) pendingPerks.push({ level, cards: [] });
+    }
     if (Number.isFinite(saveData.stepDistance)) stepDistance = Math.max(0, saveData.stepDistance);
     if (Number.isFinite(saveData.worldClock)) worldClock = ((saveData.worldClock % 1) + 1) % 1;
     // One-time migration: older slots, including earlier version-2 slots,
     // must begin in the kid's bedroom. Later saves preserve the real location.
     if (saveData.houseSpawnMigrated !== true) {
+      if (stats.health <= 0) stats.health = Math.max(1, Math.ceil(stats.maxHealth * .65));
       insideHouse = true;
       interiorPlayer.x = KID_SPAWN.x;
       interiorPlayer.y = KID_SPAWN.y;
@@ -11535,6 +11757,7 @@ const Overworld = (() => {
     }
     insideHouse = saveData.insideHouse === true;
     if (insideHouse) {
+      if (stats.health <= 0) stats.health = Math.max(1, Math.ceil(stats.maxHealth * .65));
       if (Number.isFinite(saveData.interiorX)) interiorPlayer.x = clamp(saveData.interiorX, HOME.left, HOME.right - 16);
       if (Number.isFinite(saveData.interiorY)) interiorPlayer.y = clamp(saveData.interiorY, HOME.top - 8, HOME.bottom - 15);
       if (['up', 'down', 'left', 'right'].includes(saveData.interiorFacing)) interiorPlayer.facing = saveData.interiorFacing;
@@ -11702,7 +11925,7 @@ const Overworld = (() => {
     panel = null;
     paused = false;
     pauseSelection = 0;
-    notice = '';
+    notice = ''; noticeUntil = 0; levelUpUntil = 0;
     time = 0;
     wolves.length=0; wolfSpawned=false; wolfNoticeCooldown=0; battle=null; insideHouse=false;
     bunnies.forEach((b, i) => {
@@ -11738,6 +11961,7 @@ const Overworld = (() => {
     dialogue = null; bossWaves.length = 0;
     restoreBossOutro();
     sceneTitle = null;
+    if (stats.health <= 0) recoverAtCheckpoint();
     sideCameraX = clamp(sidePlayer.x - canvas.width * 0.43, 0, Math.max(0, sideWorldWidth() - canvas.width));
     insideHouse = platformScene === 'house';
     introActive = !saveData || typeof saveData !== 'object';
@@ -11871,12 +12095,15 @@ const Overworld = (() => {
       phase: introActive ? 'intro' : paused ? 'paused' : nickScene ? 'nick-ambush' : panel || 'play',
       ambushTime: nickScene?.t ?? null, ambushBeat: nickScene ? nickScene.awake ? 'wake' : nickScene.struck ? 'impact' : nickScene.t >= NICK_CHARGE ? 'charge' : 'reveal' : null,
       introTime: introActive ? introTime : null,
-      player: { x: Math.round(sidePlayer.x), y: Math.round(sidePlayer.y), health: stats.health },
+      player: { x: Math.round(insideHouse ? interiorPlayer.x : sidePlayer.x), y: Math.round(insideHouse ? interiorPlayer.y : sidePlayer.y),
+        health: stats.health, stamina: Math.round(stats.stamina), level: stats.level, xp: stats.xp, armor: equipment.armor, weapon: currentWeapon() },
+      dialogue: dialogue?.lines[dialogue.i]?.who ?? null, interaction: !insideHouse && nearbyInteraction()?.label || null,
+      inventoryTab: panel === 'inventory' ? INV_TABS[invTab] : null, rewardLevel: perkOffer?.level ?? null,
       cameraX: Math.round(sideCameraX), boss: bossFight ? (bossFight.phaseTwo ? 'phase-two-intro' : bossFight.cine ? 'intro' : bossFight.active ? 'active' : 'dialogue') : null,
       bossForm: theBoss()?.enraged ? 2 : theBoss() ? 1 : null,
       bloodEffects, bloodParticles: bloodDrops.length,
       enemies: sideMobs.filter(m => !m.dead && Math.abs(m.x - sidePlayer.x) < 220)
-        .map(m => ({ type: m.type, x: Math.round(m.x), y: Math.round(m.y), hp: m.hp })) });
+        .map(m => ({ type: m.type, x: Math.round(m.x), y: Math.round(m.y), hp: m.hp, warning: !!mobWarning(m) })) });
   }
   return { init, update, draw, stop, controllerAction, clearHeldInput, setInputMode, setBloodEffects, renderState };
 })();

@@ -4,6 +4,14 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
 
 **Play online:** https://jasoncoker010101-cmd.github.io/pixelquest/
 
+## Woodland and combat polish
+
+- Read Dad's note, equip his armor, and look for the trail marker and Watch supply box west of Nell. The optional box holds two Camp Breads and five coins. Open the bag to set food to your quick slot.
+- XP, level stats, and partial recovery still apply at every level. Choose a major blessing at levels 5, 10, 15, 20, and so on. Offers wait until combat clears, and saved offers keep the same cards when you reload. Unclaimed blessings from older saves carry forward.
+- Defeat Grukk to earn **Watchrunner**, a sword with +4 attack and a lower roll cost. Win all three waves of the Breakwater arena to earn the **Breakwater Sigil**, which restores 12 extra stamina on a perfect dodge while equipped. Saves that already earned either victory receive its reward.
+- Watch for the new enemy wind-up marks and ground cues. Impact and defeat effects remain visible with Blood Effects disabled. Dialogue, pause, inventory, and milestone screens use art from Humble Pixel's paper UI.
+- Run `node tools/verify-tide.mjs` for regression checks on exploration, milestones, reward saves, combat cues, and equipment, and `node tools/verify-build.mjs` for runtime asset checks.
+
 ## Frostglass and the Cinder Seam
 
 In Chapter 2, stop at Wren’s Lookout. Vi’s forge is west of the fire, and a

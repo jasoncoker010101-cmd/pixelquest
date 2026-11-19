@@ -1,5 +1,10 @@
 Pixel Quest asset credits
 
+Paper UI (assets/paper-ui):
+- Humble Pixel (@Humblepixel), Humble Gift - Paper UI System: https://humblepixel.itch.io/
+- Cropped runtime artwork used for the paper dialogue, Dad's note, inventory frame,
+  menu buttons and title ribbons. Not licensed for standalone redistribution.
+
 Salt Coast expansion (assets/tide):
 - Luis Zuno (Ansimuz), Legacy Collection: https://ansimuz.itch.io/gothicvania-patreon-collection
 - The public-license.pdf inside this project's bundled copy licenses its assets CC0.

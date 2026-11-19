@@ -117,6 +117,9 @@
   .tv-shell.playing[data-input="touch"]:not(:fullscreen) .mobile-controls {
     width: max(100%, min(94vw, 312px)); left: 50%; right: auto; transform: translateX(-50%);
   }
+  .tv-shell.playing[data-input="touch"]:not(:fullscreen) .tv-fullscreen-btn {
+    top: -30px; bottom: auto;
+  }
   .tv-shell.playing[data-input="touch"]:fullscreen canvas {
     width: min(100vw, calc((100dvh - 166px) * 4 / 3)); height: auto; aspect-ratio: 4 / 3;
     transform: translateY(-77px);
@@ -1002,7 +1005,11 @@ function syncControlMode() {
 }
 function selectLocalControl(mode) { localControl = mode; syncControlMode(); }
 window.addEventListener('pointerdown', event => {
-  if (event.isTrusted) selectLocalControl(event.pointerType === 'touch' ? 'touch' : 'keyboard');
+  if (!event.isTrusted) return;
+  const mode = event.pointerType === 'touch' ? 'touch' : 'keyboard';
+  // Canvas listeners need coordinates from the layout the player actually tapped.
+  if (event.target === canvas && inWorld && mode !== localControl) requestAnimationFrame(() => selectLocalControl(mode));
+  else selectLocalControl(mode);
 }, true);
 window.addEventListener('keydown', event => {
   if (event.isTrusted && !event.isComposing && !['Alt', 'Control', 'Meta', 'CapsLock'].includes(event.key)) {

@@ -24,7 +24,19 @@ const checks = `
     music: desiredMusic, startAmbush: startNickAmbush,
     stepAmbush: updateNickAmbush, health: () => stats.health, boss: theBoss,
     ring: key => ringFerryBell(BELLS.find(b => b.key === key)),
-    clearControls: clearHeldInput, currentWeapon
+    clearControls: clearHeldInput, currentWeapon, gainXp, xpForNext, maybeOpenPerks,
+    mobWarning, damageMob, tryRoll, canHitPlayer, setBloodEffects, recoverAtCheckpoint, toggleWeapon,
+    selectRelic(id) { relicSel = RELIC_ORDER.indexOf(id); toggleRelic(); },
+    reset(save) {
+      panel = null; paused = false; time = 0; onSave = null; introActive = false;
+      applySave(save); clearHeldInput();
+      Object.assign(sidePlayer, { deadTime: 0, hurtTime: 0, roll: null, rollCooldown: 0, atk: null, pray: null, onGround: true });
+      combatFx.length = 0; bloodDrops.length = 0;
+      platformScene = insideHouse ? 'house' : save.platformScene || 'forest';
+      sidePlayer.x = save.sideX || 72; loadSceneMobs(outdoorScene() ? platformScene : 'forest');
+    },
+    capture(fn) { onSave = fn; }, tick: update, perkInput: fortuneInput,
+    fx: () => ({ rings: combatFx.filter(f => f.kind === 'strikeRing').length, blood: bloodDrops.length })
   };
 `;
 new vm.Script(source.replace(marker, checks + marker)).runInNewContext(runtime);
@@ -93,7 +105,9 @@ for (let n = 1; n <= 3; n++) {
   q.completeWave();
 }
 q.updateTideWorld(2); assert.equal(q.tideSave().arenaWins, 1);
+assert.ok(q.getSaveData().relics.owned.includes('breakwater'));
 q.updateTideWorld(2); assert.equal(q.get().inventory.coins, 188);
+const arenaSave = q.getSaveData();
 
 for (const outcome of ['shutter', 'homeward']) {
   q.applySave({ ...legacy, story: { ch4Done: true, wellBossDone: true } }); q.place('well', 1928);
@@ -188,3 +202,78 @@ assert.equal(q.get().story.ch4Done, true);
 q.place('vault', 1960); q.interact().act(); q.closeDialogue();
 assert.ok(q.get().story.pages.includes('wellnames'));
 console.log('Exploration regression checks passed: work order, cave, checkpoint, guarded cache, payout, ambush, save, boss trophy, crafting, and spoken quest clues.');
+
+const fresh = { version: 8, houseSpawnMigrated: true, equipment: { armor: true }, platformScene: 'forest' };
+const snapshot = value => JSON.parse(JSON.stringify(value));
+const milestones = () => snapshot(q.getSaveData().pendingPerks).map(r => r.level);
+q.reset(fresh);
+for (let lv = 1; lv < 20; lv++) {
+  q.gainXp(q.xpForNext(lv));
+  assert.equal(q.getSaveData().stats.level, lv + 1);
+  assert.equal(q.getSaveData().stats.maxHealth, 20 + 3 * lv);
+  assert.equal(milestones().length, Math.floor((lv + 1) / 5));
+}
+assert.deepEqual(milestones(), [5, 10, 15, 20]);
+q.reset(fresh);
+q.gainXp(Array.from({ length: 19 }, (_, i) => q.xpForNext(i + 1)).reduce((a, b) => a + b) + 9);
+assert.deepEqual(milestones(), [5, 10, 15, 20]);
+assert.equal(q.getSaveData().stats.xp, 9);
+q.reset({ ...fresh, version: 7, stats: { level: 8 }, pendingPerks: 2 });
+assert.deepEqual(milestones(), [7, 8]);
+const pending = [{ level: 5, cards: ['might', 'vigor', 'gold'] }];
+q.reset({ ...fresh, stats: { level: 5 }, pendingPerks: pending });
+const goblin = q.get().sideMobs.find(m => m.type === 'goblin');
+q.place('forest', goblin.x); q.maybeOpenPerks();
+assert.equal(q.get().panel, null, 'Blessing should not interrupt combat');
+q.place('forest', 72); q.maybeOpenPerks(); assert.equal(q.get().panel, 'perk');
+const beforePick = snapshot(q.getSaveData());
+q.reset({ ...beforePick, insideHouse: true });
+let lastWrite;
+q.capture(s => { lastWrite = snapshot(s); });
+q.tick(.1);
+assert.equal(q.get().panel, 'perk');
+assert.deepEqual(lastWrite.pendingPerks, pending);
+q.perkInput('ok'); assert.deepEqual(milestones(), [5], 'Ignore input during reveal');
+q.tick(.95); q.perkInput('right'); q.perkInput('ok'); q.perkInput('ok');
+assert.equal(lastWrite.inventory.coins, 45);
+assert.deepEqual(lastWrite.pendingPerks, []);
+q.tick(1);
+assert.equal(q.get().panel, null, 'Claim animation ends in the house');
+q.reset(lastWrite); q.maybeOpenPerks();
+assert.equal(q.get().panel, null);
+assert.equal(q.get().inventory.coins, 45);
+
+q.reset(fresh); q.setBloodEffects(false);
+const foe = q.get().sideMobs.find(m => m.type === 'goblin');
+Object.assign(foe, { attackTime: .8, atkLen: .9, attackHit: false });
+assert.ok(q.mobWarning(foe));
+q.damageMob(foe, 1, 1, 0, true, false); assert.ok(foe.hp < foe.maxHp);
+assert.equal(q.fx().rings, 1);
+q.damageMob(foe, foe.maxHp + 50, 1, 0, false, false); assert.ok(foe.dead);
+assert.equal(q.fx().rings, 2); assert.equal(q.fx().blood, 0);
+const kills = q.getSaveData().stats.kills;
+q.damageMob(foe, 999, 1, 0, true, false);
+assert.equal(q.getSaveData().stats.kills, kills);
+q.place('forest', 80); assert.equal(q.tryRoll(true), true); assert.equal(q.getSaveData().stats.stamina, 82);
+
+q.reset({ ...fresh, platformScene: 'hollow' });
+q.defeat('ogre');
+assert.ok(q.getSaveData().story.bossDefeated);
+assert.equal(q.get().inventory.watchblade, 1);
+q.toggleWeapon(); assert.equal(q.currentWeapon(), 'watchblade');
+const bladeSave = q.getSaveData();
+q.reset(bladeSave);
+assert.equal(q.currentWeapon(), 'watchblade'); assert.equal(q.get().inventory.watchblade, 1);
+assert.equal(q.tryRoll(true), true); assert.equal(q.getSaveData().stats.stamina, 87);
+q.reset({ ...fresh, story: { bossDefeated: true } }); assert.equal(q.get().inventory.watchblade, 1);
+q.reset({ ...arenaSave, relics: { ...arenaSave.relics, equipped: [] }, stats: { stamina: 45 }, platformScene: 'forest', sideX: 80 });
+q.selectRelic('breakwater');
+assert.ok(q.getSaveData().relics.equipped.includes('breakwater'));
+q.reset(q.getSaveData());
+assert.equal(q.tryRoll(true), true);
+assert.equal(q.canHitPlayer(), false); assert.equal(q.getSaveData().stats.stamina, 53);
+assert.equal(q.canHitPlayer(), false); assert.equal(q.getSaveData().stats.stamina, 53);
+q.reset({ ...fresh, stats: { health: 0 }, story: { lastFire: 'camp' } });
+q.recoverAtCheckpoint();
+assert.equal(q.getSaveData().sideX, 3670); assert.equal(q.health(), 13);
+console.log('Polish regression checks passed: level milestones, reward saves, safe windows, cues, recovery, Watchrunner and Breakwater Sigil.');
