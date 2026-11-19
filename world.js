@@ -2013,12 +2013,20 @@ const Overworld = (() => {
       ctx.fillStyle = '#e0b27a'; ctx.fillRect(x + 21, y + 5, 22, 17);
       ctx.fillStyle = '#292331'; ctx.fillRect(x + 18, y + 3, 28, 7);
     }
-    if (!equipment.armor && equipment.armor) drawKnightArmorOverlay(x, y, 2);
     ctx.restore();
   }
 
   function drawDadArmorStand(x, groundY) {
-    // This is a display stand, not another NPC. It remains in Dad's room when equipped.
+    // Dad's display stand uses the actual knight idle sprite when its sheet is ready.
+    if (knightSprites.idle && knightSprites.idle.complete && knightSprites.idle.naturalWidth) {
+      ctx.save(); ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(x - 20, groundY - 1, 40, 3);
+      drawKnightFrame(knightSprites.idle, 0, 2, 4, x - 29, groundY - 62, 58, 58, false);
+      ctx.fillStyle = '#3b2c2b'; ctx.fillRect(x - 24, groundY - 69, 48, 7);
+      ctx.strokeStyle = '#c49a55'; ctx.strokeRect(x - 23.5, groundY - 68.5, 47, 6);
+      ctx.fillStyle = '#f3dfb7'; ctx.font = '5px monospace'; ctx.textAlign = 'center'; ctx.fillText("DAD'S ARMOR", x, groundY - 64);
+      ctx.restore(); return;
+    }
+    // Fallback while the image is loading; it remains a display stand, not an NPC.
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(x - 15, groundY - 1, 30, 3);
     ctx.fillStyle = '#4b3027';
@@ -2954,6 +2962,7 @@ const Overworld = (() => {
       }
       return;
     }
+    if (action === 'attack') { if (platformScene === 'forest' && !panel) sideAttackQueued = true; return; }
     if (action === 'back' || action === 'pause') {
       paused = true;
       pauseSelection = 0;
