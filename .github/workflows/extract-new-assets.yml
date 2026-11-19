@@ -8,6 +8,7 @@ on:
       - "assets/Pixel_Interiors.zip"
       - "assets/2D_SL_Knight_v1.0.zip"
       - "assets/goblin_scout_v5_silhouette_free.zip"
+      - "assets/GoblinPack.zip"
       - ".github/workflows/extract-new-assets.yml"
   workflow_dispatch:
 
@@ -23,24 +24,27 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Extract sprite packs
         run: |
-          mkdir -p assets/werewolves assets/interiors assets/knight assets/goblin
+          mkdir -p assets/werewolves assets/interiors assets/knight assets/goblin assets/goblinpack
           unzip -o "assets/free-werewolf-sprite-sheets-pixel-art.zip" -d assets/werewolves
           unzip -o "assets/Pixel_Interiors.zip" -d assets/interiors
           unzip -o "assets/2D_SL_Knight_v1.0.zip" -d assets/knight
           unzip -o "assets/goblin_scout_v5_silhouette_free.zip" -d assets/goblin
+          unzip -o "assets/GoblinPack.zip" -d assets/goblinpack
           echo "Werewolf files:"
           find assets/werewolves -type f -print
           echo "Interior files:"
           find assets/interiors -type f -print
           echo "Knight files:"
           find assets/knight -type f -print
-          echo "Goblin files:"
+          echo "Older goblin files:"
           find assets/goblin -type f -print
+          echo "New GoblinPack files:"
+          find assets/goblinpack -type f -print
       - name: Commit extracted assets
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add assets/werewolves assets/interiors assets/knight assets/goblin
+          git add assets/werewolves assets/interiors assets/knight assets/goblin assets/goblinpack
           if git diff --cached --quiet; then
             echo "No extracted files changed."
           else
