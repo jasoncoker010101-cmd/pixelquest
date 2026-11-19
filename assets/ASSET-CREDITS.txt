@@ -64,3 +64,6 @@ Boss music (assets/audio/music):
 - boss_intro.mp3: cynicmusic, Dramatic Boss Encounter: https://opengameart.org/content/dramatic-boss-encounter (CC0)
 - boss_mare.mp3: MintoDog, Heavy Boss Battle 2: https://opengameart.org/content/heavy-boss-battle-2 (CC0)
 - boss_vael.mp3: nene, Boss Battle #2 [Symphonic Metal] (loop part): https://opengameart.org/content/boss-battle-2-symphonic-metal (CC0)
+
+Title music (assets/audio/music):
+- title.mp3: Joth, Fantasy Orchestral Theme: https://opengameart.org/content/fantasy-orchestral-theme (CC0)

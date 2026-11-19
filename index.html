@@ -399,6 +399,7 @@ async function enterWorld(slot) {
     }
   }
   inWorld = true;
+  titleMusic.pause(); titleMusic.volume = 0;
   Overworld.init(canvas, exitWorld, save, saveActiveSlot);
 }
 
@@ -422,20 +423,23 @@ const motes = [...Array(22)].map((_, i) => ({
 }));
 
 const screens = {
-  title:    { y: 118, items: () => ['START GAME', 'ACCOUNT', 'SETTINGS', 'CREDITS'] },
-  slots:    { y: 100, items: slotLabels },
-  settings: { y: 110, items: () => ['MUSIC: ' + (settings.music ? 'ON' : 'OFF'), 'SOUND: ' + (settings.sound ? 'ON' : 'OFF'), 'BACK'] },
-  credits:  { y: 190, items: () => ['BACK'] },
-  account:  { y: 104, items: () => cloudSession ? ['PROFILE / NAME', 'SIGN OUT', 'BACK'] : ['SIGN IN', 'CREATE ACCOUNT', 'BACK'] },
-  deleteConfirm: { y: 150, items: () => ['YES, DELETE', 'CANCEL'] }
+  title:    { y: 134, items: () => ['START GAME', 'ACCOUNT', 'SETTINGS', 'CREDITS'] },
+  slots:    { y: 138, items: slotLabels },
+  settings: { y: 140, items: () => ['MUSIC: ' + (settings.music ? 'ON' : 'OFF'), 'SOUND: ' + (settings.sound ? 'ON' : 'OFF'), 'BACK'] },
+  credits:  { y: 198, items: () => ['BACK'] },
+  account:  { y: 146, items: () => cloudSession ? ['PROFILE / NAME', 'SIGN OUT', 'BACK'] : ['SIGN IN', 'CREATE ACCOUNT', 'BACK'] },
+  deleteConfirm: { y: 154, items: () => ['YES, DELETE', 'CANCEL'] }
 };
 
-function rectFor(s, i) { return { x: 100, y: s.y + i * 20, w: 120, h: 14 }; }
+const TRASH_X = 170;
+function rectFor(s, i) { return { x: 18, y: s.y + i * 17 - 4, w: 148, h: 15 }; }
 
 function go(name) { state.screen = name; state.sel = 0; message = ''; }
 
 function activate() {
+  if (state.screen === 'title' && !menuPressed()) { pressStart(); return; }
   const id = state.screen, sel = state.sel;
+  menuSfx('ui_confirm', 0.5);
   if (id === 'title') go(['slots', 'account', 'settings', 'credits'][sel]);
   else if (id === 'slots') { if (sel === 3) go('title'); else enterWorld(sel + 1); }
   else if (id === 'deleteConfirm') {
@@ -458,13 +462,15 @@ function activate() {
   else if (id === 'credits') go('title');
 }
 
-function back() { if (state.screen === 'deleteConfirm') go('slots'); else if (state.screen !== 'title') go('title'); }
+function back() { if (state.screen === 'title' && !menuPressed()) { pressStart(); return; } if (state.screen === 'deleteConfirm') go('slots'); else if (state.screen !== 'title') go('title'); }
 
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (inWorld) return;
   if (k === 'o' && state.screen === 'title') { enterWorld(); return; }
   if (['arrowup', 'arrowdown', 'w', 's', ' ', 'enter', 'escape'].includes(k)) e.preventDefault();
+  if (document.getElementById('lock')) return;
+  if (state.screen === 'title' && !menuPressed()) { if (!['shift', 'control', 'alt', 'meta', 'tab'].includes(k)) pressStart(); return; }
   const count = screens[state.screen].items().length;
   if (k === 'arrowup' || k === 'w') state.sel = (state.sel + count - 1) % count;
   else if (k === 'arrowdown' || k === 's') state.sel = (state.sel + 1) % count;
@@ -479,8 +485,8 @@ function toCanvas(e) {
 function hit(p) {
   if (state.screen === 'slots') {
     for (let slot = 1; slot <= 3; slot++) {
-      const y = screens.slots.y + (slot - 1) * 20;
-      if (p.x >= 224 && p.x <= 244 && p.y >= y - 2 && p.y <= y + 16) {
+      const r = rectFor(screens.slots, slot - 1);
+      if (p.x >= TRASH_X && p.x <= TRASH_X + 16 && p.y >= r.y && p.y <= r.y + r.h) {
         state.deleteSlot = slot;
         return 100 + slot;
       }
@@ -497,12 +503,13 @@ function hit(p) {
 canvas.addEventListener('mousemove', e => {
   if (inWorld) return;
   const p = toCanvas(e);
-  if (state.screen === 'slots' && p.x >= 224 && p.x <= 244 && p.y >= 98 && p.y <= 156) return;
+  if (state.screen === 'title' && !menuPressed()) return;
   const i = hit(p);
   if (i >= 0 && i < 100) state.sel = i;
 });
 canvas.addEventListener('click', e => {
   if (inWorld) return;
+  if (state.screen === 'title' && !menuPressed()) { pressStart(); return; }
   const i = hit(toCanvas(e));
   if (i >= 100) { state.sel = 0; state.screen = 'deleteConfirm'; message = ''; return; }
   if (i >= 0) { state.sel = i; activate(); }
@@ -538,273 +545,618 @@ function update(dt) {
 }
 
 // ---- Main menu art: the Moonfall title screen ----
-const menuKnight = new Image(); menuKnight.src = 'assets/knight/Idle.png';
-const TITLE = 'PIXELQUEST';
-let menuStart = -1;               // time the title animation began
-let cursorY = 118;                // sliding sword cursor
-let comet = null, nextComet = 3.5, landFlash = 0, landX = 0;
-let shooting = null, nextShoot = 6;
-const embers = [];
-const ridges = [0, 1].map(layer => [...Array(42)].map((_, i) => rnd(i * 3 + layer * 91)));
+// A hand-built night scene: a textured, shattered moon over the Pale Court,
+// moonlit mountains, Rowan kneeling on a cliff, lightning, crows and moon-ash.
+const MENU_IMG = {};
+[['knight', 'assets/knight/Pray.png'], ['moonTex', 'assets/intro/moon.png'], ['far', 'assets/pass/far-mountains.png'],
+ ['mid', 'assets/pass/middle-mountains.png'], ['clouds', 'assets/gloam/clouds.png'], ['crow', 'assets/beasts/crow-fly.png']]
+  .forEach(([k, src]) => { const im = new Image(); im.onload = () => menuArtReady(k); im.src = src; MENU_IMG[k] = im; });
+const MENU_ART = {};
+let menuStart = -1, pressT = -1, lastSel = -1, lastScreen = 'title';
+const INTRO_END = 4.6;
+let shake = 0, flash = 0, bolt = null, nextBolt = 2.55, crows = [], nextCrows = 6;
+const ash = [...Array(46)].map((_, i) => ({ x: rnd(i + 900) * 340, y: rnd(i + 950) * 240, s: 0.4 + rnd(i + 990) * 0.8, ph: rnd(i + 1020) * 6 }));
+const sparks = [];
+
+function hexRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
+// Repaint a daylight asset with a night palette (by luminance), optionally mirrored.
+function recolor(img, ramp, flip) {
+  const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+  const g = c.getContext('2d');
+  if (flip) { g.translate(c.width, 0); g.scale(-1, 1); }
+  g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, c.width, c.height), p = d.data, cols = ramp.map(hexRgb);
+  let lo = 1, hi = 0;
+  for (let i = 0; i < p.length; i += 4) if (p[i + 3] > 20) { const l = (p[i] * 0.3 + p[i + 1] * 0.59 + p[i + 2] * 0.11) / 255; lo = Math.min(lo, l); hi = Math.max(hi, l); }
+  for (let i = 0; i < p.length; i += 4) {
+    if (p[i + 3] <= 20) { p[i + 3] = 0; continue; }
+    const l = ((p[i] * 0.3 + p[i + 1] * 0.59 + p[i + 2] * 0.11) / 255 - lo) / Math.max(0.01, hi - lo);
+    const col = cols[Math.min(cols.length - 1, Math.floor(l * cols.length))];
+    p[i] = col[0]; p[i + 1] = col[1]; p[i + 2] = col[2]; p[i + 3] = 255;
+  }
+  g.setTransform(1, 0, 0, 1, 0, 0); g.putImageData(d, 0, 0);
+  return c;
+}
+function menuArtReady(k) {
+  const im = MENU_IMG[k];
+  if (k === 'far') MENU_ART.far = recolor(im, ['#15153a', '#1a1a42', '#22224f'], true);
+  if (k === 'mid') MENU_ART.mid = recolor(im, ['#090a1c', '#10122a', '#181b3a', '#232853', '#36407a', '#5866a8', '#8e9ad2'], true);
+  if (k === 'clouds') MENU_ART.clouds = recolor(im, ['#151332', '#211d44', '#2f2a58', '#4b4682'], false);
+  if (k === 'moonTex') {
+    const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+    const g = c.getContext('2d'); g.drawImage(im, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height).data, lum = new Float32Array(c.width * c.height);
+    for (let i = 0; i < lum.length; i++) lum[i] = (d[i * 4] + d[i * 4 + 1] + d[i * 4 + 2]) / 765;
+    MENU_ART.moonTex = { w: c.width, h: c.height, lum };
+  }
+}
+
+// Milky way: a diagonal band of faint dust and color, painted once.
+const milky = (() => {
+  const c = document.createElement('canvas'); c.width = 320; c.height = 170;
+  const g = c.getContext('2d');
+  for (let i = 0; i < 9; i++) {
+    const x = 20 + i * 36, y = 150 - i * 15, r = 46 + rnd(i + 7) * 20;
+    const gr = g.createRadialGradient(x, y, 2, x, y, r);
+    gr.addColorStop(0, i % 2 ? 'rgba(120,90,190,.16)' : 'rgba(80,140,200,.13)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  for (let i = 0; i < 520; i++) {
+    const u = rnd(i + 3000), off = (rnd(i + 4000) - 0.5) * (rnd(i + 5000) * 70);
+    const x = u * 340 - 10, y = 160 - u * 140 + off;
+    g.fillStyle = 'rgba(220,225,255,' + (0.12 + rnd(i + 6000) * 0.4) + ')'; g.fillRect(Math.round(x), Math.round(y), 1, 1);
+  }
+  return c;
+})();
+
+// ---- Pixel font (5x7) for menu text ----
+const FONT5 = {
+  A:'01110100011000111111100011000110001',B:'11110100011000111110100011000111110',C:'01110100011000010000100001000101110',
+  D:'11110100011000110001100011000111110',E:'11111100001000011110100001000011111',F:'11111100001000011110100001000010000',
+  G:'01110100011000010111100011000101111',H:'10001100011000111111100011000110001',I:'01110001000010000100001000010001110',
+  J:'00111000100001000010000101001001100',K:'10001100101010011000101001001010001',L:'10000100001000010000100001000011111',
+  M:'10001110111010110101100011000110001',N:'10001100011100110101100111000110001',O:'01110100011000110001100011000101110',
+  P:'11110100011000111110100001000010000',Q:'01110100011000110001101011001001101',R:'11110100011000111110101001001010001',
+  S:'01111100001000001110000010000111110',T:'11111001000010000100001000010000100',U:'10001100011000110001100011000101110',
+  V:'10001100011000110001100010101000100',W:'10001100011000110101101011010101010',X:'10001100010101000100010101000110001',
+  Y:'10001100010101000100001000010000100',Z:'11111000010001000100010001000011111',
+  '0':'01110100011001110101110011000101110','1':'00100011000010000100001000010001110','2':'01110100010000100010001000100011111',
+  '3':'11110000010000101110000010000111110','4':'00010001100101010010111110001000010','5':'11111100001111000001000011000101110',
+  '6':'00110010001000011110100011000101110','7':'11111000010001000100010000100001000','8':'01110100011000101110100011000101110',
+  '9':'01110100011000101111000010001001100',':':'00000001000010000000001000010000000','/':'00001000010001000100010001000010000',
+  '-':'00000000000000001110000000000000000','.':'00000000000000000000000000110001100',',':'00000000000000000000011000010001000',
+  '?':'01110100010000100010001000000000100','!':'00100001000010000100001000000000100',"'":'00100001000100000000000000000000000',
+  '@':'01110100011011110101101111000001110','_':'00000000000000000000000000000011111','(':'00010001000100001000010000010000010',
+  ')':'01000001000001000010000100010001000','+':'00000001000010011111001000010000000'
+};
+function textW(s, sp = 1) { return s.length * (5 + sp) - sp; }
+function pixText(s, x, y, color, sp = 1, align = 'left') {
+  s = String(s).toUpperCase();
+  if (align === 'center') x -= textW(s, sp) / 2; else if (align === 'right') x -= textW(s, sp);
+  x = Math.round(x); y = Math.round(y);
+  ctx.fillStyle = color;
+  for (let i = 0; i < s.length; i++) {
+    const gl = FONT5[s[i]];
+    if (gl) for (let k = 0; k < 35; k++) if (gl[k] === '1') ctx.fillRect(x + (k % 5), y + Math.floor(k / 5), 1, 1);
+    x += 5 + sp;
+  }
+}
+function pixTextShadow(s, x, y, color, sp = 1, align = 'left', shadow = '#05040c') {
+  pixText(s, x + 1, y + 1, shadow, sp, align); pixText(s, x, y, color, sp, align);
+}
+
+// ---- The PIXELQUEST logo: chunky beveled metal letters with a gold rim ----
+const LOGO_GLYPHS = {
+  P:['111110','111111','110011','110011','111111','111110','110000','110000'],
+  I:['111111','111111','001100','001100','001100','001100','111111','111111'],
+  X:['110011','110011','011110','001100','001100','011110','110011','110011'],
+  E:['111111','111111','110000','111110','111110','110000','111111','111111'],
+  L:['110000','110000','110000','110000','110000','110000','111111','111111'],
+  Q:['011110','111111','110011','110011','110011','110111','111110','011011'],
+  U:['110011','110011','110011','110011','110011','110011','111111','011110'],
+  S:['011111','111111','110000','111110','011111','000011','111111','111110'],
+  T:['111111','111111','001100','001100','001100','001100','001100','001100']
+};
+const LS = 4, LPAD = 4;
+function buildLogoWord(word) {
+  const gap = 1, cols = word.length * 6 + (word.length - 1) * gap, W = cols * LS + LPAD * 2, H = 8 * LS + LPAD * 2;
+  const on = (cx, cy) => {
+    if (cy < 0 || cy >= 8 || cx < 0) return false;
+    const li = Math.floor(cx / 7), gx = cx % 7;
+    if (li >= word.length || gx >= 6) return false;
+    return LOGO_GLYPHS[word[li]][cy][gx] === '1';
+  };
+  const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; };
+  const body = mk(), g = body.getContext('2d'), shadow = mk(), sg = shadow.getContext('2d');
+  const cells = [];
+  for (let cy = 0; cy < 8; cy++) for (let cx = 0; cx < cols; cx++) if (on(cx, cy)) cells.push([cx, cy]);
+  const X = cx => LPAD + cx * LS, Y = cy => LPAD + cy * LS;
+  // dark outline (3px) and gold rim (1px)
+  g.fillStyle = '#07050f'; cells.forEach(([cx, cy]) => g.fillRect(X(cx) - 3, Y(cy) - 3, LS + 6, LS + 6));
+  sg.fillStyle = '#000'; cells.forEach(([cx, cy]) => sg.fillRect(X(cx) - 3, Y(cy) - 3, LS + 6, LS + 6));
+  g.fillStyle = '#b68a3e'; cells.forEach(([cx, cy]) => g.fillRect(X(cx) - 1, Y(cy) - 1, LS + 2, LS + 2));
+  g.fillStyle = '#f0cf7a'; cells.forEach(([cx, cy]) => { if (!on(cx, cy - 1)) g.fillRect(X(cx) - 1, Y(cy) - 1, LS + 2, 1); });
+  // chrome body with a dark "horizon" band
+  const m = g.createLinearGradient(0, LPAD, 0, LPAD + 8 * LS);
+  m.addColorStop(0, '#ffffff'); m.addColorStop(0.3, '#dbe6fb'); m.addColorStop(0.47, '#9fb3e2');
+  m.addColorStop(0.5, '#3b4594'); m.addColorStop(0.56, '#5868bd'); m.addColorStop(0.8, '#9ab4f0'); m.addColorStop(1, '#4b56a6');
+  g.fillStyle = m; cells.forEach(([cx, cy]) => g.fillRect(X(cx), Y(cy), LS, LS));
+  // bevel: light top/left edges, dark bottom/right edges
+  cells.forEach(([cx, cy]) => {
+    if (!on(cx, cy - 1)) { g.fillStyle = 'rgba(255,255,255,.85)'; g.fillRect(X(cx), Y(cy), LS, 1); }
+    if (!on(cx - 1, cy)) { g.fillStyle = 'rgba(255,255,255,.35)'; g.fillRect(X(cx), Y(cy), 1, LS); }
+    if (!on(cx, cy + 1)) { g.fillStyle = 'rgba(16,14,48,.75)'; g.fillRect(X(cx), Y(cy) + LS - 1, LS, 1); }
+    if (!on(cx + 1, cy)) { g.fillStyle = 'rgba(16,14,48,.5)'; g.fillRect(X(cx) + LS - 1, Y(cy), 1, LS); }
+  });
+  // a few etched rune ticks for texture
+  g.fillStyle = 'rgba(20,24,70,.35)';
+  cells.forEach(([cx, cy], i) => { if (rnd(i + cx * 7) < 0.12) g.fillRect(X(cx) + 1, Y(cy) + 2, 2, 1); });
+  return { body, shadow, W, H, cells, X, Y };
+}
+let LOGO = null;
+const shineCanvas = document.createElement('canvas');
+function drawLogoWord(word, x, y, scale, alpha, shine) {
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha = alpha;
+  const w = word.W * scale, h = word.H * scale, dx = Math.round(x - (w - word.W) / 2), dy = Math.round(y - (h - word.H) / 2);
+  ctx.globalAlpha = alpha * 0.55; ctx.drawImage(word.shadow, dx + 2, dy + 3, w, h);
+  ctx.globalAlpha = alpha; ctx.drawImage(word.body, dx, dy, w, h);
+  if (shine !== null && scale === 1) {
+    shineCanvas.width = word.W; shineCanvas.height = word.H;
+    const g = shineCanvas.getContext('2d');
+    g.drawImage(word.body, 0, 0); g.globalCompositeOperation = 'source-atop';
+    const sx = shine * (word.W + 60) - 30;
+    const gr = g.createLinearGradient(sx - 14, 0, sx + 14, 0);
+    gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.5, 'rgba(255,255,255,.85)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.setTransform(1, 0, -0.5, 1, 0, 0); g.fillStyle = gr; g.fillRect(sx - 14, 0, 60, word.H);
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = alpha * 0.6; ctx.drawImage(shineCanvas, dx, dy);
+  }
+  ctx.restore();
+}
+
+// ---- Sound for the menu ----
+const titleMusic = new Audio('assets/audio/music/title.mp3');
+titleMusic.loop = true; titleMusic.volume = 0;
+let musicWanted = false, audioCtx = null;
+const menuSfxCache = {};
+function menuSfx(name, vol = 0.5) {
+  if (settings.sound === false) return;
+  try {
+    const a = (menuSfxCache[name] = menuSfxCache[name] || new Audio('assets/audio/sfx/' + name + '.mp3')).cloneNode();
+    a.volume = vol; a.play().catch(() => {});
+  } catch {}
+}
+function thunder(power = 1) {
+  if (settings.sound === false) return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const len = audioCtx.sampleRate * 2.6, buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate), d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02;
+      const tt = i / audioCtx.sampleRate, env = Math.min(1, tt * 30) * Math.exp(-tt * 1.6) * (1 + 0.6 * Math.sin(tt * 9) * Math.exp(-tt * 2));
+      d[i] = last * 3.5 * env;
+    }
+    const src = audioCtx.createBufferSource(), lp = audioCtx.createBiquadFilter(), gain = audioCtx.createGain();
+    src.buffer = buf; lp.type = 'lowpass'; lp.frequency.value = 420; gain.gain.value = 0.9 * power;
+    src.connect(lp).connect(gain).connect(audioCtx.destination); src.start();
+  } catch {}
+}
+function updateMusic(dt) {
+  const want = musicWanted && settings.music !== false && !inWorld;
+  if (want && titleMusic.paused) titleMusic.play().catch(() => {});
+  const target = want ? 0.55 : 0;
+  titleMusic.volume = Math.max(0, Math.min(1, titleMusic.volume + Math.sign(target - titleMusic.volume) * Math.min(Math.abs(target - titleMusic.volume), dt * 0.5)));
+  if (!want && titleMusic.volume <= 0.001 && !titleMusic.paused) titleMusic.pause();
+}
+
+function introTime() { return menuStart < 0 ? 0 : t - menuStart; }
+function menuPressed() { return pressT >= 0; }
+// First input on the title: skip the intro, or "press start" into the menu.
+function pressStart() {
+  if (introTime() < INTRO_END) menuStart = t - INTRO_END;
+  pressT = t; flash = Math.max(flash, 0.5); musicWanted = true;
+  menuSfx('ui_confirm', 0.6);
+}
 
 function updateMenuFx(dt) {
-  if (menuStart < 0) menuStart = t;
-  // The moon shard periodically breaks loose and falls to earth.
-  nextComet -= dt;
-  if (!comet && nextComet <= 0) {
-    comet = { x: 252, y: 112, vx: -70 - Math.random() * 20, vy: 6, trail: [] };
-    nextComet = 11 + Math.random() * 5;
+  if (document.getElementById('lock')) { menuStart = -1; return; }
+  if (menuStart < 0) { menuStart = t; musicWanted = true; }
+  updateMusic(dt);
+  const el = introTime();
+  shake = Math.max(0, shake - dt * 3); flash = Math.max(0, flash - dt * 2.6);
+  // scripted beats of the opening
+  const beat = (at, fn) => { if (el >= at && el - dt < at) fn(); };
+  beat(2.7, () => { shake = 1; flash = 0.9; menuSfx('hit_heavy', 0.55); burst(80, 40, 26); });
+  beat(2.98, () => { shake = 0.8; flash = 0.5; menuSfx('hit_heavy', 0.45); burst(80, 80, 22); });
+  beat(3.3, () => menuSfx('draw_sword', 0.6));
+  // lightning
+  nextBolt -= dt;
+  if (nextBolt <= 0) {
+    const x0 = el < 4 ? 214 : 30 + Math.random() * 280;
+    const pts = [[x0, -4]]; let x = x0, y = -4;
+    while (y < 150) { y += 8 + Math.random() * 12; x += (Math.random() - 0.5) * 20; pts.push([x, y]); }
+    const branch = pts.slice(2 + Math.floor(Math.random() * 3)).slice(0, 4).map(([px, py], i) => [px - i * 9 - Math.random() * 5, py + i * 6]);
+    bolt = { pts, branch, life: 0.5 }; flash = Math.max(flash, 1);
+    setTimeout(() => thunder(el < 4 ? 1 : 0.7), 260);
+    nextBolt = 9 + Math.random() * 8;
   }
-  if (comet) {
-    comet.vy += dt * 22;
-    comet.x += comet.vx * dt; comet.y += comet.vy * dt;
-    comet.trail.push({ x: comet.x, y: comet.y, life: 0.9 });
-    if (comet.y > 168) { landFlash = 1; landX = comet.x; comet = null; }
+  if (bolt) { bolt.life -= dt; if (bolt.life <= 0) bolt = null; }
+  // crows crossing the moon
+  nextCrows -= dt;
+  if (nextCrows <= 0) {
+    const n = 3 + Math.floor(Math.random() * 3), y0 = 34 + Math.random() * 40;
+    for (let i = 0; i < n; i++) crows.push({ x: -20 - i * 14 - Math.random() * 10, y: y0 + (Math.random() - 0.5) * 18, v: 34 + Math.random() * 10, ph: Math.random() * 4, s: 0.38 + Math.random() * 0.16 });
+    nextCrows = 13 + Math.random() * 8;
   }
-  if (comet) comet.trail.forEach(p => p.life -= dt);
-  if (comet) comet.trail = comet.trail.filter(p => p.life > 0);
-  landFlash = Math.max(0, landFlash - dt * 0.9);
-  nextShoot -= dt;
-  if (!shooting && nextShoot <= 0) { shooting = { x: 20 + Math.random() * 140, y: 8 + Math.random() * 30, life: 0.7 }; nextShoot = 5 + Math.random() * 6; }
-  if (shooting) { shooting.x += dt * 170; shooting.y += dt * 60; shooting.life -= dt; if (shooting.life <= 0) shooting = null; }
-  // Campfire embers.
-  if (Math.random() < dt * 14) embers.push({ x: 74 + (Math.random() - 0.5) * 6, y: 204, vx: (Math.random() - 0.5) * 8, vy: -18 - Math.random() * 20, life: 1.4 + Math.random() });
-  for (let i = embers.length - 1; i >= 0; i--) {
-    const e = embers[i]; e.life -= dt; e.x += (e.vx + Math.sin(t * 3 + i) * 6) * dt; e.y += e.vy * dt;
-    if (e.life <= 0) embers.splice(i, 1);
+  crows.forEach(c => { c.x += c.v * dt; c.y += Math.sin(t * 1.5 + c.ph) * dt * 4; });
+  crows = crows.filter(c => c.x < 360);
+  ash.forEach(a => { a.x += (10 + a.s * 10) * dt; a.y += (5 + a.s * 6) * dt; if (a.x > 330 || a.y > 245) { a.x = -10 + Math.random() * 200; a.y = -8; } });
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const s = sparks[i]; s.life -= dt; s.vy += 70 * dt; s.x += s.vx * dt; s.y += s.vy * dt;
+    if (s.life <= 0) sparks.splice(i, 1);
   }
-  const s = screens[state.screen];
-  const target = s ? s.y + state.sel * 20 : 118;
-  cursorY += (target - cursorY) * Math.min(1, dt * 14);
+  // menu sounds on selection changes
+  if (state.screen === lastScreen && state.sel !== lastSel && lastSel >= 0) menuSfx('ui_move', 0.35);
+  if (state.screen !== lastScreen) menuSfx(state.screen === 'title' ? 'ui_back' : 'ui_open', 0.45);
+  lastSel = state.sel; lastScreen = state.screen;
 }
-
-function drawMoonfallSky() {
-  const sky = ctx.createLinearGradient(0, 0, 0, 200);
-  sky.addColorStop(0, '#070a1c'); sky.addColorStop(0.45, '#161536'); sky.addColorStop(0.8, '#3a2347'); sky.addColorStop(1, '#5a2f4a');
-  ctx.fillStyle = sky; ctx.fillRect(0, 0, 320, 240);
-  // the Moonfall light painting the horizon after a shard lands
-  if (landFlash > 0) {
-    const g = ctx.createRadialGradient(landX, 160, 4, landX, 160, 140);
-    g.addColorStop(0, 'rgba(150,210,255,' + 0.45 * landFlash + ')'); g.addColorStop(1, 'rgba(150,210,255,0)');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, 320, 240);
-  }
-  drawStars();
-  if (shooting) {
-    const a = shooting.life / 0.7;
-    const g = ctx.createLinearGradient(shooting.x - 26, shooting.y - 9, shooting.x, shooting.y);
-    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(255,255,255,' + a + ')');
-    ctx.strokeStyle = g; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(shooting.x - 26, shooting.y - 9); ctx.lineTo(shooting.x, shooting.y); ctx.stroke();
-  }
-}
-
-function drawCrackedMoon() {
-  const x = 272, y = 100, r = 26;
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  const halo = ctx.createRadialGradient(x, y, r * 0.6, x, y, r * 3);
-  halo.addColorStop(0, 'rgba(190,200,255,.28)'); halo.addColorStop(1, 'rgba(120,110,220,0)');
-  ctx.fillStyle = halo; ctx.fillRect(x - r * 3, y - r * 3, r * 6, r * 6);
-  ctx.restore();
-  // body
-  const body = ctx.createRadialGradient(x - 9, y - 10, 4, x, y, r);
-  body.addColorStop(0, '#fbf6e8'); body.addColorStop(0.7, '#d9d6e6'); body.addColorStop(1, '#a9a6c6');
-  ctx.fillStyle = body; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-  // maria and craters
-  ctx.fillStyle = 'rgba(120,118,160,.35)';
-  [[-10, -6, 8], [8, 10, 6], [-4, 14, 4], [12, -12, 4], [-16, 8, 3]].forEach(([a, b, rr]) => { ctx.beginPath(); ctx.arc(x + a, y + b, rr, 0, Math.PI * 2); ctx.fill(); });
-  ctx.fillStyle = 'rgba(255,255,255,.35)';
-  [[-11, -8, 2], [7, 8, 1.5]].forEach(([a, b, rr]) => { ctx.beginPath(); ctx.arc(x + a, y + b, rr, 0, Math.PI * 2); ctx.fill(); });
-  // terminator shading
-  const sh = ctx.createLinearGradient(x - r, y, x + r, y);
-  sh.addColorStop(0, 'rgba(20,16,50,0)'); sh.addColorStop(0.75, 'rgba(20,16,50,.05)'); sh.addColorStop(1, 'rgba(20,16,50,.45)');
-  ctx.fillStyle = sh; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-  // the missing shard: a dark notch on the lower left edge
-  ctx.save(); ctx.beginPath(); ctx.arc(x, y, r + 1, 0, Math.PI * 2); ctx.clip();
-  ctx.fillStyle = '#2c1f45';
-  ctx.beginPath(); ctx.moveTo(x - 28, y + 4); ctx.lineTo(x - 19, y + 3); ctx.lineTo(x - 15, y + 8); ctx.lineTo(x - 17, y + 13); ctx.lineTo(x - 12, y + 19); ctx.lineTo(x - 22, y + 24); ctx.lineTo(x - 30, y + 14); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = 'rgba(160,225,255,.8)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(x - 19, y + 3); ctx.lineTo(x - 15, y + 8); ctx.lineTo(x - 17, y + 13); ctx.lineTo(x - 12, y + 19); ctx.stroke();
-  ctx.restore();
-  // glowing cracks running from the wound
-  const pulse = 0.55 + Math.sin(t * 2.4) * 0.3;
-  ctx.strokeStyle = 'rgba(130,210,255,' + pulse + ')'; ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x - 15, y + 8); ctx.lineTo(x - 6, y + 1); ctx.lineTo(x + 2, y + 3); ctx.lineTo(x + 9, y - 5); ctx.lineTo(x + 18, y - 8);
-  ctx.moveTo(x - 6, y + 1); ctx.lineTo(x - 7, y - 9); ctx.lineTo(x - 2, y - 17);
-  ctx.moveTo(x + 2, y + 3); ctx.lineTo(x + 6, y + 13); ctx.lineTo(x + 3, y + 22);
-  ctx.stroke();
-  ctx.save(); ctx.globalCompositeOperation = 'lighter';
-  const wg = ctx.createRadialGradient(x - 16, y + 11, 1, x - 16, y + 11, 14);
-  wg.addColorStop(0, 'rgba(120,200,255,' + pulse * 0.7 + ')'); wg.addColorStop(1, 'rgba(120,200,255,0)');
-  ctx.fillStyle = wg; ctx.fillRect(x - 34, y - 2, 32, 32);
-  ctx.restore();
-  // floating debris near the break
-  for (let i = 0; i < 5; i++) {
-    const a = t * 0.3 + i * 1.3, dx = x - 32 - i * 6 + Math.cos(a) * 3, dy = y + 16 + i * 4 + Math.sin(a) * 2;
-    ctx.fillStyle = i % 2 ? '#cfd0e6' : '#8fd8ff'; ctx.fillRect(Math.round(dx), Math.round(dy), i % 3 ? 1 : 2, 1 + (i % 2));
-  }
-  // falling shard
-  if (comet) {
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    comet.trail.forEach(p => {
-      const a = p.life / 0.9;
-      ctx.fillStyle = 'rgba(120,200,255,' + a * 0.35 + ')'; ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 3, 3);
-      ctx.fillStyle = 'rgba(230,248,255,' + a * 0.6 + ')'; ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
-    });
-    const g = ctx.createRadialGradient(comet.x, comet.y, 1, comet.x, comet.y, 10);
-    g.addColorStop(0, 'rgba(220,245,255,.9)'); g.addColorStop(1, 'rgba(120,200,255,0)');
-    ctx.fillStyle = g; ctx.fillRect(comet.x - 10, comet.y - 10, 20, 20);
-    ctx.restore();
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(comet.x) - 1, Math.round(comet.y) - 1, 3, 3);
+function burst(x, y, n) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, v = 30 + Math.random() * 90;
+    sparks.push({ x: x + (Math.random() - 0.5) * 110, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 30, life: 0.5 + Math.random() * 0.6, c: Math.random() < 0.5 ? '#bfe6ff' : '#f0cf7a' });
   }
 }
 
-function drawRidge(layer, baseY, height, color, speed) {
-  const pts = ridges[layer], step = 16, off = (t * speed) % step, shift = Math.floor(t * speed / step);
-  ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0, 240);
-  for (let i = 0; i < 24; i++) {
-    const h = pts[(i + shift) % pts.length], x = i * step - off;
-    ctx.lineTo(x, baseY - h * height);
-    ctx.lineTo(x + step / 2, baseY - h * height * 0.55 - (i % 3 === 0 ? height * 0.35 : 0));
-  }
-  ctx.lineTo(340, 240); ctx.closePath(); ctx.fill();
-}
-
-function drawCampScene() {
-  // hill
-  ctx.fillStyle = '#0d1418';
-  ctx.beginPath(); ctx.moveTo(0, 240); ctx.lineTo(0, 202); ctx.quadraticCurveTo(60, 196, 120, 210); ctx.lineTo(130, 240); ctx.fill();
-  // warm fire light
-  const flick = 0.85 + Math.sin(t * 17) * 0.06 + Math.sin(t * 7.3) * 0.06;
-  ctx.save(); ctx.globalCompositeOperation = 'lighter';
-  const fg = ctx.createRadialGradient(74, 200, 2, 74, 200, 64 * flick);
-  fg.addColorStop(0, 'rgba(255,150,70,.42)'); fg.addColorStop(1, 'rgba(255,90,40,0)');
-  ctx.fillStyle = fg; ctx.fillRect(0, 130, 150, 110);
-  ctx.restore();
-  // logs
-  ctx.fillStyle = '#3a2416'; ctx.fillRect(64, 204, 20, 3); ctx.fillStyle = '#4e301c'; ctx.fillRect(66, 202, 16, 3);
-  // flames
-  for (let i = 0; i < 4; i++) {
-    const h = 9 + Math.sin(t * 13 + i * 1.7) * 3 + (i === 1 || i === 2 ? 4 : 0), w = 3, fx = 67 + i * 4;
-    ctx.fillStyle = '#e8542e'; ctx.beginPath(); ctx.moveTo(fx - w, 203); ctx.quadraticCurveTo(fx - w, 203 - h * 0.6, fx + Math.sin(t * 9 + i) * 1.5, 203 - h); ctx.quadraticCurveTo(fx + w, 203 - h * 0.6, fx + w, 203); ctx.fill();
-    ctx.fillStyle = '#ffc24a'; ctx.beginPath(); ctx.moveTo(fx - 1.5, 203); ctx.quadraticCurveTo(fx - 1, 203 - h * 0.4, fx, 203 - h * 0.6); ctx.quadraticCurveTo(fx + 1, 203 - h * 0.4, fx + 1.5, 203); ctx.fill();
-  }
-  embers.forEach(e => { ctx.fillStyle = 'rgba(255,' + (140 + Math.round(e.life * 50)) + ',70,' + Math.min(1, e.life) + ')'; ctx.fillRect(Math.round(e.x), Math.round(e.y), 1, 1); });
-  // Rowan resting by the fire, looking up at the broken moon.
-  if (menuKnight.complete && menuKnight.naturalWidth) {
-    const f = Math.floor(t * 6) % 8, cols = 2;
-    ctx.save(); ctx.imageSmoothingEnabled = false;
-    ctx.translate(44, 206);
-    ctx.drawImage(menuKnight, (f % cols) * 128, Math.floor(f / cols) * 64, 128, 64, -62, -64, 128, 64);
-    ctx.restore();
-    // firelight rim on the armor
-    ctx.fillStyle = 'rgba(255,150,80,.12)'; ctx.fillRect(48, 176, 6, 28);
-  }
-}
-
-function drawLogo() {
-  ctx.save();
-  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-  const el = t - menuStart, baseY = 58;
-  ctx.font = 'bold 29px monospace';
-  const total = ctx.measureText(TITLE).width, x0 = 160 - total / 2;
-  const pulse = 0.5 + 0.5 * Math.sin(t * 1.8);
-  let x = x0;
-  for (let i = 0; i < TITLE.length; i++) {
-    const ch = TITLE[i], w = ctx.measureText(ch).width;
-    const lt = el - i * 0.08;
-    if (lt > 0) {
-      // drop in with a small bounce, then a gentle wave
-      const k = Math.min(1, lt / 0.45);
-      const drop = k < 1 ? -60 * Math.pow(1 - k, 2) + Math.sin(k * Math.PI) * -4 : 0;
-      const y = baseY + drop + Math.sin(t * 1.6 + i * 0.5) * 1.3;
-      ctx.globalAlpha = Math.min(1, lt / 0.2);
-      ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.strokeStyle = '#150f22';
-      ctx.strokeText(ch, x + w / 2, y + 2);
-      const g = ctx.createLinearGradient(0, y - 26, 0, y + 3);
-      g.addColorStop(0, '#ffffff'); g.addColorStop(0.35, '#d8ecff'); g.addColorStop(0.7, '#8fbaf0'); g.addColorStop(1, '#5a6fc0');
-      ctx.shadowColor = 'rgba(120,190,255,' + (0.35 + pulse * 0.35) + ')'; ctx.shadowBlur = 6 + pulse * 5;
-      ctx.fillStyle = g; ctx.fillText(ch, x + w / 2, y);
-      ctx.shadowBlur = 0;
-    }
-    x += w;
-  }
-  ctx.globalAlpha = 1;
-  // glint sweep
-  if (el > 1.2) {
-    const sweep = ((t * 40) % 260) - 40;
-    ctx.save(); ctx.beginPath(); ctx.rect(x0 + sweep, baseY - 28, 10, 34); ctx.clip();
-    ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.fillText(TITLE, 160, baseY + Math.sin(t * 1.6) * 0);
-    ctx.restore();
-  }
-  // subtitle with crescent ornaments
-  const sa = clamp01((el - 1.0) / 0.8);
-  ctx.globalAlpha = sa;
-  ctx.font = 'bold 7px monospace'; ctx.fillStyle = '#e9d6a8';
-  ctx.fillText('THE  MOONFALL  CHRONICLE', 160, 75);
-  const lw = 34 * sa;
-  ctx.fillStyle = '#c9a86a'; ctx.fillRect(160 - 62 - lw, 72, lw, 1); ctx.fillRect(160 + 62, 72, lw, 1);
-  ctx.fillStyle = '#8fd8ff'; ctx.fillRect(160 - 64 - lw, 71, 2, 3); ctx.fillRect(160 + 62 + lw, 71, 2, 3);
-  ctx.globalAlpha = 1;
-  ctx.restore();
-}
+function ease(x) { x = clamp01(x); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; }
 function clamp01(v) { return Math.max(0, Math.min(1, v)); }
 
-function drawRuneButton(r, label, on, i) {
-  const el = t - menuStart, appear = state.screen === 'title' ? clamp01((el - 1.4 - i * 0.12) / 0.3) : 1;
+// Camera: tilts down from the stars during the opening, then breathes.
+function cam(depth) {
+  const el = introTime();
+  const tilt = (1 - ease(el / 3.4)) * 120;
+  return { x: Math.sin(t * 0.09) * 3 * depth, y: tilt * depth + Math.sin(t * 0.13) * 1.2 * depth };
+}
+
+const MOON = { x: 250, y: 66, r: 38 };
+const moonCanvas = document.createElement('canvas'); moonCanvas.width = moonCanvas.height = MOON.r * 2 + 2;
+const MOON_SHADES = ['#262544', '#3d3c62', '#5c5b84', '#8180a6', '#a9a9c6', '#cdcde0', '#e9e8f2', '#fbfaff'].map(hexRgb);
+function renderMoon() {
+  const tex = MENU_ART.moonTex, r = MOON.r, g = moonCanvas.getContext('2d'), S = moonCanvas.width;
+  const img = g.createImageData(S, S), p = img.data, rot = t * 0.025;
+  const L = [-0.42, -0.36, 0.83];
+  for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) {
+    const nx = (px - r) / r, ny = (py - r) / r, q = nx * nx + ny * ny;
+    if (q > 1) continue;
+    const nz = Math.sqrt(1 - q);
+    let lum = 0.6;
+    if (tex) {
+      const lon = Math.atan2(nx, nz) + rot, lat = Math.asin(ny);
+      const u = Math.floor(((lon / (Math.PI * 2) + 0.5) % 1 + 1) % 1 * tex.w) % tex.w, v = Math.min(tex.h - 1, Math.floor((lat / Math.PI + 0.5) * tex.h));
+      lum = tex.lum[v * tex.w + u];
+    }
+    const light = Math.max(0, nx * L[0] + ny * L[1] + nz * L[2]);
+    let k = (0.35 + lum * 0.85) * (0.2 + light * 0.95);
+    k += ((px * 7 + py * 3) % 4) * 0.012; // ordered dither
+    const col = MOON_SHADES[Math.max(0, Math.min(7, Math.floor(k * 8)))];
+    const i = (py * S + px) * 4; p[i] = col[0]; p[i + 1] = col[1]; p[i + 2] = col[2]; p[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  // the wound where the shard broke away (lower left)
+  g.save(); g.globalCompositeOperation = 'destination-out';
+  g.beginPath(); g.moveTo(r - 40, r + 6); g.lineTo(r - 24, r + 4); g.lineTo(r - 19, r + 11); g.lineTo(r - 22, r + 17); g.lineTo(r - 14, r + 24); g.lineTo(r - 16, r + 34); g.lineTo(r - 40, r + 40); g.closePath(); g.fill();
+  g.restore();
+}
+const MOON_CRACKS = [[[-24, 4], [-19, 11], [-22, 17], [-14, 24], [-16, 34]],
+  [[-19, 11], [-9, 4], [0, 6], [9, -4], [21, -8], [30, -6]], [[-9, 4], [-11, -9], [-5, -20], [-7, -30]],
+  [[0, 6], [5, 17], [2, 28]], [[9, -4], [13, -16], [22, -22]]];
+const SHARDS = [[-46, 26, 5, 0.3], [-58, 38, 3, 1.4], [-40, 44, 4, 2.2], [-70, 52, 2, 3.1], [-52, 60, 3, 4.4], [-30, 52, 2, 5.2]];
+function drawMoonScene(c) {
+  const x = Math.round(MOON.x + c.x), y = Math.round(MOON.y + c.y), r = MOON.r;
+  // halo + slowly turning rays
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  const halo = ctx.createRadialGradient(x, y, r * 0.8, x, y, r * 3.4);
+  halo.addColorStop(0, 'rgba(170,190,255,.32)'); halo.addColorStop(0.35, 'rgba(120,120,230,.12)'); halo.addColorStop(1, 'rgba(90,70,180,0)');
+  ctx.fillStyle = halo; ctx.fillRect(x - r * 3.4, y - r * 3.4, r * 6.8, r * 6.8);
+  for (let i = 0; i < 14; i++) {
+    const a = i / 14 * Math.PI * 2 + t * 0.03, w = 0.05 + (i % 3) * 0.02, len = r * (2.6 + (i % 4) * 0.6);
+    ctx.fillStyle = 'rgba(180,200,255,' + (0.035 + 0.02 * Math.sin(t * 0.7 + i)) + ')';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a - w) * len, y + Math.sin(a - w) * len); ctx.lineTo(x + Math.cos(a + w) * len, y + Math.sin(a + w) * len); ctx.fill();
+  }
+  ctx.restore();
+  renderMoon();
+  ctx.drawImage(moonCanvas, x - r, y - r);
+  // glowing cracks
+  const pulse = 0.6 + Math.sin(t * 2.1) * 0.25;
+  ctx.save(); ctx.lineJoin = 'round';
+  ctx.globalCompositeOperation = 'lighter';
+  MOON_CRACKS.forEach((line, li) => {
+    ctx.strokeStyle = 'rgba(90,180,255,' + pulse * 0.35 + ')'; ctx.lineWidth = 3;
+    ctx.beginPath(); line.forEach(([a, b], i) => i ? ctx.lineTo(x + a, y + b) : ctx.moveTo(x + a, y + b)); ctx.stroke();
+  });
+  ctx.globalCompositeOperation = 'source-over';
+  MOON_CRACKS.forEach((line, li) => {
+    ctx.strokeStyle = li === 0 ? '#d9f4ff' : 'rgba(170,230,255,' + (0.6 + pulse * 0.4) + ')'; ctx.lineWidth = 1;
+    ctx.beginPath(); line.forEach(([a, b], i) => i ? ctx.lineTo(x + a + 0.5, y + b + 0.5) : ctx.moveTo(x + a + 0.5, y + b + 0.5)); ctx.stroke();
+  });
+  // wound glow
+  ctx.globalCompositeOperation = 'lighter';
+  const wg = ctx.createRadialGradient(x - 22, y + 22, 1, x - 22, y + 22, 26);
+  wg.addColorStop(0, 'rgba(120,210,255,' + pulse * 0.55 + ')'); wg.addColorStop(1, 'rgba(120,210,255,0)');
+  ctx.fillStyle = wg; ctx.fillRect(x - 50, y - 6, 56, 56);
+  ctx.restore();
+  // drifting shards
+  SHARDS.forEach(([sx, sy, s, ph], i) => {
+    const a = t * 0.35 + ph, px = x + sx + Math.cos(a) * 2.5, py = y + sy + Math.sin(a * 1.3) * 2;
+    ctx.save(); ctx.translate(Math.round(px), Math.round(py)); ctx.rotate(t * 0.4 * (i % 2 ? 1 : -1) + ph);
+    ctx.fillStyle = '#b9b9d4'; ctx.beginPath(); ctx.moveTo(-s, 0); ctx.lineTo(0, -s * 0.8); ctx.lineTo(s, 0.2 * s); ctx.lineTo(0.2 * s, s); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#8fe0ff'; ctx.fillRect(-1, -1, 1, 1);
+    ctx.restore();
+  });
+}
+
+function drawSky() {
+  const sky = ctx.createLinearGradient(0, 0, 0, 240);
+  sky.addColorStop(0, '#04050f'); sky.addColorStop(0.35, '#0e1030'); sky.addColorStop(0.62, '#241a48'); sky.addColorStop(0.82, '#3d2453'); sky.addColorStop(1, '#4a2a52');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, 320, 240);
+  const c = cam(0.15);
+  ctx.drawImage(milky, Math.round(c.x) - 10, Math.round(c.y) - 30);
+  stars.forEach((s, i) => {
+    const a = 0.3 + 0.6 * (0.5 + 0.5 * Math.sin(t * (0.9 + s.p * 0.1) + s.p * 3));
+    const sx = Math.round(s.x + c.x), sy = Math.round(s.y * 1.3 + c.y);
+    ctx.fillStyle = 'rgba(236,236,255,' + a + ')'; ctx.fillRect(sx, sy, 1, 1);
+    if (s.size > 1) { ctx.fillStyle = 'rgba(200,215,255,' + a * 0.45 + ')'; ctx.fillRect(sx - 1, sy, 3, 1); ctx.fillRect(sx, sy - 1, 1, 3); }
+  });
+}
+
+function drawClouds(c, layer) {
+  const im = MENU_ART.clouds; if (!im) return;
+  const speed = layer ? 5 : 2.5, x = -((t * speed + layer * 140) % im.width);
+  ctx.save(); ctx.globalAlpha = layer ? 0.62 : 0.4;
+  for (let k = 0; k < 3; k++) ctx.drawImage(im, Math.round(x + k * im.width + c.x), Math.round((layer ? 78 : -40) + c.y));
+  ctx.restore();
+}
+
+function drawCastle(c) {
+  const bx = Math.round(252 + c.x), by = Math.round(152 + c.y);
+  const dark = '#0b0a1d', rim = '#3d4588';
+  const towers = [[-34, 12, 136, 128], [-22, 9, 128, 116], [-8, 16, 120, 0], [14, 9, 126, 112], [28, 12, 134, 126]];
+  ctx.fillStyle = dark;
+  ctx.fillRect(bx - 40, by - 14, 80, 14);
+  // the crag the court is built on
+  ctx.beginPath(); ctx.moveTo(bx - 58, by + 40); ctx.lineTo(bx - 46, by + 6); ctx.lineTo(bx - 40, by - 2); ctx.lineTo(bx + 42, by - 2); ctx.lineTo(bx + 50, by + 8); ctx.lineTo(bx + 66, by + 40); ctx.fill();
+  ctx.fillStyle = rim; ctx.fillRect(bx + 42, by - 2, 1, 4); ctx.fillRect(bx + 47, by + 3, 1, 5); ctx.fillStyle = dark;
+  towers.forEach(([ox, w, top, roof]) => {
+    ctx.fillStyle = dark; ctx.fillRect(bx + ox, top + c.y, w, by - (top + c.y));
+    if (roof) { ctx.beginPath(); ctx.moveTo(bx + ox - 1, top + c.y); ctx.lineTo(bx + ox + w / 2, roof + c.y); ctx.lineTo(bx + ox + w + 1, top + c.y); ctx.fill(); }
+    ctx.fillStyle = rim; ctx.fillRect(bx + ox + w - 1, top + c.y + 1, 1, by - (top + c.y) - 1);
+  });
+  // the great spire of the Pale Court
+  ctx.fillStyle = dark;
+  ctx.beginPath(); ctx.moveTo(bx - 8, 121 + c.y); ctx.lineTo(bx, 82 + c.y); ctx.lineTo(bx + 8, 121 + c.y); ctx.fill();
+  ctx.fillRect(bx - 1, 74 + c.y, 2, 10);
+  ctx.fillStyle = rim; ctx.fillRect(bx + 3, 100 + c.y, 1, 18);
+  // battlements
+  ctx.fillStyle = dark; for (let i = -40; i < 40; i += 4) ctx.fillRect(bx + i, by - 16, 2, 2);
+  // windows and the beacon at the tip
+  const win = [[-30, 140], [-18, 132], [-15, 140], [-4, 126], [2, 134], [-4, 142], [17, 132], [32, 140], [30, 146]];
+  win.forEach(([wx, wy], i) => {
+    const f = 0.55 + 0.45 * Math.sin(t * (1.3 + i * 0.37) + i * 2);
+    ctx.fillStyle = 'rgba(170,225,255,' + f + ')'; ctx.fillRect(bx + wx, Math.round(wy + c.y), 1, 2);
+  });
+  const bp = 0.5 + 0.5 * Math.sin(t * 2.2);
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(bx, 74 + c.y, 0, bx, 74 + c.y, 9 + bp * 4);
+  g.addColorStop(0, 'rgba(190,235,255,.9)'); g.addColorStop(1, 'rgba(120,190,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(bx - 14, 60 + c.y, 28, 28);
+  ctx.restore();
+}
+
+function drawBolt() {
+  if (!bolt) return;
+  const k = bolt.life / 0.5, on = k > 0.75 || (k > 0.35 && k < 0.55);
+  if (!on) return;
+  ctx.save(); ctx.lineJoin = 'miter';
+  const path = pts => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); };
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = 'rgba(140,170,255,.35)'; ctx.lineWidth = 5; path(bolt.pts);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.strokeStyle = '#f2f6ff'; ctx.lineWidth = 1.5; path(bolt.pts);
+  ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(220,230,255,.8)'; path(bolt.branch);
+  ctx.restore();
+}
+
+function drawCrows() {
+  const im = MENU_IMG.crow; if (!im.complete || !im.naturalWidth) return;
+  crows.forEach(cr => {
+    const f = Math.floor(t * 8 + cr.ph * 3) % 2, s = cr.s;
+    ctx.drawImage(im, f * 48, 0, 48, 48, Math.round(cr.x), Math.round(cr.y), Math.round(48 * s), Math.round(48 * s));
+  });
+}
+
+function drawFog(y0, alpha, speed) {
+  for (let i = 0; i < 5; i++) {
+    const fx = ((t * speed * (1 + i * 0.3) + i * 83) % 460) - 70, fy = y0 + (i % 3) * 7;
+    const g = ctx.createRadialGradient(fx, fy, 2, fx, fy, 80);
+    g.addColorStop(0, 'rgba(150,150,215,' + alpha + ')'); g.addColorStop(1, 'rgba(150,150,215,0)');
+    ctx.fillStyle = g; ctx.fillRect(fx - 80, fy - 26, 160, 52);
+  }
+}
+
+const CLIFF = [[132, 240], [140, 226], [150, 219], [158, 214], [170, 211], [184, 208], [198, 207], [214, 206], [228, 207], [238, 210], [242, 214], [236, 219], [240, 226], [233, 233], [238, 240]];
+function drawCliff(c) {
+  const ox = c.x, oy = c.y;
+  ctx.save(); ctx.translate(Math.round(ox), Math.round(oy));
+  // dead tree leaning over the drop
+  ctx.strokeStyle = '#06050d'; ctx.lineCap = 'round';
+  const sway = Math.sin(t * 0.8) * 0.6;
+  const branch = (x, y, a, len, w) => {
+    if (len < 3 || w < 0.6) return;
+    const x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len;
+    ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x2 + sway * (1 / w), y2); ctx.stroke();
+    branch(x2, y2, a - 0.45, len * 0.72, w * 0.65); branch(x2, y2, a + 0.38, len * 0.66, w * 0.6);
+  };
+  branch(160, 216, -1.35, 22, 4);
+  // rock body
+  ctx.fillStyle = '#07060e';
+  ctx.beginPath(); CLIFF.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.lineTo(132, 240); ctx.fill();
+  // moonlit rim on the top and the right face
+  ctx.fillStyle = '#2a2f5e';
+  for (let i = 1; i < 10; i++) { const [x1, y1] = CLIFF[i], [x2, y2] = CLIFF[i + 1]; for (let x = x1; x < x2; x++) ctx.fillRect(x, Math.round(y1 + (y2 - y1) * (x - x1) / (x2 - x1)), 1, 1); }
+  ctx.fillStyle = '#1a1d3e'; ctx.fillRect(240, 213, 1, 4); ctx.fillRect(238, 227, 1, 5);
+  // cracks in the stone
+  ctx.fillStyle = '#121327'; [[176, 216, 6], [205, 214, 9], [220, 224, 5], [190, 228, 7]].forEach(([x, y, w]) => { ctx.fillRect(x, y, w, 1); ctx.fillRect(x + w, y + 1, 1, 2); });
+  // grass tufts in the wind
+  for (let i = 0; i < 26; i++) {
+    const gx = 150 + Math.floor(rnd(i + 1300) * 88), base = cliffTop(gx);
+    const h = 2 + Math.floor(rnd(i + 1400) * 4), lean = Math.round(Math.sin(t * 2.2 + gx * 0.15) * 1.2 + 1);
+    ctx.fillStyle = i % 3 ? '#1b2041' : '#2d3463';
+    ctx.fillRect(gx, base - h + 1, 1, h - 1); ctx.fillRect(gx + lean, base - h, 1, 1);
+  }
+  ctx.restore();
+}
+function cliffTop(x) {
+  for (let i = 1; i < 10; i++) { const [x1, y1] = CLIFF[i], [x2, y2] = CLIFF[i + 1]; if (x >= x1 && x <= x2) return Math.round(y1 + (y2 - y1) * (x - x1) / (x2 - x1)); }
+  return 210;
+}
+
+function drawKnight(c) {
+  const im = MENU_IMG.knight; if (!im.complete || !im.naturalWidth) return;
+  // Pray sheet: 4 x 3 cells of 128x64; frames 4-8 hold the kneel with the sword planted.
+  const seq = [4, 5, 6, 7, 8, 7, 6, 5], f = seq[Math.floor(t * 3) % seq.length];
+  const x = Math.round(206 + c.x), y = Math.round(206 + c.y);
+  ctx.drawImage(im, (f % 4) * 128, Math.floor(f / 4) * 64, 128, 64, x - 64, y - 64, 128, 64);
+  // moonlight rim on the right side of the armour
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(x + 6, y - 22, 1, x + 6, y - 22, 16);
+  g.addColorStop(0, 'rgba(120,160,255,.18)'); g.addColorStop(1, 'rgba(120,160,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(x - 12, y - 40, 34, 40);
+  ctx.restore();
+}
+
+function drawAsh(front) {
+  ash.forEach((a, i) => {
+    if ((i % 3 === 0) !== front) return;
+    const tw = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3 + a.ph));
+    const x = Math.round(a.x + Math.sin(t + a.ph) * 3), y = Math.round(a.y);
+    ctx.fillStyle = front ? 'rgba(210,235,255,' + tw * 0.8 + ')' : 'rgba(160,200,255,' + tw * 0.45 + ')';
+    ctx.fillRect(x, y, front ? 2 : 1, 1);
+  });
+}
+
+function drawSword(x, y, k) {
+  // A horizontal blade under PIXEL; k = 0..1 draw progress.
+  const len = 132, shown = Math.round(len * ease(k));
+  if (shown <= 0) return;
+  ctx.save(); ctx.beginPath(); ctx.rect(x - 4, y - 8, shown + 8, 16); ctx.clip();
+  ctx.fillStyle = '#07050f'; ctx.fillRect(x - 2, y - 3, len + 2, 7); ctx.fillRect(x + len, y - 2, 3, 5);
+  // grip & pommel with a moon gem
+  ctx.fillStyle = '#5a3a22'; ctx.fillRect(x, y - 1, 12, 3); ctx.fillStyle = '#7a5434'; ctx.fillRect(x, y - 1, 12, 1);
+  ctx.fillStyle = '#c9a24a'; ctx.fillRect(x - 4, y - 3, 4, 7); ctx.fillStyle = '#8fe8ff'; ctx.fillRect(x - 3, y - 1, 2, 2);
+  // crossguard
+  ctx.fillStyle = '#07050f'; ctx.fillRect(x + 11, y - 7, 6, 15);
+  ctx.fillStyle = '#c9a24a'; ctx.fillRect(x + 12, y - 6, 4, 13); ctx.fillStyle = '#f0cf7a'; ctx.fillRect(x + 12, y - 6, 1, 13);
+  // blade
+  ctx.fillStyle = '#9fb3e2'; ctx.fillRect(x + 17, y - 1, len - 19, 3);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(x + 17, y - 1, len - 19, 1);
+  ctx.fillStyle = '#5868bd'; ctx.fillRect(x + 17, y + 1, len - 19, 1);
+  ctx.fillStyle = '#9fb3e2'; ctx.fillRect(x + len - 2, y, 2, 1); ctx.fillStyle = '#ffffff'; ctx.fillRect(x + len - 2, y - 1, 1, 1);
+  // fuller rune glow
+  const g = 0.5 + 0.5 * Math.sin(t * 3);
+  ctx.fillStyle = 'rgba(140,220,255,' + (0.3 + g * 0.4) + ')'; for (let i = 24; i < len - 14; i += 9) ctx.fillRect(x + i, y, 3, 1);
+  ctx.restore();
+  // travelling glint
+  if (k >= 1) {
+    const gx = x + 17 + ((t * 70) % 260);
+    if (gx < x + len) {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillRect(Math.round(gx), y - 1, 2, 3);
+      ctx.fillStyle = 'rgba(200,230,255,.5)'; ctx.fillRect(Math.round(gx) - 3, y, 8, 1); ctx.fillRect(Math.round(gx), y - 4, 1, 9);
+      ctx.restore();
+    }
+  }
+}
+
+const LOGO_X = 18, LOGO_Y = 16;
+function drawLogo() {
+  if (!LOGO) LOGO = { p: buildLogoWord('PIXEL'), q: buildLogoWord('QUEST') };
+  const el = introTime();
+  // halo behind the logo
+  const ga = clamp01((el - 2.6) / 0.6);
+  if (ga > 0) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(86, 60, 6, 86, 60, 90);
+    g.addColorStop(0, 'rgba(90,120,255,' + (0.16 + Math.sin(t * 1.5) * 0.04) * ga + ')'); g.addColorStop(1, 'rgba(90,120,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 200, 140); ctx.restore();
+  }
+  const slam = (at) => { const k = clamp01((el - at) / 0.28); return { a: clamp01((el - at) / 0.12), s: 1 + (1 - ease(k)) * 1.4 }; };
+  const sp = slam(2.42), sq = slam(2.7);
+  const shine = el > 4 ? ((t * 0.35) % 1.6) : null;
+  const bob = Math.round(Math.sin(t * 1.3) * 1);
+  drawLogoWord(LOGO.p, LOGO_X, LOGO_Y + bob, sp.s < 1.01 ? 1 : sp.s, sp.a, shine !== null && shine < 1 ? shine : null);
+  drawSword(LOGO_X + 4, LOGO_Y + LOGO.p.H + 4 + bob, clamp01((el - 3.3) / 0.4));
+  drawLogoWord(LOGO.q, LOGO_X + 22, LOGO_Y + LOGO.p.H + 10 + bob, sq.s < 1.01 ? 1 : sq.s, sq.a, shine !== null && shine > 0.3 && shine < 1.3 ? shine - 0.3 : null);
+  // subtitle typing in
+  const sub = 'THE MOONFALL CHRONICLE', n = Math.floor(clamp01((el - 3.7) / 0.8) * sub.length);
+  const subA = state.screen === 'title' ? 1 : 0;
+  if (n > 0 && subA) {
+    const sy = LOGO_Y + LOGO.p.H * 2 + 18 + bob;
+    pixTextShadow(sub.slice(0, n), LOGO_X + 4, sy, '#e8cf8f', 1);
+    const la = clamp01((el - 4.4) / 0.4);
+    ctx.fillStyle = 'rgba(201,162,74,' + la + ')'; ctx.fillRect(LOGO_X + 4, sy + 10, Math.round(textW(sub) * la), 1);
+    ctx.fillStyle = 'rgba(143,232,255,' + la + ')'; ctx.fillRect(LOGO_X + 4 + Math.round(textW(sub) * la) - 1, sy + 9, 2, 3);
+  }
+  sparks.forEach(s => { ctx.fillStyle = s.c; ctx.globalAlpha = clamp01(s.life * 2); ctx.fillRect(Math.round(s.x), Math.round(s.y), 1, 1); });
+  ctx.globalAlpha = 1;
+}
+
+// ---- Menu list ----
+const MENU_X = 24;
+const itemAnim = {};
+function drawButtonIcon(x, y, kind) {
+  ctx.fillStyle = '#d8d4ec'; ctx.beginPath(); ctx.arc(x + 4, y + 3.5, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#07050f'; ctx.beginPath(); ctx.arc(x + 4, y + 3.5, 3, 0, Math.PI * 2); ctx.fill();
+  if (kind === 'x') { ctx.fillStyle = '#9fc4ff'; [[2, 1], [3, 2], [4, 3], [5, 4], [6, 5], [6, 1], [5, 2], [3, 4], [2, 5]].forEach(([a, b]) => ctx.fillRect(x + a - 0.5, y + b, 1, 1)); }
+  else { ctx.strokeStyle = '#ff8fa8'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x + 4, y + 3.5, 1.6, 0, Math.PI * 2); ctx.stroke(); }
+}
+function drawItem(label, i, s) {
+  const r = rectFor(s, i), on = i === state.sel, key = state.screen + i;
+  let a = itemAnim[key] || 0; a += ((on ? 1 : 0) - a) * 0.22; itemAnim[key] = a;
+  const appear = state.screen === 'title' ? clamp01((t - pressT - i * 0.07) / 0.3) : clamp01((t - screenT - i * 0.05) / 0.25);
   if (appear <= 0) return;
   ctx.save(); ctx.globalAlpha = appear;
-  const ox = Math.round((1 - appear) * 14 * (i % 2 ? 1 : -1));
-  const x = r.x + ox, y = r.y, w = r.w, h = r.h;
-  // stone slab with chipped corners
-  ctx.fillStyle = '#0a0812'; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
-  const g = ctx.createLinearGradient(0, y, 0, y + h);
-  g.addColorStop(0, on ? '#3d4a6e' : '#2a2638'); g.addColorStop(1, on ? '#232c4a' : '#18151f');
-  ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = on ? '#7f9bd6' : '#3c364c'; ctx.fillRect(x, y, w, 1);
-  ctx.fillStyle = '#0a0812'; ctx.fillRect(x, y, 1, 1); ctx.fillRect(x + w - 1, y, 1, 1); ctx.fillRect(x, y + h - 1, 1, 1); ctx.fillRect(x + w - 1, y + h - 1, 1, 1);
-  // cracks in the stone
-  ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(x + 14 + (i * 23) % 70, y + 3, 1, 4); ctx.fillRect(x + 15 + (i * 23) % 70, y + 6, 3, 1);
-  if (on) {
+  const x = Math.round(r.x + 10 + a * 6 - (1 - ease(appear)) * 30), y = r.y + 4;
+  if (a > 0.02) {
+    // glowing blade-underline and flare
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const gl = ctx.createRadialGradient(x + w / 2, y + h / 2, 2, x + w / 2, y + h / 2, w * 0.6);
-    gl.addColorStop(0, 'rgba(110,180,255,' + (0.22 + Math.sin(t * 5) * 0.06) + ')'); gl.addColorStop(1, 'rgba(110,180,255,0)');
-    ctx.fillStyle = gl; ctx.fillRect(x - 20, y - 8, w + 40, h + 16); ctx.restore();
-    ctx.strokeStyle = 'rgba(160,215,255,.9)'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    const g = ctx.createLinearGradient(x - 10, 0, x + 140, 0);
+    g.addColorStop(0, 'rgba(110,170,255,' + 0.32 * a + ')'); g.addColorStop(1, 'rgba(110,170,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(x - 10, y - 3, 150, 13);
+    ctx.fillStyle = 'rgba(180,225,255,' + 0.8 * a + ')'; ctx.fillRect(x, y + 9, Math.round(textW(label, 2) * a), 1);
+    ctx.restore();
+    // sword cursor
+    const bob = Math.round(Math.sin(t * 6) * 1);
+    const cx = x - 14 + bob;
+    ctx.globalAlpha = appear * a;
+    ctx.fillStyle = '#c9a24a'; ctx.fillRect(cx, y + 1, 2, 5); ctx.fillStyle = '#5a3a22'; ctx.fillRect(cx - 3, y + 3, 3, 1);
+    ctx.fillStyle = '#dfe9ff'; ctx.fillRect(cx + 2, y + 3, 7, 1); ctx.fillStyle = '#ffffff'; ctx.fillRect(cx + 2, y + 2, 6, 1); ctx.fillRect(cx + 9, y + 3, 1, 1);
+    ctx.globalAlpha = appear;
   }
-  // runes at both ends
-  const rc = on ? 'rgba(170,225,255,' + (0.7 + Math.sin(t * 6 + i) * 0.3) + ')' : 'rgba(140,130,170,.5)';
-  ctx.fillStyle = rc;
-  [[x + 5, 1], [x + w - 9, -1]].forEach(([rx]) => { ctx.fillRect(rx, y + 4, 1, 6); ctx.fillRect(rx + 1, y + 4, 2, 1); ctx.fillRect(rx + 2, y + 7, 2, 1); ctx.fillRect(rx + 3, y + 8, 1, 2); });
-  ctx.font = (on ? 'bold ' : '') + '9px monospace'; ctx.textAlign = 'center';
-  ctx.fillStyle = '#0a0812'; ctx.fillText(label, x + w / 2 + 1, y + 11);
-  ctx.fillStyle = on ? '#f2f8ff' : '#cfc3e0'; ctx.fillText(label, x + w / 2, y + 10);
+  const col = on ? '#ffffff' : '#9a94b8';
+  if (on) { ctx.globalAlpha = appear * 0.35; pixText(label, x - 1, y, '#7fc4ff', 2); pixText(label, x + 1, y, '#7fc4ff', 2); ctx.globalAlpha = appear; }
+  pixTextShadow(label, x, y, col, 2);
   ctx.restore();
 }
-
-function drawSwordCursor(x, y) {
-  const bob = Math.sin(t * 6) * 1.5;
-  ctx.save(); ctx.translate(Math.round(x + bob), Math.round(y));
-  ctx.fillStyle = '#0a0812'; ctx.fillRect(-15, -2, 16, 5);
-  ctx.fillStyle = '#d8e6f4'; ctx.fillRect(-10, -1, 10, 3);
-  ctx.fillStyle = '#ffffff'; ctx.fillRect(-10, -1, 10, 1);
-  ctx.fillStyle = '#8fd8ff'; ctx.fillRect(0, 0, 2, 1);
-  ctx.fillStyle = '#c9a86a'; ctx.fillRect(-12, -3, 2, 7);
-  ctx.fillStyle = '#6b4a2a'; ctx.fillRect(-16, -1, 4, 3);
-  ctx.fillStyle = '#c9a86a'; ctx.fillRect(-17, -1, 1, 3);
-  ctx.restore();
-}
-
+let screenT = 0, prevScreenName = 'title';
 function drawMenu() {
   const s = screens[state.screen];
-  const items = s.items();
-  items.forEach((label, i) => drawRuneButton(rectFor(s, i), label, i === state.sel, i));
-  const appear = state.screen === 'title' ? clamp01((t - menuStart - 1.6) / 0.3) : 1;
-  if (appear > 0 && items.length) { ctx.globalAlpha = appear; drawSwordCursor(rectFor(s, 0).x - 4, cursorY + 7); ctx.globalAlpha = 1; }
-  if (state.screen === 'slots') items.slice(0, 3).forEach((_, i) => {
+  if (state.screen !== prevScreenName) { screenT = t; prevScreenName = state.screen; }
+  s.items().forEach((label, i) => drawItem(label, i, s));
+  if (state.screen === 'slots') s.items().slice(0, 3).forEach((_, i) => {
     const r = rectFor(s, i);
-    ctx.fillStyle = 'rgba(10,8,18,0.85)'; ctx.fillRect(224, r.y - 2, 16, 17);
-    drawTrashCan(226, r.y);
+    ctx.fillStyle = 'rgba(10,8,18,.85)'; ctx.fillRect(TRASH_X, r.y, 16, 15);
+    ctx.strokeStyle = i === state.sel ? '#8fb8ff' : '#3a3658'; ctx.strokeRect(TRASH_X + 0.5, r.y + 0.5, 15, 14);
+    drawTrashCan(TRASH_X + 1, r.y + 1);
   });
 }
 
@@ -814,7 +1166,7 @@ function slotDetail(n) {
   const ch = save.chapter || (save.story && save.story.chapterDone ? 2 : 1);
   const names = ['', 'WHERE DID DAD GO?', 'THE RIDERS EAST', 'THE DROWNED CITY', 'TO THE PALE COURT'];
   const pages = save.story && save.story.pages ? save.story.pages.length : 0;
-  return ['CHAPTER ' + ch + ' - ' + (names[ch] || ''), (save.area || 'HOME') + '   LV ' + ((save.stats && save.stats.level) || 1) + '   LORE ' + pages];
+  return ['CHAPTER ' + ch + ' - ' + (names[ch] || ''), (save.area || 'HOME') + '  LV ' + ((save.stats && save.stats.level) || 1) + '  LORE ' + pages];
 }
 
 function drawTrashCan(x, y) {
@@ -829,70 +1181,122 @@ function drawTrashCan(x, y) {
   ctx.restore();
 }
 
+function drawHeading(text, y) {
+  pixTextShadow(text, MENU_X + 10, y, '#f0cf7a', 2);
+  ctx.fillStyle = 'rgba(201,162,74,.8)'; ctx.fillRect(MENU_X + 10, y + 10, textW(text, 2), 1);
+  ctx.fillStyle = '#8fe8ff'; ctx.fillRect(MENU_X + 10 + textW(text, 2) + 2, y + 9, 2, 3);
+}
+function smallText(s, x, y, color) { ctx.font = '7px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#05040c'; ctx.fillText(s, x + 1, y + 1); ctx.fillStyle = color; ctx.fillText(s, x, y); }
+
+function drawFooter() {
+  const a = menuPressed() ? clamp01((t - pressT) / 0.5) : 0;
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a * 0.9;
+  drawButtonIcon(MENU_X + 8, 226, 'x'); pixText('SELECT', MENU_X + 20, 227, '#c9c3e0');
+  drawButtonIcon(MENU_X + 66, 226, 'o'); pixText('BACK', MENU_X + 78, 227, '#c9c3e0');
+  pixTextShadow('CHAPTERS I - III', 308, 227, '#b4aed0', 1, 'right');
+  ctx.restore();
+}
+
 function drawScreen() {
-  ctx.textAlign = 'center';
-  if (state.screen === 'title') {
-    drawLogo();
-    drawMenu();
-    const ha = clamp01((t - menuStart - 2.2) / 0.6);
-    ctx.globalAlpha = ha * (0.85 + Math.sin(t * 3) * 0.15);
-    ctx.font = '6px monospace';
-    ctx.fillStyle = '#d8d0ee';
-    ctx.fillText('ARROWS / WASD / PS5 CONTROLLER  -  ENTER OR \u2715 TO CHOOSE', 160, 228);
-    ctx.globalAlpha = ha * 0.6; ctx.textAlign = 'right'; ctx.fillStyle = '#8f88aa';
-    ctx.fillText('CHAPTERS I - III', 314, 236);
-    ctx.globalAlpha = 1; ctx.textAlign = 'center';
+  const el = introTime();
+  if (state.screen === 'title' && !menuPressed()) {
+    const a = clamp01((el - INTRO_END + 0.2) / 0.5);
+    if (a > 0) {
+      const p = 0.55 + 0.45 * Math.sin(t * 3.2);
+      ctx.save(); ctx.globalAlpha = a;
+      const y = 160;
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createLinearGradient(MENU_X, 0, MENU_X + 150, 0);
+      g.addColorStop(0, 'rgba(110,160,255,0)'); g.addColorStop(0.5, 'rgba(110,160,255,' + 0.22 * p + ')'); g.addColorStop(1, 'rgba(110,160,255,0)');
+      ctx.fillStyle = g; ctx.fillRect(MENU_X - 6, y - 5, 160, 17);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = a * (0.45 + p * 0.55);
+      pixTextShadow('PRESS START', 86, y, '#ffffff', 3, 'center');
+      ctx.globalAlpha = a * 0.8;
+      drawButtonIcon(54, y + 16, 'x'); pixText('OR ENTER', 66, y + 17, '#a9a3c8');
+      ctx.restore();
+    }
     return;
   }
-  ctx.font = 'bold 12px monospace';
-  ctx.fillStyle = '#ffe9b8';
+  if (state.screen === 'title') { drawMenu(); drawFooter(); return; }
   if (state.screen === 'slots') {
-    ctx.fillText('SELECT SAVE', 160, 86);
+    drawHeading('SELECT SAVE', 114);
     drawMenu();
     if (state.sel < 3) {
       const [l1, l2] = slotDetail(state.sel + 1);
-      ctx.fillStyle = 'rgba(10,8,18,.8)'; ctx.fillRect(70, 182, 180, 24);
-      ctx.strokeStyle = '#5a5480'; ctx.strokeRect(70.5, 182.5, 179, 23);
-      ctx.font = 'bold 7px monospace'; ctx.fillStyle = '#bfe2ff'; ctx.fillText(l1, 160, 192);
-      ctx.font = '6px monospace'; ctx.fillStyle = '#d8d0ee'; ctx.fillText(l2, 160, 201);
-      ctx.font = 'bold 12px monospace'; ctx.fillStyle = '#ffe9b8';
-    }
-    if (message) {
-      ctx.font = '10px monospace';
-      ctx.fillStyle = '#ffd27a';
-      ctx.fillText(message, 160, 218);
-    }
+      ctx.fillStyle = 'rgba(8,7,20,.85)'; ctx.fillRect(MENU_X + 4, 200, 170, 22);
+      ctx.strokeStyle = '#4a4678'; ctx.strokeRect(MENU_X + 4.5, 200.5, 169, 21);
+      ctx.fillStyle = '#c9a24a'; ctx.fillRect(MENU_X + 4, 200, 2, 22);
+      pixText(l1, MENU_X + 10, 203, '#bfe2ff');
+      pixText(l2, MENU_X + 10, 212, '#d8d0ee');
+    } else if (message) smallText(message.slice(0, 40), MENU_X + 8, 212, '#ffd27a');
   } else if (state.screen === 'deleteConfirm') {
-    ctx.fillText('DELETE SAVE SLOT ' + state.deleteSlot + '?', 160, 88);
-    ctx.font = '8px monospace';
-    ctx.fillStyle = '#d8c7a5';
-    ctx.fillText('ARE YOU SURE YOU WANT TO DELETE IT?', 160, 112);
-    ctx.fillText('THIS CANNOT BE UNDONE.', 160, 124);
+    drawHeading('DELETE SLOT ' + state.deleteSlot + '?', 114);
+    pixText('THIS CANNOT BE UNDONE.', MENU_X + 10, 138, '#d8c7a5');
     drawMenu();
   } else if (state.screen === 'account') {
-    ctx.fillText('PLAYER ACCOUNT', 160, 87);
-    ctx.font = '8px monospace';
-    ctx.fillStyle = '#d8c7a5';
-    ctx.fillText(cloudSession ? ((cloudProfile && cloudProfile.username) || cloudSession.user.email || 'SIGNED IN') : 'CLOUD SAVES REQUIRE AN ACCOUNT', 160, 98);
+    drawHeading('PLAYER ACCOUNT', 114);
+    smallText(cloudSession ? ((cloudProfile && cloudProfile.username) || cloudSession.user.email || 'SIGNED IN') : 'CLOUD SAVES REQUIRE AN ACCOUNT', MENU_X + 10, 134, '#d8c7a5');
     drawMenu();
-    if (message) {
-      ctx.font = '7px monospace';
-      ctx.fillStyle = '#ffd27a';
-      ctx.fillText(message.slice(0, 48), 160, 211);
-    }
+    if (message) smallText(message.slice(0, 44), MENU_X + 10, 212, '#ffd27a');
   } else if (state.screen === 'settings') {
-    ctx.fillText('SETTINGS', 160, 90);
+    drawHeading('SETTINGS', 114);
     drawMenu();
   } else if (state.screen === 'credits') {
-    ctx.fillText('CREDITS', 160, 88);
-    ctx.font = '10px monospace';
-    ctx.fillStyle = '#ffe9b8';
-    ctx.fillText('MADE BY', 160, 118);
-    ctx.font = 'bold 14px monospace';
-    ctx.fillStyle = '#ffd27a';
-    ctx.fillText('JASON COKER', 160, 136);
+    drawHeading('CREDITS', 114);
+    pixText('MADE BY', MENU_X + 10, 140, '#a9a3c8', 2);
+    pixTextShadow('JASON COKER', MENU_X + 10, 152, '#f0cf7a', 2);
+    pixText('ART AND MUSIC: SEE ASSET-CREDITS', MENU_X + 10, 170, '#8f88aa');
+    pixText('ON OPENGAMEART AND ITCH.IO', MENU_X + 10, 180, '#8f88aa');
     drawMenu();
   }
+  drawFooter();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, 320, 240);
+  const el = introTime();
+  const sx = shake > 0 ? Math.round((Math.random() - 0.5) * 6 * shake) : 0, sy = shake > 0 ? Math.round((Math.random() - 0.5) * 6 * shake) : 0;
+  ctx.save(); ctx.translate(sx, sy);
+  drawSky();
+  drawClouds(cam(0.3), 0);
+  drawMoonScene(cam(0.38));
+  drawCrows();
+  drawClouds(cam(0.42), 1);
+  drawBolt();
+  // lightning lights the sky behind the mountains
+  if (flash > 0) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(120,130,220,' + flash * 0.35 + ')'; ctx.fillRect(-4, -4, 328, 248); ctx.restore(); }
+  const cf = cam(0.62);
+  if (MENU_ART.far) ctx.drawImage(MENU_ART.far, Math.round(cf.x) - 4, Math.round(54 + cf.y));
+  drawCastle(cf);
+  drawFog(156 + cf.y, 0.1, 4);
+  const cm = cam(0.85);
+  if (MENU_ART.mid) ctx.drawImage(MENU_ART.mid, Math.round(cm.x) - 4, Math.round(96 + cm.y));
+  else { ctx.fillStyle = '#10122a'; ctx.fillRect(0, 170 + cm.y, 320, 80); }
+  drawAsh(false);
+  const cv = cam(1);
+  drawFog(196 + cv.y, 0.12, 7);
+  const cc = cam(1.25);
+  drawCliff(cc);
+  drawKnight(cc);
+  ctx.restore();
+  // readable darkness on the left for the logo and menu
+  const shade = ctx.createLinearGradient(0, 0, 210, 0);
+  shade.addColorStop(0, 'rgba(4,3,12,.72)'); shade.addColorStop(0.6, 'rgba(4,3,12,.35)'); shade.addColorStop(1, 'rgba(4,3,12,0)');
+  ctx.fillStyle = shade; ctx.fillRect(0, 0, 210, 240);
+  drawAsh(true);
+  ctx.save(); ctx.translate(sx, sy); drawLogo(); ctx.restore();
+  drawScreen();
+  // letterbox bars during the opening
+  const bars = Math.round((1 - ease((el - 3.2) / 0.8)) * 22);
+  if (bars > 0) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 320, bars); ctx.fillRect(0, 240 - bars, 320, bars); }
+  const v = ctx.createRadialGradient(170, 120, 90, 170, 120, 220);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(2,2,10,0.7)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, 320, 240);
+  if (flash > 0) { ctx.fillStyle = 'rgba(225,232,255,' + flash * 0.18 + ')'; ctx.fillRect(0, 0, 320, 240); }
+  const fade = menuStart < 0 ? 1 : clamp01(1 - el / 1.4);
+  if (fade > 0) { ctx.fillStyle = 'rgba(0,0,0,' + fade + ')'; ctx.fillRect(0, 0, 320, 240); }
 }
 
 function drawNightSky() {
@@ -1034,36 +1438,6 @@ function drawFireflies() {
     ctx.fillStyle = 'rgba(255,236,165,' + (pulse * 0.9) + ')';
     ctx.fillRect(x, y, 2, 2);
   });
-}
-
-function draw() {
-  ctx.clearRect(0, 0, 320, 240);
-  drawMoonfallSky();
-  drawCrackedMoon();
-  drawRidge(0, 156, 46, '#26234a', 1.2);
-  drawRidge(1, 170, 34, '#1a1834', 2.4);
-  drawForestMist();
-  drawForestLayer(178, 0.9, 4, ['#0e1420', '#1a2433'], 10, 100);
-  drawForestLayer(198, 1.08, 7, ['#090d16', '#141c28'], 10, 180);
-  ctx.fillStyle = '#080b12'; ctx.fillRect(0, 204, 320, 36);
-  drawCampScene();
-  drawPixelTree(309 + Math.sin(t * 0.6) * 1, 246, 1.75, '#070a10', '#121a24', 1);
-  drawFireflies();
-  // a slow wall of fog in front of the woods
-  for (let i = 0; i < 4; i++) {
-    const fx = ((t * (5 + i * 2) + i * 97) % 420) - 60, fy = 186 + i * 8;
-    const g = ctx.createRadialGradient(fx, fy, 2, fx, fy, 70);
-    g.addColorStop(0, 'rgba(150,140,200,.10)'); g.addColorStop(1, 'rgba(150,140,200,0)');
-    ctx.fillStyle = g; ctx.fillRect(fx - 70, fy - 30, 140, 60);
-  }
-  if (state.screen !== 'title') { ctx.fillStyle = 'rgba(6,5,14,.45)'; ctx.fillRect(0, 0, 320, 240); }
-  drawScreen();
-  const v = ctx.createRadialGradient(160, 120, 80, 160, 120, 210);
-  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(3,3,12,0.72)');
-  ctx.fillStyle = v; ctx.fillRect(0, 0, 320, 240);
-  // fade in from black when the page opens
-  const fade = clamp01(1 - (t - menuStart) / 1.2);
-  if (fade > 0) { ctx.fillStyle = 'rgba(0,0,0,' + fade + ')'; ctx.fillRect(0, 0, 320, 240); }
 }
 
 function drawCRT() {

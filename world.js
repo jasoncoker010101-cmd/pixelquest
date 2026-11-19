@@ -2660,11 +2660,17 @@ const Overworld = (() => {
     // Rising slash: an upward crescent that pops enemies into the air and
     // reaches fliers overhead. Works on the ground (with a small hop) or in the air.
     upper:    { sheet: 'attacks', cols: 8, frames: [9, 2, 3, 7, 7, 6], fps: 18, active: [2, 3, 4], reach: 46, dmg: 2, knock: 40, lunge: 30, next: null, upper: true, stamina: 10, recover: 0.12, fx: 'upper' },
+    // Down slash (Hollow Knight style "pogo"): hold down + attack in the air.
+    // Striking an enemy or a fireball below bounces the knight back up.
+    down:     { sheet: 'air', cols: 2, frames: [0, 0, 1, 1, 2, 2], fps: 24, active: [0, 1, 2, 3], reach: 0, dmg: 1, knock: 60, lunge: 0, next: null, down: true, stamina: 3, recover: 0.03 },
     // Moonblade: released after charging. Big crescent swing plus a blue wave.
     power:    { sheet: 'attacks', cols: 8, frames: [14, 15, 16, 17, 18, 19, 20, 21], fps: 16, active: [2, 3], reach: 66, dmg: 4, knock: 260, lunge: 120, next: null, shake: 5, stop: 0.12, recover: 0.22, stamina: 0, fx: 'power' }
   };
-  const ROLL_TIME = 0.42, ROLL_IFRAMES = 0.32, ROLL_SPEED = 230, ROLL_STAMINA = 18, CHARGE_TIME = 0.5, POWER_STAMINA = 28;
-  let attackHeld = false, attackHeldAt = 0;
+  const ROLL_TIME = 0.4, ROLL_IFRAMES = 0.3, ROLL_SPEED = 236, ROLL_STAMINA = 18, CHARGE_TIME = 0.5, POWER_STAMINA = 28;
+  let attackHeld = false, attackHeldAt = 0, attackBuffer = 0, rollBuffer = 0;
+  const atkGhosts = [];     // short afterimages that make swings read as one smooth motion
+  function downHeld() { return keys.has('arrowdown') || keys.has('s'); }
+  function dirHeld() { return (keys.has('arrowleft') || keys.has('a')) !== (keys.has('arrowright') || keys.has('d')); }
   const playerWaves = [];   // blue Moonblade crescents
   // rarity: common / uncommon / rare / legend. value: what Old Bram pays per item.
   const ITEM_DEFS = {
@@ -2966,6 +2972,7 @@ const Overworld = (() => {
     // and hits on landing. Too close to the ground: just slash and land.
     const upHeld = keys.has('arrowup') || keys.has('w');
     if (upHeld) return 'upper';
+    if (!sidePlayer.onGround && downHeld()) return 'down';
     if (!sidePlayer.onGround) return groundBelowDistance() > 22 ? 'air' : 'slash1';
     if (comboTimer > 0 && lastMove && KNIGHT_MOVES[lastMove].next) return KNIGHT_MOVES[lastMove].next;
     if (Math.abs(sidePlayer.vx) > 132) return 'thrust';
@@ -2979,7 +2986,8 @@ const Overworld = (() => {
     if (keys.has('arrowright') || keys.has('d')) dir += 1;
     if (dir) sidePlayer.facing = dir;
     sidePlayer.atk = { name, t: 0, hit: new Set(), queued: null, swooshed: false, phase: move.air ? 'hang' : null };
-    if (sidePlayer.onGround && move.lunge) sidePlayer.vx = sidePlayer.facing * move.lunge;
+    if (sidePlayer.onGround && move.lunge) sidePlayer.vx = sidePlayer.facing * move.lunge * 0.35;
+    if (move.down) { sidePlayer.vy = Math.min(sidePlayer.vy, 40); sfx('swing'); }
     if (move.air) { sidePlayer.vy = Math.min(sidePlayer.vy, -40); sidePlayer.vx *= 0.3; }
     if (move.upper) {
       // A short hop on the ground, a little lift in the air (allows juggles).
@@ -3023,13 +3031,16 @@ const Overworld = (() => {
     }
     updateCharge(dt);
     if (sidePlayer.charge) { sideAttackQueued = false; sidePlayer.attackTime = 1; return; }
-    if (sideAttackQueued) {
-      sideAttackQueued = false;
+    // Presses are buffered briefly so a tap during a roll, a landing or the
+    // end of a swing still comes out, which keeps combos flowing.
+    if (sideAttackQueued) { sideAttackQueued = false; attackBuffer = 0.22; }
+    if (attackBuffer > 0) {
+      attackBuffer -= dt;
       if (sidePlayer.atk) {
         const move = KNIGHT_MOVES[sidePlayer.atk.name];
-        if (move.next) sidePlayer.atk.queued = move.next;
-      } else if (sidePlayer.attackCooldown <= 0 && !panel && sidePlayer.hurtTime <= 0) {
-        startKnightMove(chooseOpeningMove());
+        if (move.next) { sidePlayer.atk.queued = move.next; attackBuffer = 0; }
+      } else if (!sidePlayer.roll && sidePlayer.attackCooldown <= 0 && !panel && sidePlayer.hurtTime <= 0) {
+        startKnightMove(chooseOpeningMove()); attackBuffer = 0;
       }
     }
     const atk = sidePlayer.atk;
@@ -3040,7 +3051,9 @@ const Overworld = (() => {
     const idx = Math.floor(atk.t * move.fps);
     if (!atk.swooshed && idx >= move.active[0]) {
       atk.swooshed = true;
-      sfx(atk.name === 'finisher' || atk.name === 'thrust' || atk.name === 'power' ? 'swingBig' : 'swing');
+      if (!move.down) sfx(atk.name === 'finisher' || atk.name === 'thrust' || atk.name === 'power' ? 'swingBig' : 'swing');
+      if (sidePlayer.onGround && move.lunge) sidePlayer.vx = sidePlayer.facing * move.lunge;
+      if (move.down) combatFx.push({ kind: 'downarc', x: sidePlayer.x, y: sidePlayer.y, f: sidePlayer.facing, color: WEAPONS[currentWeapon()].arc, life: 0.18, max: 0.18, vx: 0, vy: 0 });
       if (move.fx === 'upper') combatFx.push({ kind: 'arc', x: sidePlayer.x + sidePlayer.facing * 8, y: sidePlayer.y - 26, f: sidePlayer.facing, r: 34, up: true, color: WEAPONS[currentWeapon()].arc, life: 0.2, max: 0.2, vx: 0, vy: 0 });
       if (move.fx === 'power') { releaseMoonblade(); sfx('waveHum'); }
     }
@@ -3056,7 +3069,48 @@ const Overworld = (() => {
       return;
     }
     sidePlayer.attackTime = 1;
-    if (outdoorScene() && move.active.includes(idx)) knightHitCheck(atk, move);
+    if (outdoorScene() && move.active.includes(idx)) { if (move.down) downHitCheck(atk); else knightHitCheck(atk, move); }
+    // A down slash that bounced can be repeated right away for chained pogos.
+    if (move.down && atk.bounced && atk.t > 0.1) { sidePlayer.atk = null; lastMove = 'down'; return; }
+    // Landing mid down-slash ends it cleanly.
+    if (move.down && sidePlayer.onGround && atk.t > 0.05) { sidePlayer.atk = null; sidePlayer.attackCooldown = 0.06; lastMove = 'down'; return; }
+    // Recovery frames can be cancelled by moving or jumping.
+    const lastActive = Math.max(...move.active);
+    if (!move.down && !move.fx && idx > lastActive + 1 && !atk.queued && (dirHeld() || sideJumpQueued)) {
+      sidePlayer.atk = null; lastMove = atk.name; comboTimer = move.next ? 0.32 : 0; sidePlayer.attackCooldown = 0.04;
+    }
+  }
+
+  // Pogo: hits the area under the knight's feet and bounces him off anything struck.
+  function downHitCheck(atk) {
+    const x = sidePlayer.x, top = sidePlayer.y - 8, bottom = sidePlayer.y + 30;
+    let struck = false;
+    sideMobs.forEach((m, i) => {
+      if (m.dead || m.dormant || atk.hit.has(i)) return;
+      if (Math.abs(m.x - x) > m.T.width / 2 + 16) return;
+      if (m.y < top || mobTop(m) > bottom) return;
+      atk.hit.add(i); struck = true;
+      const bonus = Math.floor((totalAttack() - 5) / 4), crit = Math.random() < 0.12;
+      damageMob(m, KNIGHT_MOVES.down.dmg + bonus + (crit ? 1 : 0), m.x < x ? -1 : 1, KNIGHT_MOVES.down.knock, crit, crit);
+    });
+    for (let i = mobShots.length - 1; i >= 0; i--) {
+      const sh = mobShots[i];
+      if (Math.abs(sh.x - x) < 20 && sh.y > top && sh.y < bottom) {
+        spawnSparks(sh.x, sh.y, sidePlayer.facing, 8, ['#ffd27a', '#ff8a3a', '#ffffff']); sfx('clash', 0.6, 1.3);
+        mobShots.splice(i, 1); struck = true;
+      }
+    }
+    if (struck && !atk.bounced) pogoBounce(atk);
+  }
+  function pogoBounce(atk) {
+    atk.bounced = true;
+    sidePlayer.vy = -300; sidePlayer.onGround = false;
+    sidePlayer.invulnTime = Math.max(sidePlayer.invulnTime, 0.18);
+    stats.stamina = Math.min(stats.maxStamina, stats.stamina + 3);
+    combatFx.push({ kind: 'ring', x: sidePlayer.x, y: sidePlayer.y + 10, life: 0.2, max: 0.2, vx: 0, vy: 0 });
+    for (let k = 0; k < 6; k++) combatFx.push({ kind: 'spark', x: sidePlayer.x + (Math.random() - 0.5) * 16, y: sidePlayer.y + 10, vx: (Math.random() - 0.5) * 120, vy: 40 + Math.random() * 60, color: k % 2 ? '#ffffff' : '#bfe6ff', life: 0.25, max: 0.25 });
+    hitStop = Math.max(hitStop, 0.05);
+    sfx('clash', 0.5, 1.5); padRumble(0.3, 0.6, 70);
   }
 
   // ---------------------------------------------------------------------------
@@ -3152,12 +3206,12 @@ const Overworld = (() => {
     ctx.restore();
   }
 
-  function tryRoll() {
-    if (!platformMode || !outdoorScene() || panel || dialogue) return;
-    if (sidePlayer.roll || sidePlayer.deadTime > 0 || sidePlayer.hurtTime > 0 || !sidePlayer.onGround) return;
-    if ((sidePlayer.rollCooldown || 0) > 0) return;
-    if (sidePlayer.atk && KNIGHT_MOVES[sidePlayer.atk.name].air) return;
-    if (stats.stamina < ROLL_STAMINA) { notice = 'Too tired to roll.'; noticeUntil = time + 1; return; }
+  function tryRoll(quiet) {
+    if (!platformMode || !outdoorScene() || panel || dialogue) return false;
+    if (sidePlayer.roll || sidePlayer.deadTime > 0 || sidePlayer.hurtTime > 0 || !sidePlayer.onGround) return false;
+    if ((sidePlayer.rollCooldown || 0) > 0) return false;
+    if (sidePlayer.atk && KNIGHT_MOVES[sidePlayer.atk.name].air) return false;
+    if (stats.stamina < ROLL_STAMINA) { if (!quiet) { notice = 'Too tired to roll.'; noticeUntil = time + 1; } return quiet ? false : true; }
     let dir = 0;
     if (keys.has('arrowleft') || keys.has('a')) dir -= 1;
     if (keys.has('arrowright') || keys.has('d')) dir += 1;
@@ -3168,19 +3222,22 @@ const Overworld = (() => {
     stats.stamina = Math.max(0, stats.stamina - ROLL_STAMINA);
     spawnDust(sidePlayer.x - dir * 6, sidePlayer.y, 6);
     sfx('roll');
+    return true;
   }
   function updateRoll(dt) {
     const r = sidePlayer.roll;
     r.t += dt;
     const k = Math.min(1, r.t / ROLL_TIME);
-    sidePlayer.vx = r.dir * ROLL_SPEED * (1 - k * k * 0.75);
-    if (Math.floor(r.t * 30) !== Math.floor((r.t - dt) * 30)) {
-      r.trail.push({ x: sidePlayer.x, y: sidePlayer.y, t: r.t, life: 0.16 });
+    // Fast burst out of the crouch, then a smooth glide to a stop.
+    const burst = Math.min(1, r.t / 0.05);
+    sidePlayer.vx = r.dir * ROLL_SPEED * (0.55 + 0.6 * burst) * (1 - Math.pow(k, 1.6) * 0.8);
+    if (Math.floor(r.t * 40) !== Math.floor((r.t - dt) * 40)) {
+      r.trail.push({ x: sidePlayer.x, y: sidePlayer.y, t: r.t, life: 0.14 });
       if (Math.random() < 0.5) spawnDust(sidePlayer.x - r.dir * 8, sidePlayer.y, 1);
     }
     r.trail.forEach(g => g.life -= dt);
     r.trail = r.trail.filter(g => g.life > 0);
-    if (r.t >= ROLL_TIME) { sidePlayer.roll = null; sidePlayer.rollCooldown = 0.12; sidePlayer.vx *= 0.4; }
+    if (r.t >= ROLL_TIME) { sidePlayer.roll = null; sidePlayer.rollCooldown = 0.08; sidePlayer.vx *= 0.55; landTime = 0.05; }
   }
   // Called by every enemy hit test. During the roll's invincible window a
   // would-be hit becomes a "perfect dodge": stamina back and a blue flash.
@@ -3321,6 +3378,7 @@ const Overworld = (() => {
       const p = combatFx[i];
       p.life -= dt;
       if (p.kind === 'mote') { const k = Math.min(1, dt * 9); p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; }
+      else if (p.kind === 'downarc') { p.x = sidePlayer.x; p.y = sidePlayer.y; }
       else if (p.kind !== 'ring' && p.kind !== 'shock' && p.kind !== 'arc') { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += (p.kind === 'dust' ? 30 : 420) * dt; }
       if (p.life <= 0) combatFx.splice(i, 1);
     }
@@ -3381,6 +3439,21 @@ const Overworld = (() => {
         }
         ctx.strokeStyle = 'rgba(255,255,255,' + a + ')'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r - 3, Math.min(a0, sweep), Math.max(a0, sweep)); ctx.stroke();
+        ctx.restore();
+      } else if (p.kind === 'downarc') {
+        // Down-slash crescent sweeping under the knight's feet.
+        const k = 1 - a, f = p.f;
+        const a0 = f > 0 ? 0.05 : Math.PI - 0.05, a1 = f > 0 ? Math.PI - 0.05 : 0.05;
+        const sweep = a0 + (a1 - a0) * Math.min(1, k * 2.6);
+        const cx = p.x, cy = p.y + 2;
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        for (let w = 3; w >= 1; w--) {
+          ctx.strokeStyle = 'rgba(' + p.color + ',' + (a * (w === 1 ? 0.95 : 0.25)) + ')';
+          ctx.lineWidth = w === 1 ? 2 : w * 3;
+          ctx.beginPath(); ctx.ellipse(cx, cy, 24, 20, 0, Math.min(a0, sweep), Math.max(a0, sweep)); ctx.stroke();
+        }
+        ctx.strokeStyle = 'rgba(255,255,255,' + a + ')'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.ellipse(cx, cy, 21, 17, 0, Math.min(a0, sweep), Math.max(a0, sweep)); ctx.stroke();
         ctx.restore();
       } else if (p.kind === 'mote') {
         ctx.globalAlpha = a; ctx.fillStyle = p.color; ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 2); ctx.globalAlpha = 1;
@@ -3880,7 +3953,8 @@ const Overworld = (() => {
       return;
     }
 
-    if (sideRollQueued) { sideRollQueued = false; tryRoll(); }
+    if (sideRollQueued) { sideRollQueued = false; if (!tryRoll()) rollBuffer = 0.18; }
+    else if (rollBuffer > 0) { rollBuffer -= dt; if (tryRoll(true)) rollBuffer = 0; }
     if (sidePlayer.pray) {
       sidePlayer.pray.t += dt; sidePlayer.vx = 0; sidePlayer.moving = false;
       if (sidePlayer.pray.t >= 2.1) sidePlayer.pray = null;
@@ -3892,11 +3966,18 @@ const Overworld = (() => {
     } else if (sidePlayer.roll) {
       updateRoll(dt);
       sidePlayer.moving = false;
-      sideAttackQueued = false; sideJumpQueued = false;
+      sideJumpQueued = false;
     } else if (!panel && (sidePlayer.atk || sidePlayer.hurtTime > 0)) {
       // Committed: attacks carry their own lunge and hits knock the knight back.
-      const friction = sidePlayer.onGround ? 10 : 2;
-      sidePlayer.vx *= Math.max(0, 1 - dt * friction);
+      const a = sidePlayer.atk, m = a && KNIGHT_MOVES[a.name];
+      if (!sidePlayer.onGround && m && !m.air && sidePlayer.hurtTime <= 0) {
+        // Keep steering in the air while swinging.
+        let d = 0; if (keys.has('arrowleft') || keys.has('a')) d -= 1; if (keys.has('arrowright') || keys.has('d')) d += 1;
+        sidePlayer.vx += (d * 112 - sidePlayer.vx) * Math.min(1, dt * 7);
+      } else {
+        const friction = sidePlayer.onGround ? 10 : 2;
+        sidePlayer.vx *= Math.max(0, 1 - dt * friction);
+      }
       sidePlayer.moving = false;
       stats.stamina = Math.min(stats.maxStamina, stats.stamina + 6 * dt);
     } else if (!panel) {
@@ -4477,7 +4558,12 @@ const Overworld = (() => {
     if (sidePlayer.hurtTime > 0) {
       return { sheet: ks.hurt, cols: 2, frame: Math.min(2, Math.floor((0.36 - sidePlayer.hurtTime) / 0.36 * 3)) };
     }
-    if (sidePlayer.roll) return { sheet: ks.roll, cols: 2, frame: Math.min(3, Math.floor(sidePlayer.roll.t / ROLL_TIME * 4)) };
+    if (sidePlayer.roll) {
+      // Crouch in, two full tumbles, crouch out.
+      const rt = sidePlayer.roll.t;
+      if (rt < 0.035 || rt > ROLL_TIME - 0.035) return { sheet: ks.jump, cols: 2, frame: 7 };
+      return { sheet: ks.roll, cols: 2, frame: Math.floor((rt - 0.035) / (ROLL_TIME - 0.07) * 8) % 4, spin: true };
+    }
     if (sidePlayer.pray) {
       const t = sidePlayer.pray.t, f = t < 0.6 ? Math.floor(t / 0.6 * 6) : t < 1.5 ? 6 + Math.floor(t * 4) % 2 : Math.min(11, 8 + Math.floor((t - 1.5) / 0.6 * 4));
       return { sheet: ks.pray, cols: 4, frame: f };
@@ -4489,11 +4575,11 @@ const Overworld = (() => {
       if (move.air) {
         // attack_from_air: frames 0-2 dive, 3 impact, 4-6 shockwave and recover.
         if (atk.phase === 'impact') return { sheet: ks.air, cols: 2, frame: Math.min(6, 3 + Math.floor(atk.t * 14)) };
-        if (atk.phase === 'hang') return { sheet: ks.air, cols: 2, frame: 0 };
-        return { sheet: ks.air, cols: 2, frame: 1 + Math.floor(atk.t * 16) % 2 };
+        if (atk.phase === 'hang') return { sheet: ks.air, cols: 2, frame: 0, dy: 15 };
+        return { sheet: ks.air, cols: 2, frame: 1 + Math.floor(atk.t * 16) % 2, dy: 15 };
       }
       const idx = Math.min(move.frames.length - 1, Math.floor(atk.t * move.fps));
-      return { sheet: ks.attacks, cols: move.cols, frame: move.frames[idx] };
+      return { sheet: ks[move.sheet] || ks.attacks, cols: move.cols, frame: move.frames[idx], dy: move.down ? 15 : 0 };
     }
     if (!sidePlayer.onGround) {
       const vy = sidePlayer.vy;
@@ -4527,7 +4613,7 @@ const Overworld = (() => {
       if (r && r.trail) r.trail.forEach((g, i) => {
         ctx.save(); ctx.globalAlpha = 0.12 + i * 0.05;
         ctx.filter = 'brightness(1.6) hue-rotate(160deg)';
-        drawKnightCell(pose.sheet, Math.min(3, Math.floor(g.t / ROLL_TIME * 4)), pose.cols, g.x, g.y + 1, sidePlayer.facing);
+        drawKnightCell(knightSprites.roll, Math.floor(Math.max(0, g.t - 0.035) / (ROLL_TIME - 0.07) * 8) % 4, 2, g.x, g.y + 1, sidePlayer.facing);
         ctx.restore();
       });
       // Moonblade charge: a pulsing blue aura behind the knight.
@@ -4539,11 +4625,27 @@ const Overworld = (() => {
         ctx.fillStyle = g; ctx.fillRect(x - 40, y - 62, 80, 80); ctx.restore();
       }
       const atkName = sidePlayer.atk && sidePlayer.atk.name;
+      const py = y + 1 + (pose.dy || 0);
+      // Swing afterimages: the last couple of frames linger for a blink.
+      const ghostKey = atkName ? pose.sheet.src + pose.frame : null;
+      if (ghostKey && sidePlayer.lastGhostKey && sidePlayer.lastGhostKey !== ghostKey && sidePlayer.lastGhost) {
+        atkGhosts.push({ ...sidePlayer.lastGhost, until: time + 0.1 });
+        if (atkGhosts.length > 3) atkGhosts.shift();
+      }
+      sidePlayer.lastGhostKey = ghostKey;
+      sidePlayer.lastGhost = ghostKey ? { sheet: pose.sheet, frame: pose.frame, cols: pose.cols, x, y: py, f: sidePlayer.facing } : null;
+      for (let i = atkGhosts.length - 1; i >= 0; i--) {
+        const g = atkGhosts[i], a = (g.until - time) / 0.1;
+        if (a <= 0) { atkGhosts.splice(i, 1); continue; }
+        ctx.save(); ctx.globalAlpha = a * 0.32; ctx.filter = 'brightness(1.8) saturate(0.4)';
+        drawKnightCell(g.sheet, g.frame, g.cols, g.x, g.y, g.f);
+        ctx.restore();
+      }
       if (c || atkName === 'power') {
         ctx.save(); ctx.filter = 'drop-shadow(0 0 2px rgba(120,200,255,' + (c && !c.ready ? 0.5 : 0.95) + '))';
-        drawKnightCell(pose.sheet, pose.frame, pose.cols, x, y + 1, sidePlayer.facing);
+        drawKnightCell(pose.sheet, pose.frame, pose.cols, x, py, sidePlayer.facing);
         ctx.restore();
-      } else drawKnightCell(pose.sheet, pose.frame, pose.cols, x, y + 1, sidePlayer.facing);
+      } else drawKnightCell(pose.sheet, pose.frame, pose.cols, x, py, sidePlayer.facing);
       return;
     }
     if (!playerSheetReady) {
@@ -6246,7 +6348,7 @@ const Overworld = (() => {
     ctx.fillStyle = 'rgba(8,9,16,.72)'; ctx.fillRect(0, 226, W, 14);
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
     ctx.font = '6px monospace';
-    ctx.fillText(inputMode === 'pad' ? '✕ JUMP  □ ATTACK (HOLD = MOONBLADE)  ↑+□ UPPER  ○ ROLL  △ BAG' : 'SPACE JUMP  J ATTACK (HOLD = MOONBLADE)  U UPPER  K ROLL  H ITEM  I BAG', 4, 235);
+    ctx.fillText(inputMode === 'pad' ? '✕ JUMP  □ ATTACK (HOLD = MOONBLADE)  ↑+□ UPPER  ↓+□ AIR POGO  ○ ROLL  △ BAG' : 'SPACE JUMP  J ATTACK (HOLD=MOONBLADE)  U UPPER  S+J AIR POGO  K ROLL  I BAG', 4, 235);
     if (time < flashUntil) { ctx.fillStyle = 'rgba(190,230,255,' + Math.min(0.5, (flashUntil - time) * 3) + ')'; ctx.fillRect(0, 0, W, canvas.height); }
     if (time - fadeIn < 0.8) { ctx.fillStyle = 'rgba(0,0,0,' + (1 - (time - fadeIn) / 0.8) + ')'; ctx.fillRect(0, 0, W, canvas.height); }
     const near = !dialogue && !panel && nearbyInteraction();

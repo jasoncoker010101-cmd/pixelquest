@@ -27,7 +27,7 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
 - **Enemies:** goblins, mushrooms, and flying eyes in the forest. Skeletons (they block with a shield) and ghosts in the Hollow. A two-phase ogre boss that sends out shockwaves and calls ghosts when below half HP.
 - **Inventory:** full-screen bag with ITEMS / GEAR / STATS / QUEST / LORE / MAP tabs. Each item has an action menu (use, set as quick item, inspect, equip, drop), plus rarity colors, NEW tags, and a rotating inspect view with item lore. Mouse/touch clicks work too.
 - **Quick item:** set food or a tonic as the quick item and use it mid-fight without opening the bag.
-- **Combat:** tap attack for a 3-hit combo (slash, slash, heavy finisher), attack while sprinting for a dash thrust, or attack in the air for a plunge that slams to the ground with a shockwave. The plunge only triggers when you are well above the ground. Hold attack to charge the Moonblade, a blue power slash that sends out a crescent wave. Use the upper slash to hit enemies above you, and the dodge roll to pass through attacks. A roll timed just before a hit is a perfect dodge. Weapons (Ember Edge, Moonsilver) can be equipped from the bag. Hits have hit-pause, knockback, sparks, damage numbers, and XP/level-ups.
+- **Combat:** tap attack for a 3-hit combo (slash, slash, heavy finisher), attack while sprinting for a dash thrust, or attack in the air for a plunge that slams to the ground with a shockwave. Hold down and attack in the air for a down slash: hitting an enemy or a fireball below you bounces you back up (a Hollow Knight-style pogo), and you can chain bounces. The plunge only triggers when you are well above the ground. Hold attack to charge the Moonblade, a blue power slash that sends out a crescent wave. Use the upper slash to hit enemies above you, and the dodge roll to pass through attacks. A roll timed just before a hit is a perfect dodge. Weapons (Ember Edge, Moonsilver) can be equipped from the bag. Hits have hit-pause, knockback, sparks, damage numbers, and XP/level-ups.
 - **Sound and music:** sampled sword, footstep, monster, and UI sound effects, plus music for each area that crossfades between scenes, with a boss theme.
 - **Saving:** browser save slots; optional account sign-in enables cloud saves.
 - **Device support:** keyboard controls and on-screen touch controls for phones and tablets.
@@ -41,6 +41,7 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
 | Attack (forest) | J / F | □ Square (or R2) | — |
 | Moonblade (blue power slash) | Hold J / F, then release | Hold □, then release | — |
 | Upper slash | U (or Up + J) | Up + □ | — |
+| Down slash / pogo (in the air) | Down + J | Down + □ | — |
 | Dodge roll | K / L | ○ Circle | — |
 | Plunge attack | J while in the air | □ while in the air | — |
 | Quick item (forest/Hollow) | H | Touchpad | — |
