@@ -52,8 +52,8 @@ const Overworld = (() => {
     { x: 3670, y: 136, w: 126, h: 10 }
   ];
   const sideGoblins = [
-    { x: 1370, home: 1370, min: 1280, max: 1470, dir: -1, runUntil: 0, phase: 0, hp: 3, maxHp: 3, attackCooldown: 0, attackTime: 0, attackHit: false, hurtTime: 0, deadTime: 0, dead: false, respawn: 0, moving: false },
-    { x: 2760, home: 2760, min: 2660, max: 2860, dir: 1, runUntil: 0, phase: 2.7, hp: 3, maxHp: 3, attackCooldown: 0, attackTime: 0, attackHit: false, hurtTime: 0, deadTime: 0, dead: false, respawn: 0, moving: false }
+    { x: 1370, home: 1370, min: 1280, max: 1470, dir: -1, patrolDir: -1, runUntil: 0, phase: 0, hp: 3, maxHp: 3, attackCooldown: 0, attackTime: 0, attackHit: false, hurtTime: 0, deadTime: 0, dead: false, respawn: 0, moving: false },
+    { x: 2760, home: 2760, min: 2660, max: 2860, dir: 1, patrolDir: 1, runUntil: 0, phase: 2.7, hp: 3, maxHp: 3, attackCooldown: 0, attackTime: 0, attackHit: false, hurtTime: 0, deadTime: 0, dead: false, respawn: 0, moving: false }
   ];
 
   // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
@@ -258,8 +258,8 @@ const Overworld = (() => {
           const startTwoX = 29 * TILE - (startOneX - 24 * TILE) * 0.72;
           const startTwoY = 20 * TILE - (startOneY - 18 * TILE) * 0.65;
           introWolfFleePaths = [
-            introWolfFindPath(startOneX, startOneY, 280, 352),
-            introWolfFindPath(startTwoX, startTwoY, 376, 376)
+            introWolfFindPath(startOneX, startOneY, 280, 352) || [{ x: startOneX, y: startOneY }, { x: 280, y: 352 }],
+            introWolfFindPath(startTwoX, startTwoY, 376, 376) || [{ x: startTwoX, y: startTwoY }, { x: 376, y: 376 }]
           ];
         }
         const routeDuration = 2.35;
@@ -1963,10 +1963,11 @@ const Overworld = (() => {
         }
       } else if (goblin.hurtTime <= 0) {
         const speed = time < goblin.runUntil ? 90 : 18;
-        goblin.x += goblin.dir * speed * dt;
+        goblin.dir = goblin.patrolDir;
+        goblin.x += goblin.patrolDir * speed * dt;
         goblin.moving = true;
-        if (goblin.x < goblin.min) { goblin.x = goblin.min; goblin.dir = 1; }
-        if (goblin.x > goblin.max) { goblin.x = goblin.max; goblin.dir = -1; }
+        if (goblin.x < goblin.min) { goblin.x = goblin.min; goblin.patrolDir = 1; goblin.dir = 1; }
+        if (goblin.x > goblin.max) { goblin.x = goblin.max; goblin.patrolDir = -1; goblin.dir = -1; }
       }
       // The scout's contact hit activates once near the middle of its attack animation.
       if (goblin.attackTime > 0.22 && goblin.attackTime < 0.34 && !goblin.attackHit) {
@@ -3007,7 +3008,7 @@ const Overworld = (() => {
     sidePlayer.facing = 1; sidePlayer.moving = false; sidePlayer.walk = 0;
     dadNoteRead = !!(saveData && saveData.sideNoteRead);
     sideJumpQueued = false; sideAttackQueued = false; sidePlayer.attackTime = 0; sidePlayer.attackCooldown = 0; sidePlayer.hurtTime = 0; sidePlayer.invulnTime = 0; sidePlayer.deadTime = 0;
-    sideGoblins.forEach((goblin, i) => { goblin.x = goblin.home; goblin.hp = goblin.maxHp; goblin.dead = false; goblin.deadTime = 0; goblin.respawn = 0; goblin.attackTime = 0; goblin.attackCooldown = 0.7 + i * 0.4; goblin.hurtTime = 0; goblin.attackHit = false; goblin.moving = false; });
+    sideGoblins.forEach((goblin, i) => { goblin.x = goblin.home; goblin.hp = goblin.maxHp; goblin.dead = false; goblin.deadTime = 0; goblin.respawn = 0; goblin.attackTime = 0; goblin.attackCooldown = 0.7 + i * 0.4; goblin.hurtTime = 0; goblin.attackHit = false; goblin.patrolDir = i === 0 ? -1 : 1; goblin.dir = goblin.patrolDir; goblin.moving = false; });
     sideCameraX = Math.max(0, sidePlayer.x - canvas.width * 0.43);
     insideHouse = platformScene === 'house';
     introActive = !saveData || typeof saveData !== 'object';
