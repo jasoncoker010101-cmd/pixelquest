@@ -20,18 +20,21 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
 
 ## Controls
 
-| Action | Keyboard | Touch button |
-|---|---|---|
-| Move | WASD or Arrow keys | Direction pad |
-| Interact / enter or exit house | E | E |
-| Run | Hold Shift | RUN |
-| Inventory | I | BAG |
-| Stats | C | STATS |
-| Set night | Z | NIGHT |
-| Fight in encounter | 1 / Enter / Space | FIGHT |
-| Attempt to escape encounter | 2 / Escape | RUN |
-| Exit / return | Escape | — |
-| Skip opening cinematic | Any key or controller action | Tap / controller action |
+| Action | Keyboard | PS5 controller | Touch button |
+|---|---|---|---|
+| Move | WASD or Arrow keys | Left stick or D-pad | Direction pad |
+| Jump (forest) | Space / W / Up | ✕ Cross | — |
+| Attack (forest) | J / K / F | □ Square (or R2) | — |
+| Interact / confirm | E / Enter | ✕ Cross | E |
+| Back / close | Escape | ○ Circle | — |
+| Run | Hold Shift | Hold L1, R1, or L2 | RUN |
+| Inventory | I | △ Triangle | BAG |
+| Stats | C | Touchpad or Create | STATS |
+| Pause | Escape / P | Options | — |
+| Fight / escape encounter | 1 / 2 | ✕ or □ / ○ | FIGHT / RUN |
+| Skip opening cinematic | Any key | Any button | Tap |
+
+In the forest, ✕ interacts when a prompt is shown (for example, returning home) and jumps otherwise. On-screen prompts switch to PlayStation buttons while a controller is in use, and the controller rumbles on hits. Both the standard browser layout and Firefox's raw DualSense layout are supported.
 
 ## Play and run locally
 

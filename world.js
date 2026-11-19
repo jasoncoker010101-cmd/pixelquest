@@ -59,6 +59,14 @@ const Overworld = (() => {
   // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
   let introActive = false, introTime = 0, introAudio = null, introSoundChar = 0, introTextSegment = '', introLastReveal = 0, introWolfHowlOne = false, introWolfHowlTwo = false, introWolfHowlEcho = false;
   const INTRO_DURATION = 45.5;
+  // 'pad' while a controller is being used, so prompts show PlayStation buttons.
+  let inputMode = 'keyboard';
+  function setInputMode(mode) { inputMode = mode === 'pad' ? 'pad' : 'keyboard'; }
+  const PAD_LABELS = { E: '✕', ENTER: '✕', SPACE: '✕', J: '□', I: '△', C: 'TOUCHPAD', ESC: '○', P: 'OPTIONS' };
+  function K(key) { return inputMode === 'pad' ? (PAD_LABELS[key] || key) : key; }
+  function padRumble(strong, weak, ms) {
+    if (inputMode === 'pad' && typeof window.pqRumble === 'function') window.pqRumble(strong, weak, ms);
+  }
   function finishIntro() {
     introActive = false;
     introTime = INTRO_DURATION;
@@ -1865,7 +1873,7 @@ const Overworld = (() => {
     ctx.fillStyle = 'rgba(15,12,24,0.92)'; ctx.fillRect(x - 24, y - 8, 48, 14);
     ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(x - 23.5, y - 7.5, 47, 13);
     ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('[ E ] ENTER', x, y + 1);
+    ctx.fillText('[ ' + K('E') + ' ] ENTER', x, y + 1);
   }
 
   function drawMailbox() {
@@ -1905,7 +1913,7 @@ const Overworld = (() => {
     ctx.fillStyle = '#fff0bd';
     ctx.font = 'bold 8px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('[ E ] INTERACT', x, y + 1);
+    ctx.fillText('[ ' + K('E') + ' ] INTERACT', x, y + 1);
     ctx.restore();
   }
 
@@ -2375,11 +2383,11 @@ const Overworld = (() => {
 
     if (introActive || panel) return;
     if (nearDadArmor() && (!nearDadNote() || dadArmorDistance() < dadNoteDistance())) {
-      drawHousePrompt(equipment.armor ? 'ARMOR EQUIPPED' : '[ E ] EQUIP ARMOR', DAD_ARMOR.x - 20, 58);
+      drawHousePrompt(equipment.armor ? 'ARMOR EQUIPPED' : '[ ' + K('E') + ' ] EQUIP ARMOR', DAD_ARMOR.x - 20, 58);
     } else if (nearDadNote()) {
-      drawHousePrompt('[ E ] READ NOTE', DAD_NOTE.x, 70);
+      drawHousePrompt('[ ' + K('E') + ' ] READ NOTE', DAD_NOTE.x, 70);
     } else if (nearFrontDoor()) {
-      drawHousePrompt('[ E ] GO OUTSIDE', 160, 178);
+      drawHousePrompt('[ ' + K('E') + ' ] GO OUTSIDE', 160, 178);
     }
   }
 
@@ -2645,6 +2653,7 @@ const Overworld = (() => {
         if (Math.abs(dx) < 37 && dy < 36 && Math.sign(goblin.x - sidePlayer.x) === sidePlayer.facing) {
           goblin.hp = Math.max(0, goblin.hp - 1);
           goblin.hurtTime = 0.28;
+          padRumble(0.35, 0.6, 90);
           goblin.moving = false;
           if (goblin.hp <= 0) { goblin.dead = true; goblin.deadTime = 0; goblin.respawn = 7; goblin.attackTime = 0; }
         }
@@ -2688,6 +2697,7 @@ const Overworld = (() => {
         if (distance < 58 && sidePlayer.invulnTime <= 0 && sidePlayer.deadTime <= 0) {
           stats.health = Math.max(0, stats.health - Math.max(1, 3 - stats.defense));
           sidePlayer.hurtTime = 0.28; sidePlayer.invulnTime = 0.9;
+          padRumble(0.9, 0.5, stats.health <= 0 ? 420 : 200);
           sidePlayer.vx = -goblin.dir * 78;
           if (stats.health <= 0) { sidePlayer.deadTime = 0.95; sidePlayer.attackTime = 0; notice = 'You were overwhelmed. Returning to the trail...'; noticeUntil = time + 2; }
           else { notice = 'A goblin hit you!'; noticeUntil = time + 1.2; }
@@ -2887,7 +2897,7 @@ const Overworld = (() => {
     ctx.fillStyle = 'rgba(8,9,16,.72)';
     ctx.fillRect(0, 226, canvas.width, 14);
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-    ctx.fillText(dadNoteRead ? (equipment.armor ? 'QUEST COMPLETE: DAD\'S ARMOR EQUIPPED' : 'QUEST: FIND AND EQUIP DAD\'S ARMOR') : 'A/D MOVE  SPACE JUMP  J ATTACK  E INTERACT', 5, 236);
+    ctx.fillText(dadNoteRead ? (equipment.armor ? 'QUEST COMPLETE: DAD\'S ARMOR EQUIPPED' : 'QUEST: FIND AND EQUIP DAD\'S ARMOR') : (inputMode === 'pad' ? 'STICK MOVE  ✕ JUMP  □ ATTACK  △ BAG' : 'A/D MOVE  SPACE JUMP  J ATTACK  E INTERACT'), 5, 236);
 
     const noteDistance = Math.hypot(sidePlayer.x - 144, sidePlayer.y - 164);
     const armorDistance = Math.hypot(sidePlayer.x - 181, sidePlayer.y - 164);
@@ -2895,17 +2905,17 @@ const Overworld = (() => {
       ctx.fillStyle = 'rgba(15,12,24,.97)'; ctx.fillRect(82 - sideCameraX, 176, 124, 16);
       ctx.strokeStyle = '#f4d27b'; ctx.lineWidth = 1; ctx.strokeRect(82.5 - sideCameraX, 176.5, 123, 15);
       ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('[ E / ✕ ] READ DAD\'S NOTE', 144 - sideCameraX, 187);
+      ctx.fillText('[ ' + K('E') + ' ] READ DAD\'S NOTE', 144 - sideCameraX, 187);
     } else if (Math.abs(sidePlayer.y - 164) < 58 && armorDistance < 43) {
       ctx.fillStyle = 'rgba(15,12,24,.97)'; ctx.fillRect(119 - sideCameraX, 176, 125, 16);
       ctx.strokeStyle = '#f4d27b'; ctx.lineWidth = 1; ctx.strokeRect(119.5 - sideCameraX, 176.5, 124, 15);
       ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-      ctx.fillText(equipment.armor ? 'ARMOR EQUIPPED' : '[ E / ✕ ] EQUIP ARMOR', 181 - sideCameraX, 187);
+      ctx.fillText(equipment.armor ? 'ARMOR EQUIPPED' : '[ ' + K('E') + ' ] EQUIP ARMOR', 181 - sideCameraX, 187);
     } else if (Math.abs(sidePlayer.x - 930) < 55) {
       ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(875 - sideCameraX, 180, 110, 13);
       ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(875.5 - sideCameraX, 180.5, 109, 12);
       ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('[ E ] ENTER FOREST', 930 - sideCameraX, 189);
+      ctx.fillText('[ ' + K('E') + ' ] ENTER FOREST', 930 - sideCameraX, 189);
     }
     ctx.textAlign = oldText;
     ctx.font = oldFont;
@@ -2996,18 +3006,18 @@ const Overworld = (() => {
     ctx.fillStyle = 'rgba(8,9,16,.72)';
     ctx.fillRect(0, 226, canvas.width, 14);
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-    ctx.fillText(dadNoteRead ? (equipment.armor ? 'QUEST COMPLETE: DAD\'S ARMOR EQUIPPED' : 'QUEST: FIND AND EQUIP DAD\'S ARMOR') : 'A / D MOVE    SPACE OR ↑ JUMP    E INTERACT', 5, 236);
+    ctx.fillText(dadNoteRead ? (equipment.armor ? 'QUEST COMPLETE: DAD\'S ARMOR EQUIPPED' : 'QUEST: FIND AND EQUIP DAD\'S ARMOR') : (inputMode === 'pad' ? 'STICK MOVE   ✕ JUMP / USE   □ ATTACK   △ BAG' : 'A/D MOVE  SPACE JUMP  J ATTACK  E INTERACT'), 5, 236);
 
     if (sidePlayer.x < 100) {
       ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(6, 180, 102, 13);
       ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(6.5, 180.5, 101, 12);
       ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('[ E ] RETURN HOME', 57, 189);
+      ctx.fillText('[ ' + K('E') + ' ] RETURN HOME', 57, 189);
     } else if (sidePlayer.x > FOREST_SIDE_WIDTH - 170) {
       ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(100, 180, 120, 13);
       ctx.strokeStyle = '#f4d27b'; ctx.strokeRect(100.5, 180.5, 119, 12);
       ctx.fillStyle = '#fff0bd'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('[ E ] FAR SIDE', 160, 189);
+      ctx.fillText('[ ' + K('E') + ' ] FAR SIDE', 160, 189);
     }
   }
 
@@ -3046,7 +3056,7 @@ const Overworld = (() => {
     ctx.fillText('Press the INVENTORY button', 160, 119);
     ctx.fillText('to check your quest.', 160, 133);
     ctx.fillStyle = '#b8c9aa'; ctx.font = '7px monospace';
-    ctx.fillText('I / BAG / SQUARE', 160, 150);
+    ctx.fillText(inputMode === 'pad' ? 'PRESS △ TRIANGLE' : 'I / BAG', 160, 150);
   }
 
   function startArmorQuestFromInventory() {
@@ -3259,7 +3269,7 @@ const Overworld = (() => {
     ctx.fillText(panelTitle, 160, 57);
     ctx.font = '8px monospace';
     ctx.fillStyle = '#b9b1a5';
-    ctx.fillText(panel === 'inventory' ? 'Press I, E, or ESC to close' : panel === 'stats' ? 'Press C, E, or ESC to close' : 'Press E, ENTER, or ESC to close', 160, 190);
+    ctx.fillText(inputMode === 'pad' ? (panel === 'inventory' ? 'Press △, ✕, or ○ to close' : panel === 'stats' ? 'Press TOUCHPAD, ✕, or ○ to close' : 'Press ✕ or ○ to close') : (panel === 'inventory' ? 'Press I, E, or ESC to close' : panel === 'stats' ? 'Press C, E, or ESC to close' : 'Press E, ENTER, or ESC to close'), 160, 190);
 
     if (panel === 'dad-note') {
       ctx.fillStyle = '#eadbb3'; ctx.fillRect(69, 72, 182, 92);
@@ -3371,8 +3381,8 @@ const Overworld = (() => {
 
     ctx.fillStyle = '#b7b3ad';
     ctx.font = '6px monospace';
-    ctx.fillText('↑ / ↓ SELECT     ENTER CHOOSE', 160, 165);
-    ctx.fillText('ESC OR P TO RESUME', 160, 175);
+    ctx.fillText(inputMode === 'pad' ? '↑ / ↓ SELECT     ✕ CHOOSE' : '↑ / ↓ SELECT     ENTER CHOOSE', 160, 165);
+    ctx.fillText(inputMode === 'pad' ? '○ OR OPTIONS TO RESUME' : 'ESC OR P TO RESUME', 160, 175);
     ctx.restore();
   }
 
@@ -3715,7 +3725,7 @@ const Overworld = (() => {
     if (GAME_KEYS.includes(k) || k === 'shift' || k === ' ') {
       keys.add(k);
       if (GAME_KEYS.includes(k) || k === ' ') e.preventDefault();
-      if (platformMode && (k === 'arrowup' || k === 'w' || k === ' ') && !e.repeat) sideJumpQueued = true;
+      if (platformMode && (k === 'arrowup' || k === 'w' || k === ' ') && !e.repeat && !String(e.code || '').startsWith('Pad')) sideJumpQueued = true;
     }
   }
 
@@ -3779,17 +3789,19 @@ const Overworld = (() => {
     keys.clear();
   }
 
+  // True when the forest shows an interaction prompt (return home / far side).
+  function forestInteractAvailable() {
+    return platformScene === 'forest' && (sidePlayer.x < 100 || sidePlayer.x > FOREST_SIDE_WIDTH - 170);
+  }
+
+  // PS5 layout: ✕ jump/interact/confirm, □ attack, ○ back, △ inventory,
+  // touchpad/Create stats, Options pause.
   function controllerAction(action) {
+    inputMode = 'pad';
     if (introActive) { finishIntro(); return; }
 
-    // Back closes an open panel before it can pause the game.
     if (armorTutorialPending) {
-      if (action === 'inventory') startArmorQuestFromInventory();
-      return;
-    }
-
-    if (panel && action === 'back') {
-      closeCurrentPanel();
+      if (action === 'inventory' || action === 'primary') startArmorQuestFromInventory();
       return;
     }
 
@@ -3797,10 +3809,12 @@ const Overworld = (() => {
       if (action === 'back' || action === 'pause') {
         paused = false;
         pauseSelection = 0;
+        keys.clear();
       } else if (action === 'primary') {
         if (pauseSelection === 0) {
           paused = false;
           pauseSelection = 0;
+          keys.clear();
         } else {
           const saveData = getSaveData();
           paused = false;
@@ -3810,28 +3824,44 @@ const Overworld = (() => {
       }
       return;
     }
-    if (action === 'jump') { if (platformMode && !panel && platformScene === 'forest') sideJumpQueued = true; return; }
-    if (action === 'attack') { if (platformScene === 'forest' && !panel) sideAttackQueued = true; return; }
-    if (action === 'back' || action === 'pause') {
+
+    if (action === 'pause') {
       paused = true;
       pauseSelection = 0;
       panel = null;
       keys.clear();
       return;
     }
+
     if (battle) {
-      if (action === 'primary') battleAction('fight');
+      if (action === 'primary' || action === 'attack') battleAction('fight');
       else if (action === 'back') battleAction('run');
       return;
     }
-    if (action === 'primary') { if (panel) closeCurrentPanel(); else interact(); }
-    else if (action === 'inventory') {
-      if (panel === 'dad-note') closeCurrentPanel();
-      else if (panel === 'inventory') closeCurrentPanel();
-      else panel = 'inventory';
+
+    if (panel) {
+      // Any of ✕, ○, or the panel's own button closes it.
+      if (action === 'primary' || action === 'back' ||
+          (action === 'inventory' && (panel === 'inventory' || panel === 'dad-note')) ||
+          (action === 'stats' && panel === 'stats')) closeCurrentPanel();
+      else if (action === 'inventory') panel = 'inventory';
+      else if (action === 'stats') panel = 'stats';
+      return;
     }
-    else if (action === 'stats') panel = panel === 'stats' ? null : 'stats';
-    // No unsupported night-toggle action is assigned to a controller button.
+
+    const inForest = platformMode && platformScene === 'forest' && !insideHouse;
+    if (action === 'attack') {
+      if (inForest) { sideAttackQueued = true; padRumble(0.05, 0.25, 60); }
+      return;
+    }
+    if (action === 'primary') {
+      if (inForest && !forestInteractAvailable()) sideJumpQueued = true;
+      else interact();
+      return;
+    }
+    if (action === 'inventory') { panel = 'inventory'; return; }
+    if (action === 'stats') { panel = 'stats'; return; }
+    // ○ with nothing open does nothing, so it never pauses by accident.
   }
-  return { init, update, draw, stop, controllerAction };
+  return { init, update, draw, stop, controllerAction, setInputMode };
 })();
