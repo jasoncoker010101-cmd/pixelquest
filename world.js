@@ -2056,32 +2056,6 @@ const Overworld = (() => {
     ctx.strokeStyle = '#d4ad68'; ctx.strokeRect(x - 32.5, groundY - 104.5, 65, 8);
     ctx.fillStyle = '#fff0bd'; ctx.font = '6px monospace'; ctx.textAlign = 'center'; ctx.fillText("DAD'S ARMOR", x, groundY - 99);
     ctx.restore();
-    ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(x - 15, groundY - 1, 30, 3);
-    ctx.fillStyle = '#4b3027';
-    ctx.fillRect(x - 2, groundY - 39, 4, 38);
-    ctx.fillRect(x - 11, groundY - 3, 22, 3);
-    ctx.fillRect(x - 7, groundY - 6, 14, 3);
-    ctx.fillStyle = '#26313b'; ctx.fillRect(x - 9, groundY - 55, 18, 16);
-    ctx.fillStyle = '#718493'; ctx.fillRect(x - 7, groundY - 53, 14, 12);
-    ctx.fillStyle = '#c5d0d3'; ctx.fillRect(x - 5, groundY - 52, 5, 3);
-    ctx.fillStyle = '#26313b'; ctx.fillRect(x - 6, groundY - 45, 12, 2);
-    ctx.fillStyle = '#c49a55'; ctx.fillRect(x - 2, groundY - 42, 4, 2);
-    ctx.fillStyle = '#26313b'; ctx.fillRect(x - 12, groundY - 40, 24, 23);
-    ctx.fillStyle = '#718493'; ctx.fillRect(x - 10, groundY - 38, 20, 18);
-    ctx.fillStyle = '#c5d0d3'; ctx.fillRect(x - 8, groundY - 37, 6, 4);
-    ctx.fillStyle = '#435665'; ctx.fillRect(x + 2, groundY - 35, 6, 12);
-    ctx.fillStyle = '#c49a55'; ctx.fillRect(x - 1, groundY - 30, 3, 4);
-    ctx.fillStyle = '#26313b';
-    ctx.fillRect(x - 15, groundY - 38, 6, 11); ctx.fillRect(x + 9, groundY - 38, 6, 11);
-    ctx.fillStyle = '#718493';
-    ctx.fillRect(x - 14, groundY - 37, 4, 8); ctx.fillRect(x + 10, groundY - 37, 4, 8);
-    ctx.fillStyle = '#26313b'; ctx.fillRect(x - 9, groundY - 18, 8, 17); ctx.fillRect(x + 1, groundY - 18, 8, 17);
-    ctx.fillStyle = '#718493'; ctx.fillRect(x - 7, groundY - 16, 4, 13); ctx.fillRect(x + 3, groundY - 16, 4, 13);
-    ctx.fillStyle = '#3b2c2b'; ctx.fillRect(x - 22, groundY - 66, 44, 8);
-    ctx.strokeStyle = '#c49a55'; ctx.strokeRect(x - 21.5, groundY - 65.5, 43, 7);
-    ctx.fillStyle = '#f3dfb7'; ctx.font = '5px monospace'; ctx.textAlign = 'center';
-    ctx.fillText("DAD'S ARMOR", x, groundY - 60);
-    ctx.restore();
   }
 
   function drawSideInterior() {
@@ -2167,7 +2141,7 @@ const Overworld = (() => {
     ctx.fillStyle = 'rgba(8,9,16,.72)';
     ctx.fillRect(0, 226, canvas.width, 14);
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-    ctx.fillText(armorQuestActive ? (equipment.armor ? 'QUEST COMPLETE: DAD\'S ARMOR EQUIPPED' : 'QUEST: FIND AND EQUIP DAD\'S ARMOR') : 'A/D MOVE  SPACE JUMP  J ATTACK  E INTERACT', 5, 236);
+    ctx.fillText(dadNoteRead ? (equipment.armor ? 'QUEST COMPLETE: DAD\'S ARMOR EQUIPPED' : 'QUEST: FIND AND EQUIP DAD\'S ARMOR') : 'A/D MOVE  SPACE JUMP  J ATTACK  E INTERACT', 5, 236);
 
     const noteDistance = Math.hypot(sidePlayer.x - 144, sidePlayer.y - 164);
     const armorDistance = Math.hypot(sidePlayer.x - 181, sidePlayer.y - 164);
@@ -2270,7 +2244,7 @@ const Overworld = (() => {
     ctx.fillStyle = 'rgba(8,9,16,.72)';
     ctx.fillRect(0, 226, canvas.width, 14);
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-    ctx.fillText(armorQuestActive ? (equipment.armor ? 'QUEST COMPLETE: DAD\'S ARMOR EQUIPPED' : 'QUEST: FIND AND EQUIP DAD\'S ARMOR') : 'A / D MOVE    SPACE OR ↑ JUMP    E INTERACT', 5, 236);
+    ctx.fillText(dadNoteRead ? (equipment.armor ? 'QUEST COMPLETE: DAD\'S ARMOR EQUIPPED' : 'QUEST: FIND AND EQUIP DAD\'S ARMOR') : 'A / D MOVE    SPACE OR ↑ JUMP    E INTERACT', 5, 236);
 
     if (sidePlayer.x < 100) {
       ctx.fillStyle = 'rgba(15,12,24,.94)'; ctx.fillRect(6, 180, 102, 13);
@@ -2353,10 +2327,11 @@ const Overworld = (() => {
       }
       if (nearDadObjects && armorDistance < 43) {
         if (!equipment.armor) {
+          const completingArmorQuest = armorQuestActive || dadNoteRead;
           equipment.armor = true;
           armorQuestActive = false;
           armorTutorialPending = false;
-          notice = armorQuestActive ? 'Quest complete! You equipped Dad\'s armor.' : "You equipped Dad's armor.";
+          notice = completingArmorQuest ? 'Quest complete! Dad\'s armor equipped.' : "You equipped Dad's armor.";
           noticeUntil = time + 2.5;
           if (onSave) onSave(getSaveData());
         } else {
@@ -2819,8 +2794,12 @@ const Overworld = (() => {
     }
     dadNoteRead = saveData.sideNoteRead === true;
     if (typeof saveData.armorQuestActive === 'boolean') armorQuestActive = saveData.armorQuestActive;
-    else armorQuestActive = dadNoteRead && !equipment.armor;
+    else armorQuestActive = false;
     armorTutorialPending = saveData.armorTutorialPending === true && !equipment.armor;
+    // Older save slots may already have recorded the note read; show the inventory tutorial once after upgrade.
+    if (dadNoteRead && !equipment.armor && typeof saveData.armorTutorialPending !== 'boolean' && typeof saveData.armorQuestActive !== 'boolean') {
+      armorTutorialPending = true;
+    }
     if (saveData.inventory && typeof saveData.inventory === 'object') {
       ['berries', 'wood', 'fish'].forEach(k => {
         if (Number.isFinite(saveData.inventory[k])) inventory[k] = Math.max(0, Math.floor(saveData.inventory[k]));
