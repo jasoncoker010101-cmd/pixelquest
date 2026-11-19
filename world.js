@@ -19,8 +19,9 @@ const Overworld = (() => {
   let platformScene = 'house';
   let sideCameraX = 0;
   let sideJumpQueued = false;
+  let sideAttackQueued = false;
   let dadNoteRead = false;
-  const sidePlayer = { x: 410, y: SIDE_GROUND_Y, vx: 0, vy: 0, onGround: true, facing: 1, moving: false, walk: 0 };
+  const sidePlayer = { x: 410, y: SIDE_GROUND_Y, vx: 0, vy: 0, onGround: true, facing: 1, moving: false, walk: 0, attackTime: 0, attackCooldown: 0, hurtTime: 0, invulnTime: 0, deadTime: 0 };
   const HOUSE_SIDE_PLATFORMS = [
     { x: 0, y: SIDE_GROUND_Y, w: HOUSE_SIDE_WIDTH, h: 44 },
     { x: 24, y: 160, w: 82, h: 10 },
@@ -49,8 +50,8 @@ const Overworld = (() => {
     { x: 3670, y: 136, w: 126, h: 10 }
   ];
   const sideWolves = [
-    { x: 1370, min: 1280, max: 1470, dir: -1, runUntil: 0, phase: 0, red: false },
-    { x: 2760, min: 2660, max: 2860, dir: 1, runUntil: 0, phase: 2.7, red: true }
+    { x: 1370, home: 1370, min: 1280, max: 1470, dir: -1, runUntil: 0, phase: 0, red: false, hp: 3, maxHp: 3, attackCooldown: 0, attackTime: 0, attackHit: false, hurtTime: 0, deadTime: 0, dead: false, respawn: 0 },
+    { x: 2760, home: 2760, min: 2660, max: 2860, dir: 1, runUntil: 0, phase: 2.7, red: true, hp: 3, maxHp: 3, attackCooldown: 0, attackTime: 0, attackHit: false, hurtTime: 0, deadTime: 0, dead: false, respawn: 0 }
   ];
 
   // First-play cinematic: pixel planet, narrated countryside pan, then the bedroom.
@@ -613,6 +614,23 @@ const Overworld = (() => {
   playerSheet.onload = () => { playerSheetReady = true; };
   playerSheet.onerror = () => { playerSheetReady = false; };
   playerSheet.src = pqAsset('./assets/player-character3.png');
+
+  // Actual knight sprite sheets from the ZIP the player added to the repository.
+  const knightSprites = {};
+  ['Idle','Run','Attacks','Hurt','Death','Jump'].forEach(name => {
+    const image = new Image();
+    image.src = pqAsset('./assets/knight/' + name + '.png');
+    knightSprites[name.toLowerCase()] = image;
+  });
+  const wolfCombatSprites = [
+    { attack: new Image(), hurt: new Image(), dead: new Image() },
+    { attack: new Image(), hurt: new Image(), dead: new Image() }
+  ];
+  ['Black_Werewolf','Red_Werewolf'].forEach((folder, i) => {
+    wolfCombatSprites[i].attack.src = pqAsset('./assets/werewolves/' + folder + '/Attack_1.png');
+    wolfCombatSprites[i].hurt.src = pqAsset('./assets/werewolves/' + folder + '/Hurt.png');
+    wolfCombatSprites[i].dead.src = pqAsset('./assets/werewolves/' + folder + '/Dead.png');
+  });
 
   // Forest pack artwork: separate terrain tiles and large transparent decorations.
   const forestTilesSheet = new Image();
@@ -1722,6 +1740,21 @@ const Overworld = (() => {
       if (onSave) onSave(getSaveData());
     }
 
+    sidePlayer.attackCooldown = Math.max(0, sidePlayer.attackCooldown - dt);
+    sidePlayer.attackTime = Math.max(0, sidePlayer.attackTime - dt);
+    sidePlayer.hurtTime = Math.max(0, sidePlayer.hurtTime - dt);
+    sidePlayer.invulnTime = Math.max(0, sidePlayer.invulnTime - dt);
+    if (sidePlayer.deadTime > 0) {
+      sidePlayer.deadTime -= dt;
+      sidePlayer.vx = 0; sidePlayer.vy = 0;
+      if (sidePlayer.deadTime <= 0) {
+        sidePlayer.x = 72; sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0;
+        sidePlayer.onGround = true; sidePlayer.invulnTime = 1.6;
+        stats.health = Math.max(1, Math.ceil(stats.maxHealth * 0.65));
+        notice = 'You made it back to the forest entrance.'; noticeUntil = time + 2.5;
+      }
+      sideAttackQueued = false; sideJumpQueued = false; updateSideCamera(dt); return;
+    }
     if (!panel) {
       let direction = 0;
       if (keys.has('arrowleft') || keys.has('a')) direction -= 1;
@@ -1745,6 +1778,11 @@ const Overworld = (() => {
       sidePlayer.moving = false;
     }
     sideJumpQueued = false;
+    if (sideAttackQueued && sidePlayer.attackCooldown <= 0 && !panel) {
+      sidePlayer.attackTime = 0.34;
+      sidePlayer.attackCooldown = 0.52;
+      sideAttackQueued = false;
+    } else if (sideAttackQueued) sideAttackQueued = false;
 
     const oldFeet = sidePlayer.y;
     const nextX = clamp(sidePlayer.x + sidePlayer.vx * dt, 16, sideWorldWidth() - 16);
@@ -1784,19 +1822,7 @@ const Overworld = (() => {
     stepDistance += moved;
     while (stepDistance >= 20) { stats.steps++; stepDistance -= 20; }
 
-    if (platformScene === 'forest') {
-      for (const wolf of sideWolves) {
-        const distance = Math.abs(sidePlayer.x - wolf.x);
-        if (distance < 170) {
-          wolf.runUntil = Math.max(wolf.runUntil, time + 0.8);
-          wolf.dir = wolf.x >= sidePlayer.x ? 1 : -1;
-        }
-        const running = time < wolf.runUntil;
-        wolf.x += wolf.dir * (running ? 96 : 18) * dt;
-        if (wolf.x < wolf.min) { wolf.x = wolf.min; wolf.dir = 1; }
-        if (wolf.x > wolf.max) { wolf.x = wolf.max; wolf.dir = -1; }
-      }
-    }
+    if (platformScene === 'forest') updateForestCombat(dt);
     updateSideCamera(dt);
   }
 
@@ -1861,9 +1887,91 @@ const Overworld = (() => {
     pixel(18, 28, 3, 2, steel);
   }
 
+  function updateForestCombat(dt) {
+    const playerCenterY = sidePlayer.y - 22;
+    // The player's swing has a short active window; the hitbox follows facing direction.
+    if (sidePlayer.attackTime > 0.12 && sidePlayer.attackTime < 0.27) {
+      const hitX = sidePlayer.x + sidePlayer.facing * 39;
+      for (const wolf of sideWolves) {
+        if (wolf.dead || wolf.hurtTime > 0.1) continue;
+        const dx = wolf.x - hitX;
+        const dy = Math.abs((SIDE_GROUND_Y - 23) - playerCenterY);
+        if (Math.abs(dx) < 37 && dy < 36 && Math.sign(wolf.x - sidePlayer.x) === sidePlayer.facing) {
+          wolf.hp = Math.max(0, wolf.hp - 1);
+          wolf.hurtTime = 0.28;
+          if (wolf.hp <= 0) { wolf.dead = true; wolf.deadTime = 0; wolf.respawn = 7; wolf.attackTime = 0; }
+        }
+      }
+    }
+    for (const wolf of sideWolves) {
+      if (wolf.dead) {
+        wolf.deadTime += dt; wolf.respawn -= dt;
+        if (wolf.respawn <= 0) { wolf.dead = false; wolf.deadTime = 0; wolf.hp = wolf.maxHp; wolf.x = wolf.home; wolf.attackCooldown = 1.2; }
+        continue;
+      }
+      wolf.attackCooldown = Math.max(0, wolf.attackCooldown - dt);
+      wolf.attackTime = Math.max(0, wolf.attackTime - dt);
+      wolf.hurtTime = Math.max(0, wolf.hurtTime - dt);
+      const dx = sidePlayer.x - wolf.x;
+      const distance = Math.abs(dx);
+      wolf.dir = dx < 0 ? -1 : 1;
+      if (wolf.hurtTime <= 0 && distance < 230) {
+        wolf.runUntil = Math.max(wolf.runUntil, time + 0.25);
+        if (distance > 43) wolf.x += wolf.dir * 76 * dt;
+        else if (wolf.attackCooldown <= 0 && wolf.attackTime <= 0) {
+          wolf.attackTime = 0.56; wolf.attackCooldown = 1.35; wolf.attackHit = false;
+        }
+      } else if (wolf.hurtTime <= 0) {
+        const speed = time < wolf.runUntil ? 90 : 18;
+        wolf.x += wolf.dir * speed * dt;
+        if (wolf.x < wolf.min) { wolf.x = wolf.min; wolf.dir = 1; }
+        if (wolf.x > wolf.max) { wolf.x = wolf.max; wolf.dir = -1; }
+      }
+      // Wolf bite hitbox activates once near the middle of its attack animation.
+      if (wolf.attackTime > 0.22 && wolf.attackTime < 0.34 && !wolf.attackHit) {
+        wolf.attackHit = true;
+        if (distance < 58 && sidePlayer.invulnTime <= 0 && sidePlayer.deadTime <= 0) {
+          stats.health = Math.max(0, stats.health - Math.max(1, 3 - stats.defense));
+          sidePlayer.hurtTime = 0.28; sidePlayer.invulnTime = 0.9;
+          sidePlayer.vx = -wolf.dir * 78;
+          if (stats.health <= 0) { sidePlayer.deadTime = 0.95; sidePlayer.attackTime = 0; notice = 'You were overwhelmed. Returning to the trail...'; noticeUntil = time + 2; }
+          else { notice = 'A wolf hit you!'; noticeUntil = time + 1.2; }
+        }
+      }
+      // Keep the player from walking through a living wolf; the attack hitbox is separate.
+      const bodyGap = sidePlayer.x - wolf.x;
+      if (Math.abs(bodyGap) < 22 && Math.abs(sidePlayer.y - SIDE_GROUND_Y) < 8) {
+        sidePlayer.x = wolf.x + (bodyGap < 0 ? -22 : 22);
+        sidePlayer.vx = 0;
+      }
+    }
+  }
+
+  function drawKnightFrame(sheet, frame, columns, rows, x, y, width = 56, height = 56, flip = false) {
+    if (!sheet || !sheet.complete || !sheet.naturalWidth) return false;
+    const cellW = sheet.naturalWidth / columns, cellH = sheet.naturalHeight / rows;
+    const col = frame % columns, row = Math.floor(frame / columns) % rows;
+    const cropX = Math.max(0, Math.floor((cellW - cellH) / 2));
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    if (flip) { ctx.translate(x + width, 0); ctx.scale(-1, 1); x = 0; }
+    ctx.drawImage(sheet, col * cellW + cropX, row * cellH, Math.min(cellH, cellW), cellH, x, y, width, height);
+    ctx.restore(); return true;
+  }
+
   function drawSidePlayer() {
     const x = Math.round(sidePlayer.x);
     const y = Math.round(sidePlayer.y);
+    if (equipment.armor && knightSprites.idle && knightSprites.idle.complete && knightSprites.idle.naturalWidth) {
+      const sheet = sidePlayer.deadTime > 0 ? knightSprites.death : sidePlayer.hurtTime > 0 ? knightSprites.hurt : sidePlayer.attackTime > 0 ? knightSprites.attacks : !sidePlayer.onGround ? knightSprites.jump : sidePlayer.moving ? knightSprites.run : knightSprites.idle;
+      let frame = 0, cols = 2, rows = 4;
+      if (sheet === knightSprites.attacks) { cols = 8; rows = 5; frame = Math.min(7, Math.floor((0.34 - sidePlayer.attackTime) / 0.34 * 8)); }
+      else if (sheet === knightSprites.death || sheet === knightSprites.hurt) { cols = 2; rows = 2; frame = Math.min(3, Math.floor(time * 7)); }
+      else { frame = Math.floor(time * (sheet === knightSprites.run ? 9 : 3)) % 8; }
+      if (sidePlayer.facing < 0) {
+        drawKnightFrame(sheet, frame, cols, rows, x - 29, y - 57, 58, 58, true);
+      } else drawKnightFrame(sheet, frame, cols, rows, x - 29, y - 57, 58, 58, false);
+      return;
+    }
     if (!playerSheetReady) {
       ctx.fillStyle = 'rgba(0,0,0,.25)';
       ctx.fillRect(x - 9, y - 1, 19, 3);
@@ -1896,14 +2004,16 @@ const Overworld = (() => {
     const x = 62, y = 79;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    if (playerSheetReady) {
+    if (equipment.armor && knightSprites.idle && knightSprites.idle.complete && knightSprites.idle.naturalWidth) {
+      drawKnightFrame(knightSprites.idle, 0, 2, 4, x + 4, y + 3, 56, 56, false);
+    } else if (playerSheetReady) {
       ctx.drawImage(playerSheet, 0, 2 * 32, 32, 32, x, y, 64, 64);
     } else {
       ctx.fillStyle = '#342c39'; ctx.fillRect(x + 18, y + 18, 28, 42);
       ctx.fillStyle = '#e0b27a'; ctx.fillRect(x + 21, y + 5, 22, 17);
       ctx.fillStyle = '#292331'; ctx.fillRect(x + 18, y + 3, 28, 7);
     }
-    if (equipment.armor) drawKnightArmorOverlay(x, y, 2);
+    if (!equipment.armor && equipment.armor) drawKnightArmorOverlay(x, y, 2);
     ctx.restore();
   }
 
@@ -2021,7 +2131,7 @@ const Overworld = (() => {
     ctx.fillStyle = 'rgba(8,9,16,.72)';
     ctx.fillRect(0, 226, canvas.width, 14);
     ctx.fillStyle = '#f0e5ce'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-    ctx.fillText('A / D MOVE    SPACE OR ↑ JUMP    E INTERACT', 5, 236);
+    ctx.fillText('A/D MOVE  SPACE JUMP  J ATTACK  E INTERACT', 5, 236);
 
     if (Math.abs(sidePlayer.x - 144) < 18 && Math.abs(sidePlayer.y - 164) < 52) {
       ctx.fillStyle = 'rgba(15,12,24,.97)'; ctx.fillRect(82 - sideCameraX, 176, 124, 16);
@@ -2069,18 +2179,27 @@ const Overworld = (() => {
     // the separate raised platforms here; keep the continuous ground invisible.
     FOREST_SIDE_PLATFORMS.slice(1).forEach(drawSidePlatform);
 
-    // The supplied werewolf walk/run sheets are used as roaming forest creatures.
+    // The supplied werewolf walk/run/attack/hurt/death sheets drive the forest combatants.
     const creatures = [
       { x: 1370, walk: introBlackWalk, run: introBlackRun, phase: 0, framesWalk: 11, framesRun: 9 },
       { x: 2760, walk: introRedWalk, run: introRedRun, phase: 2.7, framesWalk: 11, framesRun: 9 }
     ];
     creatures.forEach((creature, i) => {
       const wolfState = sideWolves[i];
+      if (wolfState.dead) {
+        const deadSheet = wolfCombatSprites[i].dead;
+        if (deadSheet.complete && deadSheet.naturalWidth) {
+          const frame = Math.min(1, Math.floor(wolfState.deadTime * 4));
+          ctx.drawImage(deadSheet, frame * 128, 0, 128, 128, wolfState.x - 36, SIDE_GROUND_Y - 68, 72, 72);
+        }
+        return;
+      }
+      const combat = wolfCombatSprites[i];
       const running = time < wolfState.runUntil;
-      const sheet = running ? creature.run : creature.walk;
+      const sheet = wolfState.attackTime > 0 && combat.attack.complete ? combat.attack : wolfState.hurtTime > 0 && combat.hurt.complete ? combat.hurt : (running ? creature.run : creature.walk);
       if (!sheet || !sheet.complete || !sheet.naturalWidth) return;
-      const frames = running ? creature.framesRun : creature.framesWalk;
-      const frame = Math.floor(time * (running ? 10 : 6) + creature.phase) % frames;
+      const frames = sheet === combat.attack ? 6 : sheet === combat.hurt ? 2 : running ? creature.framesRun : creature.framesWalk;
+      const frame = sheet === combat.attack ? Math.min(5, Math.floor((0.56 - wolfState.attackTime) / 0.56 * 6)) : sheet === combat.hurt ? Math.min(1, Math.floor(time * 8)) : Math.floor(time * (running ? 10 : 6) + creature.phase) % frames;
       const w = 72, h = 72;
       ctx.save();
       if (wolfState.dir < 0) {
@@ -2090,6 +2209,10 @@ const Overworld = (() => {
         ctx.drawImage(sheet, frame * 128, 0, 128, 128, wolfState.x - w / 2, SIDE_GROUND_Y - h + 4, w, h);
       }
       ctx.restore();
+      if (!wolfState.dead) {
+        ctx.fillStyle = 'rgba(10,10,18,.78)'; ctx.fillRect(wolfState.x - 20, SIDE_GROUND_Y - 75, 40, 5);
+        ctx.fillStyle = '#d65b57'; ctx.fillRect(wolfState.x - 19, SIDE_GROUND_Y - 74, 38 * (wolfState.hp / wolfState.maxHp), 3);
+      }
     });
 
     // A quiet trail marker signals the far side without abruptly ending the level.
@@ -2715,6 +2838,10 @@ const Overworld = (() => {
       e.stopPropagation();
       return;
     }
+    if ((k === 'j' || k === 'k' || k === 'f') && platformMode && platformScene === 'forest') {
+      if (!e.repeat && !panel) sideAttackQueued = true;
+      e.preventDefault(); e.stopPropagation(); return;
+    }
     if (k === 'i' || k === 'c') {
       if (e.repeat) return;
       panel = panel === (k === 'i' ? 'inventory' : 'stats') ? null : (k === 'i' ? 'inventory' : 'stats');
@@ -2772,7 +2899,9 @@ const Overworld = (() => {
     sidePlayer.y = SIDE_GROUND_Y; sidePlayer.vx = 0; sidePlayer.vy = 0; sidePlayer.onGround = true;
     sidePlayer.facing = 1; sidePlayer.moving = false; sidePlayer.walk = 0;
     dadNoteRead = !!(saveData && saveData.sideNoteRead);
-    sideJumpQueued = false; sideCameraX = Math.max(0, sidePlayer.x - canvas.width * 0.43);
+    sideJumpQueued = false; sideAttackQueued = false; sidePlayer.attackTime = 0; sidePlayer.attackCooldown = 0; sidePlayer.hurtTime = 0; sidePlayer.invulnTime = 0; sidePlayer.deadTime = 0;
+    sideWolves.forEach((wolf, i) => { wolf.x = wolf.home; wolf.hp = wolf.maxHp; wolf.dead = false; wolf.deadTime = 0; wolf.respawn = 0; wolf.attackTime = 0; wolf.attackCooldown = 0.7 + i * 0.4; wolf.hurtTime = 0; wolf.attackHit = false; });
+    sideCameraX = Math.max(0, sidePlayer.x - canvas.width * 0.43);
     insideHouse = platformScene === 'house';
     introActive = !saveData || typeof saveData !== 'object';
     introTime = 0; introSoundChar = 0; introTextSegment = ''; introLastReveal = 0;
