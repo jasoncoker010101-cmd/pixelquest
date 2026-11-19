@@ -152,16 +152,80 @@
     padding: .75rem; background: #25131c; color: #ffe4e4; border: 1px solid #ba6269;
     text-align: center; font: 16px system-ui;
   }
+  #lock {
+    position: fixed; z-index: 9999; inset: 0; overflow: auto;
+    display: grid; place-items: center; padding: clamp(14px, 4vw, 55px);
+    color: #f5e7d4; background: radial-gradient(ellipse at 80% 28%, #291a2a, #0b090e 71%);
+    font: 14px/1.55 system-ui, sans-serif;
+  }
+  .gate-frame {
+    position: relative; width: min(100%, 1100px); min-width: 0;
+    display: grid; grid-template-columns: minmax(320px, .82fr) minmax(0, 1.18fr);
+    border: 1px solid #66484a; background: #100d14; box-shadow: 0 26px 80px #050306b0;
+  }
+  .gate-panel { padding: clamp(25px, 4.1vw, 58px); }
+  .gate-brand, .gate-kicker, .gate-plate, .gate-version, .gate-heading,
+  #gate-form label, #unlock, #gate-motion { font-family: "Courier New", monospace; }
+  .gate-brand { margin: 0 0 34px; font-size: 13px; font-weight: bold; color: #efba7e; letter-spacing: .22em; }
+  .gate-brand::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 10px; background: #f49b76; transform: rotate(45deg); vertical-align: 1px; }
+  .gate-kicker { margin: 0 0 10px; color: #ec9a8f; font-size: 11px; font-weight: bold; letter-spacing: .2em; }
+  .gate-heading { margin: 0; color: #fff0d5; font-size: clamp(36px, 5.1vw, 78px); line-height: .89; letter-spacing: -.07em; text-shadow: 3px 4px #5b333e; }
+  #gate-copy { max-width: 29ch; margin: 23px 0 23px; color: #d4bcc1; }
+  #gate-form label { display: block; margin-bottom: 8px; color: #ead7c5; font-size: 11px; font-weight: bold; letter-spacing: .13em; text-transform: uppercase; }
+  .gate-entry { display: grid; grid-template-columns: minmax(0, 1fr) max-content; gap: 7px; }
+  #code, #unlock, #gate-motion { min-height: 44px; border: 1px solid #78555a; border-radius: 0; }
+  #code { min-width: 0; width: 100%; padding: 9px 11px; color: #fff0df; background: #19131d; font: 16px system-ui, sans-serif; }
+  #code::placeholder { color: #ae929e; }
+  #unlock { padding: 0 14px; cursor: pointer; color: #251217; background: #eea074; font-size: 12px; font-weight: bold; }
+  #unlock:hover { background: #ffc098; }
+  #lock :focus-visible { outline: 2px solid #ffd58d; outline-offset: 3px; }
+  #error { min-height: 1.55em; margin: 7px 0 0; color: #ff9a9a; font-size: 13px; }
+  .gate-version { margin: 8px 0 0; color: #b196a4; font-size: 10px; letter-spacing: .14em; }
+  .gate-scene { position: relative; isolation: isolate; min-height: 400px; overflow: hidden; border-left: 1px solid #66484a; background: #221925 url('./assets/hollow/middle.png') center 60% / cover; }
+  #gate-fight { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 0; background: transparent; filter: none; }
+  .gate-scene::after { content: ""; position: absolute; z-index: 1; inset: 0; pointer-events: none; background: linear-gradient(#100b17bb, transparent 25%, transparent 72%, #100b17e8), repeating-linear-gradient(transparent 0 3px, #11081820 3px 4px); }
+  .gate-plate { position: absolute; z-index: 2; top: 16px; left: 18px; margin: 0; color: #e9bca4; font-size: 10px; letter-spacing: .17em; text-shadow: 0 1px #000; }
+  .gate-plate strong { display: block; margin-top: 2px; color: #fff0d5; font-size: 13px; }
+  #gate-motion { position: absolute; right: 15px; bottom: 13px; z-index: 2; padding: 0 10px; color: #f4ddcb; background: #17101de8; font-size: 10px; letter-spacing: .08em; cursor: pointer; }
+  #gate-motion:hover { background: #372531; }
+  @media (max-width: 710px) {
+    .gate-frame { grid-template-columns: minmax(0, 1fr); max-width: 465px; }
+    .gate-scene { order: -1; min-height: 0; aspect-ratio: 1.67; border-left: none; border-bottom: 1px solid #66484a; }
+    .gate-panel { padding: 22px clamp(17px, 5vw, 28px); }
+    .gate-brand { margin-bottom: 15px; }
+    .gate-heading { font-size: clamp(37px, 10vw, 55px); }
+    .gate-heading br { display: none; }
+    #gate-copy { margin: 13px 0 17px; }
+    .gate-plate { top: 9px; left: 11px; }
+    #gate-motion { bottom: 8px; right: 9px; }
+  }
 </style>
 </head>
 <body>
- <div id="lock" style="position:fixed;inset:0;background:#111;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:sans-serif;z-index:9999;">
-  <h1>🚧 This site is in pre-alpha</h1>
-  <p>Enter the access code to continue.</p>
-  <input id="code" type="password" placeholder="Access code" style="padding:10px;font-size:16px;border-radius:6px;border:none;text-align:center;">
-  <button id="unlock" style="margin-top:10px;padding:10px 20px;font-size:16px;border:none;border-radius:6px;cursor:pointer;">Unlock</button>
-  <p id="error" style="color:#ff6b6b;min-height:1.2em;"></p>
-</div>
+<main id="lock" aria-labelledby="gate-heading">
+  <div class="gate-frame">
+    <section class="gate-panel">
+      <p class="gate-brand">PIXELQUEST</p>
+      <p class="gate-kicker">PRE-ALPHA</p>
+      <h1 class="gate-heading" id="gate-heading">COMING<br> SOON</h1>
+      <p id="gate-copy">Have a playtest code? Enter it to play the pre-alpha.</p>
+      <form id="gate-form" aria-describedby="gate-copy">
+        <label for="code">Access code</label>
+        <div class="gate-entry">
+          <input id="code" type="password" placeholder="Enter code" autocomplete="off" spellcheck="false" aria-describedby="error">
+          <button id="unlock" type="submit">Unlock</button>
+        </div>
+        <p id="error" role="status" aria-live="polite"></p>
+      </form>
+      <p class="gate-version">EARLY ACCESS PLAYTEST</p>
+    </section>
+    <div class="gate-scene">
+      <canvas id="gate-fight" width="360" height="240" aria-hidden="true"></canvas>
+      <p class="gate-plate">BOSS ENCOUNTER<strong>THE WITCHMIRE</strong></p>
+      <button id="gate-motion" type="button" hidden>Pause fight</button>
+    </div>
+  </div>
+</main>
 <dialog id="account-dialog" aria-labelledby="account-heading">
   <form id="account-form">
     <h2 id="account-heading">Account</h2>
@@ -178,23 +242,138 @@
 <script>
   const SECRET_CODE = "letmein"; // change this to your code
 
-  function tryUnlock() {
-    const input = document.getElementById("code").value;
-    if (input === SECRET_CODE) {
+  const gateCode = document.getElementById("code");
+  const gateError = document.getElementById("error");
+  document.getElementById("gate-form").addEventListener("submit", e => {
+    e.preventDefault();
+    if (gateCode.value === SECRET_CODE) {
       document.getElementById("lock").remove();
+      const shell = document.getElementById("tvShell");
+      shell.inert = false;
+      document.getElementById("game").focus({ preventScroll: true });
       document.dispatchEvent(new Event('pixelquest-unlocked'));
     } else {
-      document.getElementById("error").textContent = "Wrong code, try again.";
+      gateCode.setAttribute("aria-invalid", "true");
+      gateError.textContent = gateCode.value ? "Wrong code. Try again." : "Enter your access code.";
+      gateCode.focus();
     }
-  }
-
-  document.getElementById("unlock").addEventListener("click", tryUnlock);
-  document.getElementById("code").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") tryUnlock();
+  });
+  gateCode.addEventListener("input", () => {
+    gateCode.removeAttribute("aria-invalid");
+    gateError.textContent = "";
   });
 </script>
-<div class="tv-shell" id="tvShell">
-  <canvas id="game" width="320" height="240" aria-label="PixelQuest game">PixelQuest needs a browser with Canvas support.</canvas>
+<script>
+(() => {
+  const screen = document.getElementById('gate-fight');
+  const motion = document.getElementById('gate-motion');
+  const g = screen.getContext('2d');
+  if (!g) return;
+  const load = src => { const img = new Image(); img.src = src; return img; };
+  const back = load('./assets/hollow/back.png'), woods = load('./assets/hollow/middle.png');
+  const ground = load('./assets/hollow/ground.png');
+  const knightIdle = load('./assets/knight/Idle.png'), knightSwing = load('./assets/knight/Attacks.png');
+  const skarnIdle = load('./assets/skarn/idle.png'), skarnAxe = load('./assets/skarn/axe.png');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  const ready = img => img.complete && img.naturalWidth > 0;
+  const clamp01 = v => Math.max(0, Math.min(1, v));
+  const smooth = v => { v = clamp01(v); return v * v * (3 - 2 * v); };
+  const width = screen.width, height = screen.height, floor = 181;
+  let blood = true;
+  try { blood = localStorage.getItem('pixelquest-blood-effects') !== 'off'; } catch {}
+  let running = !reduced.matches, age = running ? 0 : 1.65, last = 0, raf = 0;
+
+  function draw(t) {
+    g.imageSmoothingEnabled = false;
+    g.fillStyle = '#171123'; g.fillRect(0, 0, width, height);
+    if (ready(back)) g.drawImage(back, 0, 0, width, height);
+    const amber = g.createRadialGradient(220, 82, 5, 220, 82, 132);
+    amber.addColorStop(0, '#a85d523f'); amber.addColorStop(1, '#632b4e00');
+    g.fillStyle = amber; g.fillRect(0, 0, width, height);
+    if (ready(woods)) g.drawImage(woods, 0, -6, width, height);
+    g.fillStyle = '#64273a25'; g.fillRect(0, 0, width, height);
+    g.fillStyle = '#211a26'; g.fillRect(0, floor, width, height - floor);
+    if (ready(ground)) {
+      for (let x = 0; x < width; x += 128) g.drawImage(ground, x, floor - 1, 128, 96);
+    }
+    g.fillStyle = '#24182950'; g.fillRect(0, floor + 2, width, height - floor);
+    for (let i = 0; i < 22; i++) {
+      const x = (i * 73 + t * (3 + i % 4)) % width;
+      const y = 46 + (i * 19 % 124) + Math.sin(t * 1.8 + i) * 5;
+      g.fillStyle = i % 4 ? '#eaa89456' : '#ffc080a0';
+      g.fillRect(Math.round(x), Math.round(y), i % 4 ? 1 : 2, 1);
+    }
+    const slash = t >= 1.18 && t < 1.95, riposte = t >= 3.15 && t < 4.78;
+    const advance = smooth((t - .52) / .75) * (1 - smooth((t - 4.02) / .92));
+    const recoil = smooth((t - 3.68) / .17) * (1 - smooth((t - 4.12) / .35));
+    const kick = smooth((t - 1.57) / .18) * (1 - smooth((t - 1.97) / .4));
+    const kx = Math.round(116 + advance * 48 - recoil * 21);
+    const sx = Math.round(236 + kick * 10 - smooth((t - 3.43) / .32) * (1 - smooth((t - 4.09) / .59)) * 17);
+    g.fillStyle = '#110b16a8';
+    for (const [x, r] of [[kx, 17], [sx, 30]]) {
+      g.beginPath(); g.ellipse(x, floor, r, 4, 0, 0, Math.PI * 2); g.fill();
+    }
+    const mino = riposte && ready(skarnAxe) ? skarnAxe : skarnIdle;
+    if (ready(mino)) {
+      const frame = mino === skarnAxe ? Math.min(15, Math.floor((t - 3.15) * 10)) : Math.floor(t * 9) % 16;
+      g.drawImage(mino, frame * 216, 0, 216, 128, sx - 132, floor - 122, 216, 128);
+    }
+    const sword = slash && ready(knightSwing) ? knightSwing : knightIdle;
+    if (ready(sword)) {
+      const frame = sword === knightSwing ? [15,16,17,18,19,20,21,22][Math.min(7, Math.floor((t - 1.18) * 11))] : Math.floor(t * 7) % 8;
+      const cols = sword === knightSwing ? 8 : 2;
+      g.drawImage(sword, frame % cols * 128, Math.floor(frame / cols) * 64, 128, 64, kx - 62, floor - 64, 128, 64);
+    }
+    for (const [beat, x, y, dir] of [[1.57, 203, 133, 1], [3.69, 161, 148, -1]]) {
+      const p = t - beat;
+      if (p < 0 || p > 1.14) continue;
+      for (let i = 0; i < 7 && p < .33; i++) {
+        g.fillStyle = i % 3 ? '#ffc084' : '#fff2d1';
+        g.fillRect(Math.round(x + dir * p * (22 + i * 9)), Math.round(y - p * (19 + i % 4 * 23) + i * 3 - 10), 2, 2);
+      }
+      if (!blood) continue;
+      for (let i = 0; i < 21; i++) {
+        const dx = (22 + i * 17 % 87) * dir * p;
+        const py = y - (30 + (i * 43 % 126)) * p + 250 * p * p;
+        const landed = py >= floor;
+        if (landed && i % 3 === 0) continue;
+        const size = landed ? 4 + i % 4 : 2 + i % 3;
+        g.globalAlpha = Math.min(1, (1.14 - p) * 2.9);
+        g.fillStyle = ['#ed384f', '#bc2944', '#781b35'][i % 3];
+        g.fillRect(Math.round(x + dx * (landed ? .8 : 1)), Math.round(Math.min(py, floor - 1)), size, landed ? 1 : size - 1);
+      }
+      g.globalAlpha = 1;
+    }
+  }
+  function tick(now) {
+    if (!running || !screen.isConnected) return;
+    if (!last || now - last >= 32) {
+      age = (age + (last ? Math.min(80, now - last) / 1000 : 0)) % 6.6;
+      last = now; draw(age);
+    }
+    raf = requestAnimationFrame(tick);
+  }
+  function sync() {
+    cancelAnimationFrame(raf); last = 0;
+    motion.textContent = running ? 'Pause fight' : 'Play fight';
+    draw(age);
+    if (running) raf = requestAnimationFrame(tick);
+  }
+  motion.addEventListener('click', () => { running = !running; sync(); });
+  const followMotion = e => { running = !e.matches; sync(); };
+  reduced.addEventListener('change', followMotion);
+  document.addEventListener('pixelquest-unlocked', () => {
+    running = false; cancelAnimationFrame(raf);
+    reduced.removeEventListener('change', followMotion);
+  }, { once: true });
+  for (const img of [back, woods, ground, knightIdle, knightSwing, skarnIdle, skarnAxe]) {
+    img.addEventListener('load', () => { if (!running && screen.isConnected) draw(age); });
+  }
+  motion.hidden = false; sync();
+})();
+</script>
+<div class="tv-shell" id="tvShell" inert>
+  <canvas id="game" width="320" height="240" tabindex="-1" aria-label="PixelQuest game">PixelQuest needs a browser with Canvas support.</canvas>
   <button type="button" class="tv-fullscreen-btn" id="tvFullscreen" aria-label="Enter TV fullscreen">⛶ TV FULLSCREEN</button>
   <div class="mobile-controls" role="group" aria-label="Touch game controls">
     <div class="mobile-pad" role="group" aria-label="Directional pad. Slide your thumb to change direction.">
@@ -315,7 +494,8 @@ function readEmailReturn() {
 }
 const emailReturnNotice = readEmailReturn();
 if (emailReturnNotice) {
-  document.querySelector('#lock p').textContent = emailReturnNotice + ' Unlock the game to continue.';
+  const copy = document.getElementById('gate-copy');
+  if (copy) copy.textContent = emailReturnNotice + ' Unlock the game to continue.';
   document.addEventListener('pixelquest-unlocked', () => {
     if (!sessionUser()) {
       openAccountForm('signin');
@@ -1900,7 +2080,12 @@ function frame(now) {
 }
 window.render_game_to_text = () => inWorld ? Overworld.renderState() :
   JSON.stringify({ phase: document.getElementById('lock') ? 'locked' : state.screen, selection: state.sel, bloodEffects: settings.blood });
-requestAnimationFrame(frame);
+const startGameFrames = () => { last = performance.now(); requestAnimationFrame(frame); };
+if (document.getElementById('lock')) {
+  document.addEventListener('pixelquest-unlocked', startGameFrames, { once: true });
+} else {
+  startGameFrames();
+}
 </script>
 </body>
 </html>
