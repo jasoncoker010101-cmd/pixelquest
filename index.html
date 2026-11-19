@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Pixelquest</title>
 <style>
   * { box-sizing: border-box; }
@@ -90,6 +91,16 @@
   @media (pointer: coarse) {
     .tv-shell { -webkit-tap-highlight-color: transparent; }
   }
+  #account-dialog { width: min(92vw, 400px); max-height: 90dvh; overflow: auto; border: 1px solid #a78355; border-radius: 12px; padding: 24px; background: #19151e; color: #f6ead5; font: 15px/1.5 system-ui, sans-serif; }
+  #account-dialog::backdrop { background: #07060bd9; }
+  #account-dialog h2 { color: #ffe2aa; margin: 0 0 12px; font: bold 20px monospace; }
+  #account-dialog label { display: block; margin: 12px 0; }
+  #account-dialog label[hidden] { display: none; }
+  #account-dialog input { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; border: 1px solid #947956; border-radius: 5px; background: #0f0d14; color: #fff; font: 16px system-ui; }
+  #account-dialog button { min-height: 42px; border: 1px solid #9c805b; border-radius: 5px; padding: 6px 12px; background: #292130; color: #fff1d3; font: inherit; cursor: pointer; }
+  #account-submit { background: #684832 !important; }
+  #account-dialog :focus-visible { outline: 2px solid #ffdca1; outline-offset: 2px; }
+  #account-feedback { color: #ffdb9c; min-height: 1.5em; }
 </style>
 </head>
 <body>
@@ -100,6 +111,18 @@
   <button id="unlock" style="margin-top:10px;padding:10px 20px;font-size:16px;border:none;border-radius:6px;cursor:pointer;">Unlock</button>
   <p id="error" style="color:#ff6b6b;min-height:1.2em;"></p>
 </div>
+<dialog id="account-dialog" aria-labelledby="account-heading">
+  <form id="account-form">
+    <h2 id="account-heading">Account</h2>
+    <p id="account-help"></p>
+    <label id="account-email-row">Email<input id="account-email" type="email" maxlength="254" autocomplete="email"></label>
+    <label id="account-password-row">Password<input id="account-password" type="password" maxlength="128" autocomplete="current-password"></label>
+    <label id="account-name-row">Player name<input id="account-name" type="text" minlength="3" maxlength="24" autocomplete="nickname"></label>
+    <p id="account-feedback" role="status" aria-live="polite"></p>
+    <button id="account-submit" type="submit">Continue</button>
+    <button id="account-close" type="button">Back</button>
+  </form>
+</dialog>
 <script>
   const SECRET_CODE = "letmein"; // change this to your code
 
@@ -139,6 +162,7 @@
 <script>
 (async function pixelquestUpdateLoader(){
   const repoApi = 'https://api.github.com/repos/jasoncoker010101-cmd/pixelquest/branches/main';
+  const official = location.hostname === 'jasoncoker010101-cmd.github.io';
   const params = new URLSearchParams(location.search);
   const currentRev = params.get('pqrev') || '';
   async function getLatestRevision(){
@@ -149,7 +173,7 @@
       return data && data.commit && data.commit.sha ? data.commit.sha : '';
     } catch (_) { return ''; }
   }
-  const latest = await getLatestRevision();
+  const latest = official ? await getLatestRevision() : '';
   if (latest && latest !== currentRev) {
     params.set('pqrev', latest);
     location.replace(location.pathname + '?' + params.toString() + location.hash);
@@ -160,7 +184,7 @@
   gameScript.src = 'world.js?rev=' + encodeURIComponent(window.PQ_REV);
   gameScript.onload = () => {
     // Check periodically so an already-open game notices new commits too.
-    setInterval(async () => {
+    if (official) setInterval(async () => {
       const newer = await getLatestRevision();
       if (newer && newer !== window.PQ_REV) {
         const next = new URL(location.href);
@@ -205,7 +229,14 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 let t = 0, last = performance.now(), message = '';
-const settings = { music: true, sound: true };
+const settings = { music: true, sound: true, blood: true };
+const BLOOD_PREF = 'pixelquest-blood-effects';
+try { settings.blood = localStorage.getItem(BLOOD_PREF) !== 'off'; } catch {}
+function toggleBloodEffects() {
+  settings.blood = !settings.blood;
+  try { localStorage.setItem(BLOOD_PREF, settings.blood ? 'on' : 'off'); } catch {}
+  if (typeof Overworld !== 'undefined') Overworld.setBloodEffects(settings.blood);
+}
 const state = { screen: 'title', sel: 0 };
 let inWorld = false;
 let activeSlot = 0;
@@ -215,19 +246,37 @@ const CLOUD_KEY = 'sb_publishable_xLrZKJZnifoDQFvBXFbgug_5DmzsypK';
 const AUTH_KEY = 'pixelquest-auth-session';
 let cloudSession = null;
 let cloudProfile = null;
+let refreshInFlight = null;
+let enteringWorld = false;
+let accountMode = '';
+let accountBusy = false;
+const accountDialog = document.querySelector('#account-dialog');
+const accountForm = document.querySelector('#account-form');
+const accountEmail = document.querySelector('#account-email');
+const accountPassword = document.querySelector('#account-password');
+const accountName = document.querySelector('#account-name');
+const accountFeedback = document.querySelector('#account-feedback');
+const accountSubmit = document.querySelector('#account-submit');
+const accountClose = document.querySelector('#account-close');
+const slotWrites = new Map();
+const memorySlots = new Map();
+const sessionUser = () => cloudSession?.user?.id || null;
 try { cloudSession = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch { cloudSession = null; }
+if (!sessionUser() || !cloudSession.access_token) cloudSession = null;
 
 function storeSession(session) {
   cloudSession = session;
-  if (session) localStorage.setItem(AUTH_KEY, JSON.stringify(session));
-  else localStorage.removeItem(AUTH_KEY);
+  try {
+    if (session) localStorage.setItem(AUTH_KEY, JSON.stringify(session));
+    else localStorage.removeItem(AUTH_KEY);
+  } catch {}
 }
 
 async function authRequest(path, body) {
   const response = await fetch(CLOUD_URL + '/auth/v1/' + path, {
     method: 'POST',
     headers: { apikey: CLOUD_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body), signal: AbortSignal.timeout(12000)
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.msg || data.message || data.error_description || data.error || 'Account request failed.');
@@ -236,29 +285,33 @@ async function authRequest(path, body) {
 
 async function refreshCloudSession() {
   if (!cloudSession || !cloudSession.refresh_token) return false;
-  try {
-    const data = await authRequest('token?grant_type=refresh_token', { refresh_token: cloudSession.refresh_token });
-    storeSession(data);
-    return true;
-  } catch {
-    storeSession(null);
-    cloudProfile = null;
-    return false;
-  }
+  if (refreshInFlight) return refreshInFlight;
+  const old = cloudSession;
+  refreshInFlight = (async () => {
+    try {
+      const data = await authRequest('token?grant_type=refresh_token', { refresh_token: old.refresh_token });
+      if (cloudSession !== old || data.user?.id !== old.user.id) return false;
+      storeSession(data);
+      return true;
+    } catch { return false; }
+  })().finally(() => { refreshInFlight = null; });
+  return refreshInFlight;
 }
 
 async function cloudRequest(path, options = {}, retry = true) {
   if (!cloudSession) throw new Error('Sign in to use cloud saves.');
+  const session = cloudSession;
   const response = await fetch(CLOUD_URL + path, {
-    ...options,
+    ...options, signal: AbortSignal.timeout(12000),
     headers: {
       apikey: CLOUD_KEY,
-      Authorization: 'Bearer ' + cloudSession.access_token,
+      Authorization: 'Bearer ' + session.access_token,
       'Content-Type': 'application/json',
       ...(options.headers || {})
     }
   });
-  if (response.status === 401 && retry && await refreshCloudSession()) return cloudRequest(path, options, false);
+  if (response.status === 401 && retry && sessionUser() === session.user.id &&
+      (cloudSession !== session || await refreshCloudSession()) && sessionUser() === session.user.id) return cloudRequest(path, options, false);
   const body = response.status === 204 ? null : await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.message || body.details || body.hint || 'Cloud request failed.');
   return body;
@@ -302,29 +355,71 @@ async function deleteCloudSlot(slot) {
   });
 }
 
-async function signInOrCreate(createAccount) {
-  const email = prompt('Enter your email address:');
-  if (!email) return;
-  const password = prompt('Enter your password (at least 6 characters):');
-  if (!password) return;
+function openAccountForm(mode) {
+  accountMode = mode;
+  accountForm.reset(); accountFeedback.textContent = '';
+  const profile = mode === 'profile', signup = mode === 'signup';
+  document.querySelector('#account-heading').textContent = profile ? 'Player profile' : signup ? 'Create an account' : 'Sign in';
+  document.querySelector('#account-help').textContent = profile ? 'Change the name shown in your account.' :
+    signup ? 'Use an email you can open. You’ll need to confirm it before signing in.' : 'Sign in to access your own save slots.';
+  for (const [field, visible] of [[accountEmail,!profile],[accountPassword,!profile],[accountName,profile || signup]]) {
+    field.closest('label').hidden = !visible;
+    field.disabled = !visible;
+    field.required = visible;
+  }
+  accountPassword.minLength = signup ? 6 : 1;
+  accountPassword.autocomplete = signup ? 'new-password' : 'current-password';
+  accountName.value = profile ? (cloudProfile?.username || '') : '';
+  accountSubmit.textContent = profile ? 'Save name' : signup ? 'Create account' : 'Sign in';
+  accountDialog.showModal();
+  (profile ? accountName : accountEmail).focus();
+}
+accountClose.addEventListener('click', () => { if (!accountBusy) accountDialog.close(); });
+accountDialog.addEventListener('cancel', e => { if (accountBusy) e.preventDefault(); });
+accountDialog.addEventListener('close', () => { if (!accountDialog.open) accountPassword.value = ''; });
+accountForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  if (accountBusy) return;
+  const mode = accountMode, name = accountName.value.trim();
+  if (mode !== 'signin' && name.length < 3) { accountFeedback.textContent = 'Enter at least 3 characters for your player name.'; return; }
+  accountBusy = accountSubmit.disabled = accountClose.disabled = true;
+  accountFeedback.textContent = mode === 'signup' ? 'Creating account…' : mode === 'profile' ? 'Saving name…' : 'Signing in…';
   try {
-    const data = await authRequest(createAccount ? 'signup' : 'token?grant_type=password', { email: email.trim(), password });
+    if (mode === 'profile') {
+      await saveCloudProfile(name); message = 'Player name updated.'; accountDialog.close(); return;
+    }
+    const payload = { email: accountEmail.value.trim(), password: accountPassword.value };
+    if (mode === 'signup') payload.data = { player_name: name };
+    const data = await authRequest(mode === 'signup' ? 'signup' : 'token?grant_type=password', payload);
     if (!data.access_token) {
-      message = 'Check your email to confirm your account, then sign in.';
+      if (mode !== 'signup') throw new Error('Could not sign in. Try again.');
+      accountPassword.value = '';
+      accountFeedback.textContent = 'Check your inbox and spam for a confirmation link. Then return here and choose Sign In. If you already have an account, try signing in now.';
       return;
     }
+    if (!data.user?.id) throw new Error('Could not load your account.');
+    cloudProfile = null;
     storeSession(data);
-    await loadCloudProfile();
-    if (!cloudProfile) {
-      const username = prompt('Choose a player name (3-24 characters):');
-      if (username && username.trim().length >= 3 && username.trim().length <= 24) await saveCloudProfile(username.trim());
-      else await saveCloudProfile('Player' + data.user.id.slice(0, 6));
+    state.sel = 0;
+    try {
+      await loadCloudProfile();
+      if (!cloudProfile) {
+        const chosen = String(data.user.user_metadata?.player_name || name).trim().slice(0, 24);
+        await saveCloudProfile(chosen.length >= 3 ? chosen : 'Player' + data.user.id.slice(0, 6));
+      }
+      message = 'Signed in.';
+      accountDialog.close();
+    } catch {
+      accountFeedback.textContent = 'You’re signed in, but your profile could not load. Close this form to continue.';
     }
-    message = 'Signed in! Cloud saves are ready.';
   } catch (error) {
-    message = error.message;
+    accountFeedback.textContent = error instanceof TypeError || error.name === 'TimeoutError' ?
+      'Could not reach the account service. Try again, or play as a guest.' : error.message;
+  } finally {
+    accountBusy = accountSubmit.disabled = accountClose.disabled = false;
+    if (sessionUser() && mode !== 'profile' && accountDialog.open) accountSubmit.disabled = true;
   }
-}
+});
 
 async function signOut() {
   try {
@@ -337,22 +432,15 @@ async function signOut() {
 }
 
 async function enterAccountAction(index) {
-  if (cloudSession && !cloudProfile) {
-    try { await loadCloudProfile(); } catch (error) { message = error.message; }
-  }
+  if (accountBusy || enteringWorld || accountDialog.open) return;
+  accountSubmit.disabled = false;
   if (!cloudSession) {
-    if (index === 0) await signInOrCreate(false);
-    else if (index === 1) await signInOrCreate(true);
+    if (index === 0) openAccountForm('signin');
+    else if (index === 1) openAccountForm('signup');
     else go('title');
   } else {
-    if (index === 0) {
-      const current = cloudProfile && cloudProfile.username || 'Player';
-      const username = prompt('Player name (3-24 characters):', current);
-      if (username && username.trim().length >= 3 && username.trim().length <= 24) {
-        try { await saveCloudProfile(username.trim()); message = 'Profile updated.'; }
-        catch (error) { message = error.message; }
-      }
-    } else if (index === 1) await signOut();
+    if (index === 0) openAccountForm('profile');
+    else if (index === 1) { accountBusy = true; try { await signOut(); } finally { accountBusy = false; state.sel = 0; } }
     else go('title');
   }
 }
@@ -362,8 +450,10 @@ async function syncCloudSlot(slot) {
   return await loadCloudSlot(slot);
 }
 
-function readSlot(slot) {
-  try { return JSON.parse(localStorage.getItem(SAVE_KEY + slot) || 'null'); }
+function slotKey(slot, user = sessionUser()) { return SAVE_KEY + (user ? user + '-' : '') + slot; }
+function readSlot(slot, user = sessionUser()) {
+  const key = slotKey(slot, user);
+  try { return JSON.parse(memorySlots.get(key) || localStorage.getItem(key) || 'null'); }
   catch { return null; }
 }
 
@@ -375,32 +465,44 @@ function slotLabels() {
 }
 
 function saveActiveSlot(data) {
-  try { localStorage.setItem(SAVE_KEY + activeSlot, JSON.stringify(data)); }
+  const slot = activeSlot, user = sessionUser(), key = slotKey(slot, user), snapshot = JSON.stringify({ ...data, savedAt: Date.now() });
+  memorySlots.set(key, snapshot);
+  try { localStorage.setItem(key, snapshot); }
   catch (error) { console.warn('Could not save Pixel Quest slot.', error); }
-  if (cloudSession) saveCloudSlot(activeSlot, data).catch(error => { message = 'Cloud save error: ' + error.message; });
+  if (user) {
+    const job = (slotWrites.get(key) || Promise.resolve()).catch(() => {}).then(async () => {
+      if (sessionUser() !== user) throw new Error('Account changed.');
+      await saveCloudSlot(slot, JSON.parse(snapshot));
+    });
+    slotWrites.set(key, job);
+    job.catch(() => { message = 'Cloud save failed. This browser kept a copy when storage was available.'; });
+  }
 }
 
 async function enterWorld(slot) {
-  activeSlot = slot || 1;
+  if (enteringWorld || inWorld || accountBusy || accountDialog.open || typeof Overworld === 'undefined') return;
+  enteringWorld = true;
+  const selected = slot || 1, user = sessionUser(), key = slotKey(selected, user);
   message = cloudSession ? 'LOADING CLOUD SAVE...' : '';
-  let save = readSlot(activeSlot);
-  if (cloudSession) {
-    // Never start with a local fallback when cloud loading fails: it could overwrite a real cloud save.
-    try {
-      const cloudSave = await syncCloudSlot(activeSlot);
-      save = cloudSave;
+  try {
+    let save = readSlot(selected, user);
+    if (user) {
+      await slotWrites.get(key)?.catch(() => {});
+      const cloudSave = await syncCloudSlot(selected);
+      if (sessionUser() !== user) return;
+      // If upload failed on a previous visit, keep the newer browser copy.
+      const current = readSlot(selected, user);
+      save = !cloudSave || (current?.savedAt || 0) > (cloudSave.savedAt || 0) ? current || cloudSave : cloudSave;
       try {
-        if (cloudSave) localStorage.setItem(SAVE_KEY + activeSlot, JSON.stringify(cloudSave));
-        else localStorage.removeItem(SAVE_KEY + activeSlot);
+        if (save) { const snapshot = JSON.stringify(save); memorySlots.set(key, snapshot); localStorage.setItem(key, snapshot); }
       } catch {}
-    } catch (error) {
-      message = 'CLOUD LOAD FAILED: ' + error.message;
-      return;
     }
-  }
-  inWorld = true;
-  titleMusic.pause(); titleMusic.volume = 0;
-  Overworld.init(canvas, exitWorld, save, saveActiveSlot);
+    activeSlot = selected;
+    titleMusic.pause(); titleMusic.volume = 0;
+    Overworld.init(canvas, exitWorld, save, saveActiveSlot);
+    inWorld = true; message = '';
+  } catch { message = 'Cloud load failed. Retry or sign out to play as a guest.'; }
+  finally { enteringWorld = false; }
 }
 
 function exitWorld(data) {
@@ -425,7 +527,7 @@ const motes = [...Array(22)].map((_, i) => ({
 const screens = {
   title:    { y: 134, items: () => ['START GAME', 'ACCOUNT', 'SETTINGS', 'CREDITS'] },
   slots:    { y: 138, items: slotLabels },
-  settings: { y: 140, items: () => ['MUSIC: ' + (settings.music ? 'ON' : 'OFF'), 'SOUND: ' + (settings.sound ? 'ON' : 'OFF'), 'BACK'] },
+  settings: { y: 140, items: () => ['MUSIC: ' + (settings.music ? 'ON' : 'OFF'), 'SOUND: ' + (settings.sound ? 'ON' : 'OFF'), 'BLOOD EFFECTS: ' + (settings.blood ? 'ON' : 'OFF'), 'BACK'] },
   credits:  { y: 198, items: () => ['BACK'] },
   account:  { y: 146, items: () => cloudSession ? ['PROFILE / NAME', 'SIGN OUT', 'BACK'] : ['SIGN IN', 'CREATE ACCOUNT', 'BACK'] },
   deleteConfirm: { y: 154, items: () => ['YES, DELETE', 'CANCEL'] }
@@ -437,6 +539,7 @@ function rectFor(s, i) { return { x: 18, y: s.y + i * 17 - 4, w: 148, h: 15 }; }
 function go(name) { state.screen = name; state.sel = 0; message = ''; }
 
 function activate() {
+  if (document.getElementById('lock') || enteringWorld || accountBusy || accountDialog.open) return;
   if (state.screen === 'title' && !menuPressed()) { pressStart(); return; }
   const id = state.screen, sel = state.sel;
   menuSfx('ui_confirm', 0.5);
@@ -445,31 +548,37 @@ function activate() {
   else if (id === 'deleteConfirm') {
     if (sel === 0) {
       const slot = state.deleteSlot;
-      try { localStorage.removeItem(SAVE_KEY + slot); } catch {}
-      if (cloudSession) {
-        deleteCloudSlot(slot).then(() => { message = 'SAVE SLOT ' + slot + ' DELETED'; })
-          .catch(error => { message = 'LOCAL SAVE DELETED; CLOUD ERROR: ' + error.message; });
-      } else message = 'SAVE SLOT ' + slot + ' DELETED';
-      go('slots');
+      const user = sessionUser(), key = slotKey(slot, user);
+      enteringWorld = true;
+      (async () => {
+        try {
+          await slotWrites.get(key)?.catch(() => {});
+          if (user) await deleteCloudSlot(slot);
+          try { localStorage.removeItem(key); } catch {}
+          memorySlots.delete(key);
+          slotWrites.delete(key); go('slots'); message = 'SAVE SLOT ' + slot + ' DELETED';
+        } catch { go('slots'); message = 'Could not delete cloud save.'; }
+        finally { enteringWorld = false; }
+      })();
     } else go('slots');
   }
   else if (id === 'account') { enterAccountAction(sel); }
   else if (id === 'settings') {
     if (sel === 0) settings.music = !settings.music;
     else if (sel === 1) settings.sound = !settings.sound;
+    else if (sel === 2) toggleBloodEffects();
     else go('title');
   }
   else if (id === 'credits') go('title');
 }
 
-function back() { if (state.screen === 'title' && !menuPressed()) { pressStart(); return; } if (state.screen === 'deleteConfirm') go('slots'); else if (state.screen !== 'title') go('title'); }
+function back() { if (enteringWorld || accountBusy || accountDialog.open) return; if (state.screen === 'title' && !menuPressed()) { pressStart(); return; } if (state.screen === 'deleteConfirm') go('slots'); else if (state.screen !== 'title') go('title'); }
 
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
-  if (inWorld) return;
+  if (inWorld || accountDialog.open || document.getElementById('lock')) return;
   if (k === 'o' && state.screen === 'title') { enterWorld(); return; }
   if (['arrowup', 'arrowdown', 'w', 's', ' ', 'enter', 'escape'].includes(k)) e.preventDefault();
-  if (document.getElementById('lock')) return;
   if (state.screen === 'title' && !menuPressed()) { if (!['shift', 'control', 'alt', 'meta', 'tab'].includes(k)) pressStart(); return; }
   const count = screens[state.screen].items().length;
   if (k === 'arrowup' || k === 'w') state.sel = (state.sel + count - 1) % count;
@@ -1479,7 +1588,7 @@ window.addEventListener('gamepaddisconnected', e => {
 });
 // Real keyboard use switches on-screen prompts back to keyboard keys.
 window.addEventListener('keydown', e => {
-  if (e.isTrusted && Overworld.setInputMode) Overworld.setInputMode('keyboard');
+  if (e.isTrusted && typeof Overworld !== 'undefined' && Overworld.setInputMode) Overworld.setInputMode('keyboard');
 }, true);
 function dispatchPadKey(key, down, repeat = false) {
   // The "Pad" code lets the game tell stick/D-pad input apart from the keyboard,
@@ -1592,6 +1701,8 @@ function frame(now) {
   drawCRT();
   requestAnimationFrame(frame);
 }
+window.render_game_to_text = () => inWorld ? Overworld.renderState() :
+  JSON.stringify({ phase: document.getElementById('lock') ? 'locked' : state.screen, selection: state.sel, bloodEffects: settings.blood });
 requestAnimationFrame(frame);
 </script>
 </body>

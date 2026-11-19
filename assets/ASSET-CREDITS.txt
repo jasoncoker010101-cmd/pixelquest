@@ -1,5 +1,10 @@
 Pixel Quest asset credits
 
+Regional scenery (assets/scenery):
+- Ansimuz Legacy Collection: https://ansimuz.itch.io/gothicvania-patreon-collection
+- Four in-game props from the project's existing Legacy archive: woods, pillars, crystal and plant.
+- Skarn, Mourn and Tidemaw sprites and the phase-two overlays are original to this game.
+
 Interior furniture spritesheet:
 - Original artist/source: Kenney (Kenney.nl)
 - Asset pack: Roguelike Indoors

@@ -4,6 +4,14 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
 
 **Play online:** https://jasoncoker010101-cmd.github.io/pixelquest/
 
+## Combat and account update
+
+- All seven bosses now reveal a second form at half health. The short cutscene can be skipped with the same controls as the first entrance; combat resumes with a brief grace period.
+- Skarn, Mourn and Tidemaw use their own pixel art. Both opening moon shots show the fracture, and each outdoor region has its own set of scenery and lighting accents. See `assets/ASSET-CREDITS.txt` for the scenery source.
+- Blood particles are optional. Switch them off in either the title settings or the in-game pause menu.
+- Choose **Account → Create Account**, enter an email, password and player name, then follow the email confirmation link before signing in. Guest saves are separate from account saves. Existing cloud saves are read from the same Supabase project.
+- If the cloud service cannot load a slot, retry or sign out to play as a guest. The game does not silently replace a cloud slot with a guest save.
+
 ## Features
 
 - **Retro presentation:** pixel art, a CRT-style frame, scanline effect, and a 320 × 240 game canvas.

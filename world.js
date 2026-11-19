@@ -11,7 +11,7 @@ const Overworld = (() => {
   let canvas, ctx, onExit, onSave, saveTimer = 0, map = [];
   let time = 0;
 
-  // The opening cinematic remains unchanged; all playable scenes now use side-view platform controls.
+  // All playable scenes use side-view platform controls.
   const SIDE_GROUND_Y = 196;
   const HOUSE_SIDE_WIDTH = 960;
   const FOREST_SIDE_WIDTH = 4000;
@@ -323,6 +323,7 @@ const Overworld = (() => {
   // ===========================================================================
   function introTexture(src) {
     const tex = { img: new Image(), data: null, w: 0, h: 0 };
+    tex.img.crossOrigin = 'anonymous';
     tex.img.onload = () => {
       try {
         const c = document.createElement('canvas');
@@ -502,6 +503,60 @@ const Overworld = (() => {
     return introSkyMoon;
   }
 
+  // A stepped fault line, not a soft streak: every segment snaps to the game grid.
+  const MOON_FAULTS = [
+    [[0.31,-1.02],[0.12,-0.65],[0.20,-0.49],[-0.08,-0.22],[0,-0.04],[-0.29,0.30],[-0.23,0.50],[-0.54,0.88]],
+    [[-0.08,-0.22],[-0.36,-0.24],[-0.60,-0.51],[-0.83,-0.52]],
+    [[0,-0.04],[0.27,0.07],[0.47,0.36],[0.91,0.43]],
+    [[-0.29,0.30],[-0.55,0.25],[-0.72,0.42]],
+    [[0.20,-0.49],[0.45,-0.55],[0.58,-0.76]]
+  ];
+  function drawFracturedMoon(x, y, r, surface, t, intensity = 0.7) {
+    x = Math.round(x); y = Math.round(y);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    if (surface) ctx.drawImage(surface, x - (r + 1), y - (r + 1));
+    else {
+      for (let row = -r; row <= r; row++) {
+        const half = Math.floor(Math.sqrt(r * r - row * row));
+        ctx.fillStyle = row > r * 0.55 ? '#8e90af' : '#d3d4e8';
+        ctx.fillRect(x - half, y + row, half * 2 + 1, 1);
+      }
+      ctx.fillStyle = '#a5a6c2';
+      ctx.fillRect(x - Math.round(r * 0.55), y - 3, Math.ceil(r / 3), 3);
+      ctx.fillRect(x + Math.round(r * 0.27), y + 3, Math.ceil(r / 4), 2);
+    }
+    const walk = (line, paint) => {
+      for (let k = 1; k < line.length; k++) {
+        const [ax, ay] = line[k - 1].map(v => Math.round(v * r));
+        const [bx, by] = line[k].map(v => Math.round(v * r));
+        const n = Math.max(Math.abs(bx - ax), Math.abs(by - ay), 1);
+        for (let j = 0; j <= n; j++) {
+          const dx = Math.round(ax + (bx - ax) * j / n), dy = Math.round(ay + (by - ay) * j / n);
+          if (dx * dx + dy * dy <= r * r) paint(dx, dy);
+        }
+      }
+    };
+    MOON_FAULTS.forEach((line, i) => walk(line, (dx, dy) => {
+      if ((dx + 1) ** 2 + (dy + 1) ** 2 <= r * r) {
+        ctx.fillStyle = i === 0 ? '#9e84c9' : '#7a668f';
+        ctx.fillRect(x + dx + 1, y + dy + 1, 1, 1);
+      }
+      ctx.fillStyle = i === 0 ? '#161126' : '#3d2b55';
+      ctx.fillRect(x + dx, y + dy, 1, i === 0 && r >= 18 && dx * dx + (dy + 1) ** 2 <= r * r ? 2 : 1);
+    }));
+    ctx.fillStyle = '#ffcae6';
+    ctx.globalAlpha *= intensity * (0.7 + Math.sin(t * 2.8) * 0.25);
+    const q = Math.round(r * 0.15);
+    ctx.fillRect(x - q, y + q, 1, 1);
+    ctx.fillRect(x + q, y - Math.round(r * 0.48), 1, 1);
+    for (let k = 0; k < 4; k++) {
+      const drift = Math.sin(t * (0.7 + k * 0.15) + k * 2);
+      ctx.fillRect(x + r + 2 + k * 3, y + Math.round(r * 0.27 + k * 3 + drift * 2), k === 0 ? 2 : 1, 1);
+    }
+    ctx.restore();
+  }
+
   // ---- Starfield and Milky Way (pre-rendered) ----
   let introStarfield = null;
   function getIntroStarfield() {
@@ -609,14 +664,14 @@ const Overworld = (() => {
     // The Moon drifts across the foreground on its orbit.
     const mp = t / 8.5;
     const mx = 286 - mp * 38, my = 52 + mp * 12;
-    const moonR = 12;
-    if (introMoonTex.data) {
+    const moonR = 16;
+    {
       const moonGlow = ctx.createRadialGradient(mx, my, moonR * 0.8, mx, my, moonR * 2.1);
       moonGlow.addColorStop(0, 'rgba(220,225,240,.16)');
       moonGlow.addColorStop(1, 'rgba(220,225,240,0)');
       ctx.fillStyle = moonGlow; ctx.beginPath(); ctx.arc(mx, my, moonR * 2.2, 0, Math.PI * 2); ctx.fill();
-      const moon = renderIntroSphere('moon', moonR, 0.4 + t * 0.01, light);
-      ctx.drawImage(moon, Math.round(mx - moon.width / 2), Math.round(my - moon.height / 2));
+      const moon = introMoonTex.data ? renderIntroSphere('moon', moonR, 0.4 + t * 0.01, [-0.72, -0.32, 0.63]) : null;
+      drawFracturedMoon(mx, my, moonR, moon, t);
     }
     // Faint lens ghosts along the sun axis.
     ctx.globalCompositeOperation = 'lighter';
@@ -1024,11 +1079,7 @@ const Overworld = (() => {
     halo.addColorStop(0.3, 'rgba(160,180,240,' + (0.1 * (0.4 + sky.night * 0.6)) + ')');
     halo.addColorStop(1, 'rgba(120,140,220,0)');
     ctx.fillStyle = halo; ctx.fillRect(moonX - 95, moonY - 95, 190, 190);
-    const skyMoon = getIntroSkyMoon();
-    if (skyMoon) {
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(skyMoon, Math.round(moonX - skyMoon.width / 2), Math.round(moonY - skyMoon.height / 2));
-    }
+    drawFracturedMoon(moonX, moonY, 19, getIntroSkyMoon(), t, 0.65 + 0.35 * smooth01((t - 14.8) / 1.4));
     // Thin drifting clouds crossing the moon.
     for (let i = 0; i < 4; i++) {
       const cx = ((i * 140 + t * (5 + i * 2) - cam * 0.05) % 460 + 460) % 460 - 70;
@@ -2637,7 +2688,7 @@ const Overworld = (() => {
   function updateSideCamera(dt) {
     let target = clamp(sidePlayer.x - canvas.width * 0.43, 0, Math.max(0, sideWorldWidth() - canvas.width));
     if (bossFight && (bossFight.active || bossFight.intro)) target = clamp((BOSS_ARENA.left + BOSS_ARENA.right) / 2 - canvas.width / 2 + (sidePlayer.x - (BOSS_ARENA.left + BOSS_ARENA.right) / 2) * 0.5, BOSS_ARENA.left - 20, BOSS_ARENA.right - canvas.width + 20);
-    if (bossFight && bossFight.cine && bossFight.t < CINE_END - 0.3) {
+    if (bossFight && bossFight.cine && bossFight.t < (bossFight.phaseTwo ? PHASE_END : CINE_END) - 0.3) {
       const b = theBoss();
       if (b) target = clamp(b.x - canvas.width / 2 + (b.type === 'mare' ? 10 : 0), 0, Math.max(0, sideWorldWidth() - canvas.width));
       sideCameraX += (target - sideCameraX) * Math.min(1, dt * 3.2);
@@ -2729,6 +2780,29 @@ const Overworld = (() => {
   let invTab = 0, invSel = 0, gearSel = 0, invOpenTime = 0;
   let hitStop = 0, screenShake = 0, comboTimer = 0, lastMove = null, landTime = 0;
   const combatFx = [], damageNumbers = [], pickups = [];
+  let bloodEffects = true, bloodBurst = 0;
+  const bloodDrops = [];
+  const BLOOD_COLORS = ['#5a0c29', '#981638', '#d12748', '#ef5262'];
+  const DRY_MOBS = new Set(['skeleton', 'ghost', 'shade', 'skull', 'lamp', 'mourn', 'tidemaw']);
+
+  function setBloodEffects(enabled) {
+    bloodEffects = enabled;
+    if (!enabled) bloodDrops.length = 0;
+  }
+
+  function spawnBlood(x, y, direction, heavy) {
+    if (!bloodEffects) return;
+    const seed = ++bloodBurst * 67;
+    const count = heavy ? 19 : 11;
+    for (let i = 0; i < count; i++) {
+      const a = introHash(seed + i * 3), b = introHash(seed + i * 3 + 1), c = introHash(seed + i * 3 + 2);
+      const life = 0.27 + a * 0.34;
+      bloodDrops.push({ x: x + a * 6 - 3, y: y + b * 8 - 4,
+        vx: direction * (35 + a * (heavy ? 130 : 90)) * (i % 5 === 0 ? -0.48 : 1), vy: -28 - b * 124,
+        life, max: life, size: i % 7 === 0 ? 3 : i % 3 ? 2 : 1, color: BLOOD_COLORS[Math.floor(c * BLOOD_COLORS.length)] });
+    }
+    if (bloodDrops.length > 128) bloodDrops.splice(0, bloodDrops.length - 128);
+  }
   let levelUpUntil = 0;
 
   function xpForNext(level) { return 20 + level * 15; }
@@ -3266,6 +3340,7 @@ const Overworld = (() => {
   function weaponAttack() { return WEAPONS[currentWeapon()].atk; }
 
   function damageMob(m, dmg, f, knock, big, crit) {
+    if (bossFight && (bossFight.phaseTwo || (m.T.boss && bossFight.intro))) return;
     // Skeletons sometimes raise their shield against hits from the front.
     if (m.T.block && !m.dead && m.attackTime <= 0 && m.hurtTime <= 0 && Math.random() < m.T.block && Math.sign(sidePlayer.x - m.x) === m.dir) {
       m.blockTime = 0.4; m.flash = 0.04; m.kvx = f * knock * 0.4;
@@ -3274,6 +3349,9 @@ const Overworld = (() => {
       sfx('clash'); hitStop = 0.04; return;
     }
     dmg = fortuneDamage(Math.max(1, dmg));
+    const halfway = Math.ceil(m.maxHp / 2);
+    const turns = m.T.boss && bossFight && bossFight.active && !m.enraged && m.hp - dmg <= halfway;
+    if (turns) dmg = m.hp - halfway;
     m.hp = Math.max(0, m.hp - dmg);
     m.flash = 0.07; m.showHpUntil = time + 3;
     if (!m.T.armor) {
@@ -3285,12 +3363,14 @@ const Overworld = (() => {
     hitStop = big ? 0.075 : 0.05;
     screenShake = Math.max(screenShake, big ? 2.5 : 1.2);
     spawnSparks(m.x - f * 8, m.y - m.T.bodyH * 0.6, f, big ? 12 : 7, m.type === 'ghost' ? ['#d8fbff', '#7fe3ff', '#ffffff'] : ['#fff6d0', '#ffd27a', '#ff9a4a']);
+    if (!DRY_MOBS.has(m.type)) spawnBlood(m.x, m.y - m.T.bodyH * 0.52, f, big || m.hp === 0);
     addDamageNumber(m.x, mobTop(m) - 10, crit ? dmg + '!' : dmg, crit ? '#ffdf6b' : '#ffffff');
     sfx(big ? 'hitBig' : 'hit');
     mobVoice(m, 'hurt');
     padRumble(big ? 0.7 : 0.35, big ? 0.9 : 0.6, big ? 140 : 80);
     if (m.hp <= 0) defeatMob(m, f);
     if (crit) onCrit(m, f);
+    if (turns) beginBossSecondPhase(m);
   }
 
   function knightHitCheck(atk, move) {
@@ -3333,7 +3413,7 @@ const Overworld = (() => {
     stats.kills = (stats.kills || 0) + 1;
     if (m.type === 'goblin') stats.goblinKills = (stats.goblinKills || 0) + 1;
     mobVoice(m, 'death');
-    if (!T.anims.death && !T.boss) spawnSparks(m.x, m.y - T.bodyH * 0.5, f, 10, ['#5a5060', '#8a8090', '#2a2430', T.light ? '#ffb347' : '#c8324a']);
+    if (!T.boss && !T.anims.death) spawnSparks(m.x, m.y - T.bodyH * 0.5, f, 10, ['#5a5060', '#8a8090', '#2a2430', T.light ? '#ffb347' : '#c8324a']);
     const dropY = m.y - T.bodyH * 0.6;
     const coinMul = (hasRelic('giltooth') ? 1.6 : 1) * (m.elite ? (m.elite.gold ? 4 : 2) : 1) * (bloodMoon ? 1.5 : 1) * blessCoins();
     const coins = Math.round((T.coins[0] + Math.floor(Math.random() * (T.coins[1] - T.coins[0] + 1))) * coinMul);
@@ -3372,6 +3452,7 @@ const Overworld = (() => {
     hitStop = 0.06; screenShake = Math.max(screenShake, 2.5);
     addDamageNumber(sidePlayer.x, sidePlayer.y - 58, amount, '#ff6b6b');
     spawnSparks(sidePlayer.x, sidePlayer.y - 28, fromDir, 6, ['#ff8a8a', '#ffffff']);
+    spawnBlood(sidePlayer.x, sidePlayer.y - 28, fromDir, stats.health <= 0);
     sfx('hurt');
     padRumble(0.9, 0.5, stats.health <= 0 ? 420 : 200);
     if (stats.health <= 0 && phoenixRevive()) {
@@ -3386,6 +3467,16 @@ const Overworld = (() => {
     screenShake = Math.max(0, screenShake - dt * 14);
     comboTimer = Math.max(0, comboTimer - dt);
     landTime = Math.max(0, landTime - dt);
+    for (let i = bloodDrops.length - 1; i >= 0; i--) {
+      const p = bloodDrops[i];
+      p.life -= dt;
+      if (p.life <= 0) { bloodDrops.splice(i, 1); continue; }
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 330 * dt;
+      if (p.y >= SIDE_GROUND_Y - 1) {
+        p.y = SIDE_GROUND_Y - 1; p.vy = 0; p.vx = 0;
+        p.life = Math.min(p.life, 0.16);
+      }
+    }
     for (let i = combatFx.length - 1; i >= 0; i--) {
       const p = combatFx[i];
       p.life -= dt;
@@ -3481,6 +3572,12 @@ const Overworld = (() => {
         ctx.globalAlpha = 1;
       }
     });
+    for (const drop of bloodDrops) {
+      ctx.globalAlpha = Math.min(1, drop.life * 5);
+      ctx.fillStyle = drop.color;
+      ctx.fillRect(Math.round(drop.x), Math.round(drop.y) - drop.size + 1, drop.size, drop.size);
+    }
+    ctx.globalAlpha = 1;
     pickups.forEach(p => {
       const bob = p.vy === 0 ? Math.sin(time * 5 + p.x) * 1.5 : 0;
       if (p.type === 'coin') {
@@ -4036,6 +4133,7 @@ const Overworld = (() => {
     }
     sideJumpQueued = false;
     updateKnightAttack(dt);
+    if (bossFight && bossFight.phaseTwo) { updateSideCamera(dt); return; }
 
     const oldFeet = sidePlayer.y;
     let nextX = clamp(sidePlayer.x + sidePlayer.vx * dt, 16, sideWorldWidth() - 16);
@@ -4145,6 +4243,7 @@ const Overworld = (() => {
   const bossWaves = [];   // ground shockwaves from the Hollow King's club
   function playerBodyOverlaps(top, bottom) { return sidePlayer.y - 40 < bottom && sidePlayer.y > top; }
   function updateForestCombat(dt) {
+    if (bossFight && bossFight.phaseTwo) return;
     const playerAlive = sidePlayer.deadTime <= 0;
     for (const m of sideMobs) {
       const T = m.T;
@@ -4175,15 +4274,7 @@ const Overworld = (() => {
         if (m.rising) { m.rising += dt; if (m.rising > 11 / 12) { m.rising = 0; m.dormant = false; m.attackCooldown = 0.6; } }
         continue;
       }
-      const enraged = T.boss && m.hp <= m.maxHp / 2;
-      if (enraged && !m.enraged) {
-        m.enraged = true; m.attackTime = 0; m.attackCooldown = 1.2;
-        sfx('roar', 1, 0.8); screenShake = 6; padRumble(1, 1, 500);
-        notice = T.enrageText || 'It grows furious!'; noticeUntil = time + 2.4;
-        [BOSS_ARENA.left + 60, BOSS_ARENA.right - 60].forEach((x, k) => {
-          const g = makeMob(T.summon || 'ghost', x, 60, k); g.respawn = Infinity; g.summoned = true; g.flash = 0.3; g.dormant = false; sideMobs.push(g);
-        });
-      }
+      const enraged = T.boss && !!m.enraged;
       if (T.ai) { updateBossAI(m, dt, enraged, playerAlive); continue; }
       m.attackCooldown = Math.max(0, m.attackCooldown - dt);
       m.attackTime = Math.max(0, m.attackTime - dt);
@@ -4208,6 +4299,7 @@ const Overworld = (() => {
         } else if (m.attackCooldown <= 0) {
           m.attackTime = T.atkTime / speedMul; m.atkLen = m.attackTime; m.attackHit = false; m.waveDone = false;
           m.attackCooldown = (T.cd[0] + Math.random() * (T.cd[1] - T.cd[0])) / speedMul * (m.elite && m.elite.cd || 1);
+          if (T.boss) m.attackCooldown = Math.max(m.attackCooldown, m.atkLen + (enraged ? 0.62 : 0.82));
           if (Math.random() < 0.6) mobVoice(m, 'attack');
         }
       } else {
@@ -4246,10 +4338,12 @@ const Overworld = (() => {
             m.waveDone = true;
             screenShake = Math.max(screenShake, 5); padRumble(0.9, 0.9, 220); sfx('slam', 1, 0.75);
             spawnDust(m.x + m.dir * 60, SIDE_GROUND_Y, 10);
-            bossWaves.push({ x: m.x + m.dir * 58, dir: m.dir, life: enraged ? 2.6 : 1.9, hit: false });
-            if (enraged) bossWaves.push({ x: m.x - m.dir * 30, dir: -m.dir, life: 1.6, hit: false });
+            if (!T.volley || (m.type === 'tidemaw' && enraged)) {
+              bossWaves.push({ x: m.x + m.dir * 45, dir: m.dir, life: enraged ? 2.3 : 1.9, hit: false });
+              if (enraged && !T.volley) bossWaves.push({ x: m.x - m.dir * 30, dir: -m.dir, life: 1.6, hit: false });
+            }
             if (T.volley) {
-              const n = T.volley + (enraged ? 2 : 0), sx = m.x + m.dir * 24, sy = m.y - T.bodyH * 0.6;
+              const n = T.volley + (enraged ? 1 : 0), sx = m.x + m.dir * 24, sy = m.y - T.bodyH * 0.6;
               const base = Math.atan2(sidePlayer.y - 22 - sy, sidePlayer.x - sx);
               for (let k = 0; k < n; k++) { const a = base + (k - (n - 1) / 2) * 0.2; mobShots.push({ x: sx, y: sy, vx: Math.cos(a) * 125, vy: Math.sin(a) * 125, life: 3, dmg: Math.max(2, T.dmg - 3), who: T.short, kind: T.shot || 'fire' }); }
               sfx(T.shot === 'moon' ? 'magic' : 'fire', 0.8);
@@ -4391,16 +4485,16 @@ const Overworld = (() => {
         if (m.stT < dt * 1.5) { sfx('mare'); m.dir = face; }
         if (Math.random() < dt * 20) spawnDust(m.x - m.dir * 26, SIDE_GROUND_Y, 1);
         m.tele = true;
-        if (m.stT > (enraged ? 0.42 : 0.6)) { m.tele = false; m.chargeDir = m.dir; m.trailX = m.x; go('charge'); screenShake = Math.max(screenShake, 2); }
+        if (m.stT > (enraged ? 0.58 : 0.76)) { m.tele = false; m.chargeDir = m.dir; m.trailX = m.x; go('charge'); screenShake = Math.max(screenShake, 2); }
       } else if (m.st === 'charge') {
         const sp = enraged ? 410 : 340;
         m.dir = m.chargeDir; m.x += m.dir * sp * dt; m.moving = true; m.walk += dt * 15;
-        if (Math.abs(m.x - m.trailX) > 16) { m.trailX = m.x; groundFires.push({ x: m.x - m.dir * 20, life: enraged ? 3.2 : 2.4 }); }
+        if (Math.abs(m.x - m.trailX) > 22) { m.trailX = m.x; groundFires.push({ x: m.x - m.dir * 20, life: enraged ? 2.1 : 1.6 }); }
         if (Math.random() < dt * 30) spawnDust(m.x - m.dir * 30, SIDE_GROUND_Y, 1);
         if (playerAlive && bossTouch(m, 34, SIDE_GROUND_Y - 44, T.dmg)) padRumble(1, 1, 220);
         if ((m.dir > 0 && m.x >= R) || (m.dir < 0 && m.x <= L)) { m.x = clamp(m.x, L, R); screenShake = Math.max(screenShake, 4); sfx('slam', 0.8, 0.9); spawnDust(m.x + m.dir * 30, SIDE_GROUND_Y, 8); go('stun'); }
       } else if (m.st === 'stun') {
-        if (m.stT > (enraged ? 0.7 : 1.15)) go(enraged && !m.second && Math.random() < 0.55 ? (m.second = true, 'windup') : (m.second = false, 'stalk'));
+        if (m.stT > (enraged ? 1.02 : 1.35)) go(enraged && !m.second && Math.random() < 0.45 ? (m.second = true, 'windup') : (m.second = false, 'stalk'));
       } else if (m.st === 'stomp') {
         m.tele = m.stT < 0.45;
         if (m.stT > 0.45 && !m.stomped) {
@@ -4442,7 +4536,10 @@ const Overworld = (() => {
           }
           if (Math.random() < dt * 8) screenShake = Math.max(screenShake, 1.5);
         }
-        if (m.stT >= T.atkTime) { m.breathHit = false; m.attackTime = 0; go('stalk'); }
+        if (m.stT >= T.atkTime) { m.breathHit = false; m.attackTime = 0; go('recover'); }
+      } else if (m.st === 'recover') {
+        m.y = lowY;
+        if (m.stT > (enraged ? 0.76 : 1.15)) go('stalk');
       } else if (m.st === 'orbs') {
         m.y += (SIDE_GROUND_Y - 100 - m.y) * Math.min(1, dt * 3);
         m.tele = m.stT < 0.5;
@@ -4496,10 +4593,12 @@ const Overworld = (() => {
   }
   function drawMob(m) {
     const T = m.T;
+    if (T.art) { drawChampion(m); return; }
     const [anim, frame] = mobFrame(m);
     const img0 = mobSheet(T, anim);
     if (!imgReady(img0)) return;
-    const img = T.tint ? tintedSheet(img0, T.tint) : img0;
+    const tint = m.enraged ? hexRgb(BOSS_FORMS[m.type][2]) + ',.32' : T.tint;
+    const img = tint ? tintedSheet(img0, tint) : img0;
     let alpha = T.alpha || 1;
     if (m.dead) {
       const fadeStart = T.boss ? 1.6 : T.anims.death ? (anim[1] / (T.anims.death[2] || 9) + 0.5) : 0.12;
@@ -4529,6 +4628,99 @@ const Overworld = (() => {
     }
     ctx.restore();
   }
+
+  // Original sprites for the three champions that used to borrow enemy sheets.
+  // Draw on a small backing canvas so outlines stay sharp at the game's pixel scale.
+  const championCanvas = document.createElement('canvas');
+  championCanvas.width = 64; championCanvas.height = 60;
+  const championInk = championCanvas.getContext('2d');
+  const CHAMPION_COLORS = {
+    skarn: ['#160e16', '#57352f', '#7b4b3a', '#596238', '#8d9760', '#493e4e', '#a88578', '#f0b36e'],
+    mourn: ['#101025', '#27263e', '#3e395a', '#454961', '#6b7a97', '#7d81a3', '#b2bad2', '#d0eeff'],
+    tidemaw: ['#0d1a22', '#1e3540', '#2c5357', '#3f6259', '#678e77', '#667462', '#9da585', '#a0f8dc']
+  };
+  function championSprite(id, stride = 0, wind = 0, strike = false, bob = 0, enrage = false) {
+    const g = championInk, c = CHAMPION_COLORS[id];
+    g.clearRect(0, 0, 64, 60);
+    const box = (i, x, y, w, h) => { g.fillStyle = c[i]; g.fillRect(x, y, w, h); };
+    const shape = (i, pts) => {
+      g.fillStyle = c[i]; g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+      for (let j = 1; j < pts.length; j++) g.lineTo(pts[j][0], pts[j][1]);
+      g.closePath(); g.fill();
+    };
+    // Common coordinate system only: each body, head and carried object is distinct.
+    g.save(); g.translate(0, bob);
+    if (id === 'skarn') {
+      shape(0, [[17,31],[44,30],[49,40],[46,51],[43,59],[31,59],[29,50],[23,58],[11,58],[11,53],[16,46]]);
+      box(1, 14 + stride, 48, 10, 8); box(2, 32 - stride, 48, 10, 9);
+      shape(1, [[19,28],[35,26],[46,32],[46,41],[37,49],[19,46],[14,41]]);
+      shape(2, [[19,29],[38,25],[44,34],[41,39],[18,36],[14,33]]);
+      box(0, 17, 41, 27, 4); box(7, 26, 41, 5, 3);
+      shape(0, [[11,13],[18,16],[23,11],[38,12],[46,9],[43,20],[39,25],[36,32],[20,32],[14,26]]);
+      shape(3, [[13,16],[20,20],[23,14],[37,14],[43,12],[38,21],[36,28],[21,29],[16,25]]);
+      shape(4, [[18,19],[23,15],[36,16],[36,22],[30,26],[21,23]]);
+      box(0, 18, 21, 4, 2); box(0, 28, 21, 4, 2); box(7, 19, 21, 2, 1); box(7, 29, 21, 2, 1);
+      box(0, 17, 26, 13, 2); box(6, 17, 24, 2, 4); box(6, 26, 25, 2, 4);
+      box(5, 22, 11, 15, 6); box(6, 24, 10, 3, 5); box(7, 31, 10, 2, 4);
+      g.save(); g.translate(strike ? -5 : 0, wind);
+      box(0, 7, 31, 4, 22); box(2, 8, 34, 2, 18);
+      shape(0, [[3,21],[16,20],[16,33],[8,39],[3,36]]);
+      shape(5, [[4,22],[15,21],[15,32],[8,37],[4,34]]);
+      shape(6, [[4,22],[7,22],[7,36],[4,34]]); box(7, 11, 25, 2, 2);
+      box(3, 12, 37, 9, 6); box(4, 10, 38, 5, 4); g.restore();
+    } else if (id === 'mourn') {
+      shape(0, [[20,19],[37,18],[47,27],[48,42],[52,59],[42,57],[37,60],[24,56],[15,60],[11,56],[15,40],[13,31]]);
+      shape(1, [[19,23],[35,22],[45,27],[45,43],[49,56],[40,54],[37,57],[26,53],[16,57],[15,54]]);
+      shape(2, [[21,26],[33,30],[31,54],[25,50],[18,55],[19,44]]);
+      shape(3, [[18,22],[23,21],[35,29],[43,24],[45,32],[36,41],[23,36],[16,30]]);
+      box(4, 19, 25, 7, 3); box(5, 35, 28, 9, 3); box(6, 29, 33, 6, 2); box(7, 31, 34, 2, 3);
+      shape(0, [[18,8],[19,2],[23,7],[34,6],[39,0],[40,18],[34,25],[23,24],[17,19]]);
+      shape(4, [[20,9],[23,10],[27,7],[35,9],[38,5],[37,18],[33,22],[23,21],[19,17]]);
+      box(6, 21, 11, 15, 2); box(0, 20, 14, 15, 4); box(7, 22, 15, 4, 1); box(7, 28, 15, 4, 1);
+      box(3, 23, 19, 10, 2); box(6, 28, 11, 1, 9);
+      g.save(); g.translate(strike ? -4 : 0, wind);
+      box(0, 7, 10, 4, 48); box(5, 8, 15, 1, 40);
+      shape(4, [[8,4],[13,6],[13,12],[9,15],[5,13],[4,8]]);
+      box(0, 6, 7, 5, 5); box(7, 7, 8, 3, 3); box(6, 6, 13, 6, 2);
+      box(4, 8, 31, 9, 5); box(6, 8, 31, 2, 3); g.restore();
+      box(5, 38, 42, 3, 7); box(6, 37, 47, 5, 2);
+    } else {
+      shape(0, [[11,26],[20,18],[42,17],[47,24],[52,35],[50,48],[54,55],[47,59],[36,56],[28,59],[19,55],[10,59],[5,54],[11,47],[7,39]]);
+      shape(2, [[12,28],[25,22],[44,24],[49,36],[47,47],[52,55],[47,56],[37,52],[29,56],[20,52],[12,56],[8,54],[13,44],[10,39]]);
+      shape(3, [[16,29],[25,24],[42,29],[45,37],[41,51],[32,50],[26,54],[18,50],[21,40]]);
+      box(1, 12, 35, 7, 3); box(4, 42, 29, 3, 12); box(1, 46, 39, 4, 9);
+      shape(0, [[16,14],[21,10],[21,5],[29,3],[38,5],[39,11],[44,15],[44,23],[38,30],[23,29],[16,24]]);
+      shape(4, [[18,15],[24,10],[24,7],[30,5],[37,7],[37,12],[42,15],[42,22],[37,27],[24,27],[18,23]]);
+      box(6, 22, 14, 18, 3); box(0, 18, 20, 23, 4); box(7, 21, 21, 4, 2); box(7, 30, 21, 4, 2);
+      box(2, 37, 18, 3, 7); box(4, 46, 39, 2, 10);
+      g.save(); g.translate(strike ? -6 : 0, wind);
+      box(0, 7, 27, 8, 16); box(3, 8, 28, 5, 13); box(6, 9, 28, 1, 10);
+      shape(0, [[4,37],[14,37],[17,41],[17,47],[20,51],[20,54],[1,54],[1,50],[3,46],[3,41]]);
+      shape(5, [[6,38],[13,38],[15,42],[15,47],[18,51],[18,52],[3,52],[5,47],[5,41]]);
+      box(6, 7, 40, 2, 9); box(4, 15, 48, 2, 2); box(7, 6, 52, 9, 1);
+      box(0, 9, 54, 4, 2); g.restore();
+    }
+    if (enrage) { box(7, 27, id === 'tidemaw' ? 15 : 12, 2, 1); box(7, 33, id === 'tidemaw' ? 17 : 16, 1, 2); }
+    g.restore();
+    return championCanvas;
+  }
+  function drawChampion(m) {
+    const T = m.T;
+    const phase = m.attackTime > 0 ? 1 - m.attackTime / m.atkLen : -1;
+    const strike = phase >= T.hit[0] && phase <= T.hit[1];
+    const wind = phase < 0 ? 0 : strike ? 3 : phase < T.hit[0] ? -6 : -1;
+    const stride = m.moving ? Math.round(Math.sin(m.walk * 0.7) * 2) : 0;
+    const bob = m.moving ? -Math.abs(stride) : Math.round(Math.sin(time * 3) * 0.6);
+    const pic = championSprite(T.art, stride, wind, strike, bob, m.enraged);
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    if (m.dead) ctx.globalAlpha *= Math.max(0, 1 - Math.max(0, m.deadTime - 0.3) / 1.6);
+    if (m.flash > 0) ctx.filter = 'brightness(1.7)';
+    else if (m.enraged) ctx.filter = 'saturate(1.38) contrast(1.13)';
+    ctx.translate(Math.round(m.x), Math.round(m.y + (m.dead ? Math.min(18, m.deadTime * 10) : 0)));
+    if (m.dir > 0) ctx.scale(-1, 1);
+    ctx.drawImage(pic, -Math.round(T.drawH * 0.55), -T.drawH, Math.round(T.drawH * 64 / 60), T.drawH);
+    ctx.restore();
+  }
   function drawSideMobs() {
     sideMobs.forEach(m => {
       if (m.dead && m.deadTime > 3) return;
@@ -4544,7 +4736,9 @@ const Overworld = (() => {
         ctx.fillStyle = g; ctx.fillRect(m.x - fl, ly - fl, fl * 2, fl * 2); ctx.restore();
       }
       drawEliteAura(m);
+      if (m.enraged && !m.dead) drawBossForm(m, false);
       drawMob(m);
+      if (m.enraged && !m.dead) drawBossForm(m, true);
       // Telegraph: a red glint before a heavy swing.
       if (!m.dead && m.attackTime > 0 && (1 - m.attackTime / m.atkLen) < m.T.hit[0] && Math.floor(time * 16) % 2) {
         ctx.fillStyle = '#ff5050';
@@ -5016,8 +5210,10 @@ const Overworld = (() => {
       ctx.fillStyle = '#1c1410'; ctx.fillRect(x + 16, y + 18, 2, 2); ctx.fillRect(x + 22, y + 18, 2, 2);
       ctx.fillStyle = '#cfcac0'; ctx.fillRect(x + 13, y + 22, 14, 12); ctx.fillRect(x + 16, y + 34, 8, 3);
     } else if (SPEAKERS[who] && SPEAKERS[who].mob) {
-      const T = MOB_TYPES[SPEAKERS[who].mob], img0 = mobSheet(T, T.anims.idle);
-      if (imgReady(img0)) {
+      const T = MOB_TYPES[SPEAKERS[who].mob], img0 = T.art ? null : mobSheet(T, T.anims.idle);
+      if (T.art) {
+        ctx.drawImage(championSprite(T.art), 12, 0, 38, 38, x, y, 40, 40);
+      } else if (imgReady(img0)) {
         const img = T.tint ? tintedSheet(img0, T.tint) : img0, sc = Math.min(2.2, 46 / Math.min(T.fh, T.bodyH / T.scale * 1.3));
         ctx.translate(x + 20, y + 40 + (T.fh - T.ay) * sc * 0.2); if (T.faceLeft) ctx.scale(-1, 1);
         ctx.drawImage(img, 0, 0, T.fw, T.fh, -T.ax * sc, -T.ay * sc * 0.82, T.fw * sc, T.fh * sc);
@@ -5222,7 +5418,8 @@ const Overworld = (() => {
   }
   function rollElite(m) {
     if (m.T.boss || m.summoned || m.elite) return;
-    const ch = 0.07 + (bloodMoon ? 0.25 : 0) + Math.min(0.06, luckValue() * 0.03) + (questChapter() - 1) * 0.02;
+    if (platformScene === 'forest' && m.home < 1450) return;
+    const ch = 0.065 + (bloodMoon ? 0.16 : 0) + Math.min(0.04, luckValue() * 0.025) + (Math.min(3, questChapter()) - 1) * 0.018;
     if (Math.random() < ch) makeElite(m);
   }
   function drawEliteAura(m) {
@@ -6025,14 +6222,12 @@ const Overworld = (() => {
   function talkToDad() {
     if (story.chapterDone && !story.ch2Started) {
       startDialogue([
-        { who: 'aldric', text: "Sit. You've earned the truth. Twenty winters ago the moon cracked. Not by chance. Someone broke it." },
-        { who: 'aldric', text: "Her name was Morwen. A moon-mage of the Silver Watch. Her daughter died in the Long Winter, when the moon waned and stayed dark. Morwen swore she'd pull it down and make a moon that never wanes." },
-        { who: 'aldric', text: "The Watch stopped her, but the moon bled. Shards fell across the land. The biggest one fell here. The Moonfall." },
-        { who: 'aldric', text: "Morwen didn't die. She fled east with the knights who loved her. They call themselves the Pale Court now. She calls herself a queen." },
-        { who: 'aldric', text: "The pale riders who bought the shard from Grukk... those were hers. If she gathers enough shards, she can remake the moon. Her moon." },
-        { who: 'rowan', text: 'Then someone has to stop her riders. Where did they go?' },
-        { who: 'aldric', text: "East. Past my throne-room hiding spot is the Ashen Pass. A Watch scout still keeps a lookout fire there. Find her." },
-        { who: 'aldric', text: "I'll hold the Hollow seal so nothing else crawls out. Go, Rowan. And... your mother would have gone too." }
+        { who: 'aldric', text: "Do you know why we call it the Moonfall? Twenty winters ago, a woman named Morwen tried to pull the moon down." },
+        { who: 'rowan', text: "Why would anyone do that?" },
+        { who: 'aldric', text: "Her little girl froze the winter the moon went dark. Morwen wanted a moon that would never go dark again." },
+        { who: 'aldric', text: "We stopped her, but not before it broke. We buried the biggest piece here. Morwen got away." },
+        { who: 'rowan', text: "The riders who took the shard. They work for her?" },
+        { who: 'aldric', text: "Yes. They're the Pale Court now. Find our scout in the Ashen Pass. I'll stay here and see if I can mend the seal." }
       ], () => {
         story.ch2Started = true; addLore('oath');
         notice = 'New path: the Ashen Pass lies east, past the throne.'; noticeUntil = time + 3;
@@ -6055,29 +6250,27 @@ const Overworld = (() => {
   const BOSS_LINES = {
     ogre: {
       first: [
-        { who: 'grukk', text: 'Another Silver Watch whelp crawls into MY Hollow.' },
-        { who: 'grukk', text: 'Your father hides like a rat behind my throne. I will crack your bones and use them to call him out.' },
-        { who: 'rowan', text: "So he's alive. Then I just have to go through you." },
-        { who: 'grukk', text: 'HAH! Kneel before the Hollow King!' }],
-      retry: [{ who: 'grukk', text: 'Back again, little knight? My Hollow loves the taste of you.' }],
+        { who: 'grukk', text: "That your father's armor? I knew he'd run out of places to hide." },
+        { who: 'rowan', text: "Where is he?" },
+        { who: 'grukk', text: "Behind the throne. Go on, try to get past me." }],
+      retry: [{ who: 'grukk', text: "You really don't know when to quit." }],
       tip: 'Jump over his shockwaves!', flag: 'bossStarted'
     },
     mare: {
       first: [
-        { who: 'rowan', text: 'The ground is still burning... hoofprints. Huge ones.' },
-        { who: 'ashmane', text: '(A voice like cinders, inside your head.) Little moth. You smell of the Hollow shard.' },
-        { who: 'ashmane', text: 'My Queen rode on and left me the road. No one walks the Ashen Pass while I still burn.' },
-        { who: 'rowan', text: "Then I'll put you out." }],
-      retry: [{ who: 'ashmane', text: 'The moth returns to the flame. How sweet.' }],
+        { who: 'ashmane', text: 'I can smell the shard on you.' },
+        { who: 'rowan', text: 'Can you smell the riders who took it?' },
+        { who: 'ashmane', text: 'My Queen went on ahead. She told me to keep the road clear.' },
+        { who: 'rowan', text: "I take it asking nicely won't help." }],
+      retry: [{ who: 'ashmane', text: 'I heard you coming this time.' }],
       tip: 'Roll through her charge, strike while she is dazed!', flag: 'passBossStarted'
     },
     demon: {
       first: [
-        { who: 'vael', text: 'Ahh... a Silver Watch knight. I have not tasted one since the night this city drowned.' },
-        { who: 'vael', text: 'I am Vael. I eat the moon a sliver at a time, and the Pale Queen feeds me what is left of it.' },
-        { who: 'rowan', text: 'Where did the riders take the shard?' },
-        { who: 'vael', text: 'Kneel and I will show you. From the inside.' }],
-      retry: [{ who: 'vael', text: 'Back so soon? The well is hungry, and so am I.' }],
+        { who: 'vael', text: "Silver Watch. Last one I saw was trying to swim in that armor." },
+        { who: 'rowan', text: 'Where did they take the shard?' },
+        { who: 'vael', text: "Ask the Queen. She only tells me when it's time to eat." }],
+      retry: [{ who: 'vael', text: 'I was hoping you’d come back.' }],
       tip: 'Upper slash reaches him in the air. Roll through the moonfire!', flag: 'gloamBossStarted'
     }
   };
@@ -6085,6 +6278,84 @@ const Overworld = (() => {
   // Boss entrance cinematics: letterbox bars, the camera swings to the boss,
   // it does its signature move, and its name card burns in above its head.
   const CINE_END = 4.5;
+  const PHASE_END = 2.9;
+  // Each second form has its own outline, drawn behind the original animation.
+  const BOSS_FORMS = {
+    ogre: ['THE BROKEN CROWN', "Don't touch my crown!", '#a45987', '#ffbcaa', [[-27,-79,-7,35],[-10,-95,2,39],[1,-89,17,30]], [[-18,-49,10,5],[7,-33,6,3]]],
+    mare: ['THE UNBRIDLED', 'I never needed reins.', '#8e48a5', '#ffe3aa', [[-30,-73,2,42],[-17,-61,13,37],[5,-45,32,30],[18,-35,44,25]], [[-20,-36,8,3],[-12,-34,4,5]]],
+    demon: ['THE HUNGER', "Still here? Good. I'm hungry.", '#4757a6', '#a5edff', [[-12,-72,-79,54],[-6,-59,-58,35],[9,-75,76,53],[5,-56,56,34]], [[-37,-44,10,3],[-28,-42,4,5],[21,-34,6,2]]],
+    skarn: ['THE BONE MASK', 'You broke my good mask.', '#825340', '#f2d6a4', [[-26,-79,-15,37],[11,-71,24,29]], [[-18,-58,21,8],[-15,-50,15,4],[-16,-55,4,2,1],[-4,-55,5,2,1]]],
+    mourn: ['THE LAST WATCH', 'I can hear them again.', '#536699', '#c9e1ff', [[-24,-96,-33,28],[-10,-106,-8,35],[5,-93,16,31],[20,-53,33,39]], [[-10,-81,11,2],[-10,-37,22,3],[0,-44,2,14]]],
+    wyrm: ['THE EMBER STAR', "Get back. It's waking up.", '#be442a', '#ffdc7a', [[-34,-81,-50,32],[-20,-93,-29,43],[-7,-87,-3,36],[7,-73,18,47],[21,-61,36,32]], [[-28,-37,11,4],[-25,-33,8,3],[-20,-30,4,5]]],
+    tidemaw: ['THE CRACKED BELL', 'No. Not the bell.', '#386e64', '#c3f8cb', [[-31,-76,-29,65],[27,-71,39,61],[-19,-91,-3,33]], [[-20,-60,6,3],[-16,-57,4,6],[-12,-54,7,2],[-7,-52,2,7],[-32,-36,7,3],[26,-29,7,3]]]
+  };
+  function beginBossSecondPhase(m) {
+    Object.assign(bossFight, { phaseTwo: true, intro: true, cine: true, active: false, t: 0, ev: {} });
+    keys.clear();
+    attackHeld = false; sideRollQueued = false; sideUpperQueued = false; attackBuffer = 0; rollBuffer = 0;
+    Object.assign(sidePlayer, { atk: null, charge: null, roll: null, attackTime: 0, vx: 0 });
+    Object.assign(m, { attackTime: 0, moving: false, kvx: 0, tele: false, dir: sidePlayer.x < m.x ? -1 : 1 });
+    mobShots.length = groundFires.length = bossWaves.length = cineFx.length = sporeClouds.length = 0;
+    sfx('magic', 0.55, 0.62);
+  }
+  function updateBossSecondPhase(c, boss, dt) {
+    c.t += dt;
+    boss.flash = Math.max(0, boss.flash - dt);
+    playerWaves.length = 0;
+    if (cineEvent(c, 'break', 0.65)) {
+      boss.enraged = true; screenShake = 5;
+      padRumble(0.65, 0.75, 350); sfx('roar', 0.75, 0.78);
+      const color = hexRgb(BOSS_FORMS[boss.type][3]);
+      cineFx.push({kind: 'ring', x: boss.x, y: boss.y - 24, r: 8, vr: 125, life: 0.72, max: 0.72, color});
+      cineBurst(boss.x, boss.y - boss.T.bodyH * 0.56, 24, { speed: 90, life: 0.95, g: 35, color });
+    }
+    updateCineParticles(dt);
+    if (c.t < PHASE_END) return;
+    Object.assign(c, { phaseTwo: false, intro: false, cine: false, active: true });
+    cineFx.length = 0;
+    Object.assign(boss, { st: 'stalk', stT: 0, attackCooldown: 1.2, attackTime: 0, tele: false, swoop: null,
+      second: false, stomped: false, breathHit: false, fired: false });
+    sidePlayer.invulnTime = Math.max(sidePlayer.invulnTime, 0.7);
+    const flank = sidePlayer.x < (BOSS_ARENA.left + BOSS_ARENA.right) / 2 ? BOSS_ARENA.right - 55 : BOSS_ARENA.left + 55;
+    const add = makeMob(boss.T.summon || 'ghost', flank, 42, 0);
+    Object.assign(add, { respawn: Infinity, summoned: true, attackCooldown: 1.65, dormant: false });
+    sideMobs.push(add);
+  }
+  function drawBossForm(m, front) {
+    const [, , shade, hot, blades, marks] = BOSS_FORMS[m.type];
+    ctx.save(); ctx.translate(Math.round(m.x), Math.round(m.y)); ctx.scale(-m.dir, 1);
+    if (front) {
+      for (const [x,y,w,h,dark] of marks) { ctx.fillStyle = dark ? shade : hot; ctx.fillRect(x,y,w,h); }
+    } else {
+      blades.forEach(([x,y,tip,len], i) => {
+        const w = Math.round(Math.sin(time * 8 + i) * 3), mid = Math.round((x + tip) / 2);
+        ctx.fillStyle = shade;
+        // Stepped silhouettes stay crisp at 320 × 240.
+        for (let j = 0; j < len; j += 3) {
+          const start = Math.round(tip + w + (mid - tip - w) * j / len);
+          const end = Math.round(tip + w + (x - tip - w) * j / len);
+          ctx.fillRect(Math.min(start,end) - 1, y + j, Math.abs(end-start) + 3 + Math.round(j * 0.19), 3);
+        }
+        ctx.fillStyle = hot; ctx.fillRect(tip + w, y, 2, 5);
+      });
+    }
+    ctx.restore();
+  }
+  function drawSecondPhase(c, boss) {
+    const [title, line, , hot] = BOSS_FORMS[boss.type], t = c.t;
+    const k = Math.min(1, t * 5, (PHASE_END - t) * 6), bar = Math.round(25 * k);
+    ctx.save();
+    ctx.fillStyle = 'rgba(8,6,17,' + (0.16 * k) + ')'; ctx.fillRect(0, 0, 320, 240);
+    drawCineFx();
+    ctx.fillStyle = '#080610'; ctx.fillRect(0, 0, 320, bar); ctx.fillRect(0, 240 - bar, 320, bar);
+    if (t > 0.55) {
+      ctx.globalAlpha = Math.min(k, (t - 0.55) * 5);
+      ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+      ctx.fillStyle = hot; ctx.fillText('PHASE II / ' + title, 160, 16);
+      ctx.font = '8px monospace'; ctx.fillStyle = '#eee7dc'; ctx.fillText(line, 160, 230);
+    }
+    ctx.restore();
+  }
   const BOSS_CINE = {
     ogre:  { nameAt: 2.25, main: '#ffd88a', hot: '#fff3c8', deep: '#b8461a', glow: '255,150,50', crest: 'skull' },
     mare:  { nameAt: 2.05, main: '#bfeaff', hot: '#ffffff', deep: '#2a6fd0', glow: '90,190,255', crest: 'flame' },
@@ -6194,6 +6465,10 @@ const Overworld = (() => {
       cineFx.push({ kind: 'mote', x: sideCameraX + 160 + (Math.random() - 0.5) * 220, y: 60 + Math.random() * 40, vx: (Math.random() - 0.5) * 10, vy: -8 - Math.random() * 10, g: 0, life: 1.6, max: 1.6, size: 1, color: th.glow });
     }
     if (cineEvent(c, 'name', th.nameAt)) { sfx('slam', 0.9, 0.45); sfx('magic', 0.5, 0.7); c.flash = Math.max(c.flash, 0.3); }
+    updateCineParticles(dt);
+  }
+  function updateCineParticles(dt) {
+    const gy = SIDE_GROUND_Y;
     for (let i = cineFx.length - 1; i >= 0; i--) {
       const f = cineFx[i];
       if (f.delay > 0) { f.delay -= dt; continue; }
@@ -6206,6 +6481,7 @@ const Overworld = (() => {
   function updateBossIntro(dt) {
     if (!bossFight || !bossFight.intro) return;
     const c = bossFight, boss = theBoss();
+    if (c.phaseTwo && boss) { updateBossSecondPhase(c, boss, dt); return; }
     c.t += dt * (c.cine ? c.speed : 1);
     if (c.cine && boss) updateBossCine(c, boss, dt);
     if (c.cine && c.t >= CINE_END) { c.cine = false; c.t = 0; cineFx.length = 0; if (boss) { boss.st = 'stalk'; boss.moving = false; boss.attackTime = 0; } }
@@ -6214,7 +6490,7 @@ const Overworld = (() => {
       const B = BOSS_LINES[boss ? boss.type : 'ogre'] || BOSS_LINES.ogre;
       const retry = story[B.flag];
       story[B.flag] = true;
-      startDialogue(retry ? B.retry : B.first, () => {
+      startDialogue(retry ? B.retry : typeof B.first === 'function' ? B.first() : B.first, () => {
         const b = theBoss();
         bossFight.intro = false; bossFight.active = true;
         if (b) { b.dormant = false; b.attackCooldown = 0.8; b.st = 'stalk'; b.stT = 0; }
@@ -6224,6 +6500,10 @@ const Overworld = (() => {
     }
   }
   function skipBossCine() {
+    if (bossFight && bossFight.phaseTwo) {
+      if (bossFight.t > 0.7) bossFight.t = Math.max(bossFight.t, PHASE_END - 0.18);
+      return true;
+    }
     if (bossFight && bossFight.cine && bossFight.t > 0.4) { bossFight.t = Math.max(bossFight.t, CINE_END - 0.45); return true; }
     return !!(bossFight && bossFight.cine);
   }
@@ -6283,6 +6563,7 @@ const Overworld = (() => {
   }
   function drawBossCine() {
     const c = bossFight, boss = theBoss(); if (!boss) return;
+    if (c.phaseTwo) { drawSecondPhase(c, boss); return; }
     const W = canvas.width, H = canvas.height, t = c.t, th = BOSS_CINE[boss.type] || BOSS_CINE.ogre;
     const ease = k => { k = clamp(k, 0, 1); return k * k * (3 - 2 * k); };
     drawCineFx();
@@ -6409,11 +6690,11 @@ const Overworld = (() => {
       dad.onArrive = () => {
         sidePlayer.facing = dad.x < sidePlayer.x ? -1 : 1;
         startDialogue([
-          { who: 'aldric', text: 'Rowan? ...Rowan! By the moon, you actually came.' },
-          { who: 'rowan', text: 'You left me a note and a suit of armor. What did you think I would do?' },
-          { who: 'aldric', text: "Ha. Your mother's stubbornness. I was hiding behind that throne for two days, waiting for an opening." },
-          { who: 'aldric', text: "Grukk was only the start. His crown only holds a splinter. He sold the real shard to pale riders. They rode east a week ago." },
-          { who: 'aldric', text: "There's a lot I never told you about the Silver Watch. Catch your breath, then talk to me. I'll tell you everything." }
+          { who: 'aldric', text: 'Rowan? Let me look at you. Are you hurt?' },
+          { who: 'rowan', text: "I'm fine. How long were you stuck back there?" },
+          { who: 'aldric', text: "Two days. Thought I'd get a clean shot at him. Kept waiting." },
+          { who: 'aldric', text: "Look at his crown. That's just a splinter. He sold the rest to pale riders. They went east a week ago." },
+          { who: 'aldric', text: "Sit with me when you catch your breath. I owe you an explanation." }
         ], () => {
           story.dadFound = true; story.chapterDone = true;
           addLore('aldric');
@@ -6429,10 +6710,10 @@ const Overworld = (() => {
       wren.onArrive = () => {
         sidePlayer.facing = -1;
         startDialogue([
-          { who: 'wren', text: "You actually killed her. Ashmane. The Pale Queen's own mare. I've been hiding from that thing for a week." },
+          { who: 'wren', text: "Is she down? Good. I've spent a week trying not to get stepped on." },
           { who: 'rowan', text: 'She said her Queen rode on. Where?' },
-          { who: 'wren', text: "East, through the pass. To Gloamhold. The old Watch city, the one that drowned in the Black Tide." },
-          { who: 'wren', text: "The riders carried the Hollow shard there. Whatever the Pale Court is building, it's under that city." },
+          { who: 'wren', text: "Gloamhold. People still say the city drowned empty. It wasn't empty." },
+          { who: 'wren', text: "Come on. If they took the shard there, they'll be down by the well." },
           { who: 'wren', text: "My mother was the last captain of Gloamhold. I'm going in. You can follow, if you're as stubborn as your father says." }
         ], () => {
           story.ch2Done = true; addLore('ashmane');
@@ -6445,12 +6726,11 @@ const Overworld = (() => {
     if (bossOutro.scene === 'gloam' && bossOutro.t > 2.6 && !bossOutro.talked) {
       bossOutro.talked = true;
       startDialogue([
-        { who: 'vael', text: '(Vael\'s voice, fading.) Little knight... you are too late. The Queen already has her singer...' },
-        { who: 'rowan', text: 'Singer? What singer?' },
-        { who: 'vael', text: 'The moon-reader... the one with your eyes... Seren...' },
-        { who: 'rowan', text: "...Mother? No. She died. Dad said she died in the fever winter." },
-        { who: 'rowan', text: '(Something glints where the demon fell. A silver locket, still warm. Your mother\'s.)' },
-        { who: 'rowan', text: "She's alive. The Pale Court has her. And I'm going to bring her home." }
+        { who: 'vael', text: 'The Queen already has her singer.' },
+        { who: 'rowan', text: 'Who?' },
+        { who: 'vael', text: "Seren. She has your eyes. Here. She dropped this at the well." },
+        { who: 'rowan', text: "That's her locket. Dad told me she died in the fever." },
+        { who: 'rowan', text: "I'm bringing her home." }
       ], () => {
         story.ch3Done = true; addLore('seren');
         inventory.locket = Math.max(1, inventory.locket || 0); newItems.add('locket');
@@ -6557,21 +6837,21 @@ const Overworld = (() => {
                 fw: 48, fh: 48, ax: 24, ay: 34, scale: 1.0, bodyH: 26, width: 20, fly: 56, dive: true, hp: 6, speed: 100, chase: 250, reach: 40, dmg: 4,
                 atkTime: 0.7, hit: [0.4, 0.8], cd: [1.3, 1.9], xp: 18, coins: [2, 5], drops: [['eye', 0.5]], voice: 'eye' },
     // ---- Champions: one waits at the end of each side area ----
-    skarn:    { name: 'Skarn, the Mire Chief', boss: true, champion: true, src: 'mobs/goblin/', anims: MOB_TYPES.goblin.anims, tint: '190,60,20,.35',
-                fw: 150, fh: 150, ax: 75, ay: 101, scale: 1.95, bodyH: 70, width: 34, hp: 70, speed: 72, chase: 700, reach: 74, dmg: 7,
-                atkTime: 1.0, hit: [0.7, 0.92], cd: [1.1, 1.6], xp: 160, coins: [30, 40], drops: [['cleaver', 1], ['tonic', 1]], voice: 'goblin', armor: true, short: 'Skarn',
+    skarn:    { name: 'Skarn, the Mire Chief', boss: true, champion: true, art: 'skarn', drawH: 82,
+                bodyH: 66, width: 34, hp: 52, speed: 60, chase: 700, reach: 64, dmg: 6,
+                atkTime: 1.15, hit: [0.63, 0.85], cd: [1.8, 2.1], xp: 150, coins: [30, 40], drops: [['cleaver', 1], ['tonic', 1]], voice: 'goblin', armor: true, short: 'Skarn',
                 enrageText: 'Skarn whistles. Cutthroats drop from the trees...', summon: 'sneak' },
-    mourn:    { name: 'Mourn, the Barrow Warden', boss: true, champion: true, src: 'depths/', anims: { idle: ['acolyte-walk', 6, 5], move: ['acolyte-walk', 6, 8], attack: ['acolyte-walk', 6], hurt: null, death: null }, tint: '120,150,255,.28',
-                fw: 32, fh: 48, ax: 16, ay: 48, scale: 2.3, bodyH: 92, width: 34, hp: 85, speed: 48, chase: 700, reach: 70, dmg: 7, volley: 3, shot: 'moon',
-                atkTime: 1.2, hit: [0.55, 0.75], cd: [1.2, 1.8], xp: 200, coins: [35, 45], drops: [['wardenblade', 1], ['tonic', 1]], voice: 'ghost', armor: true, short: 'Mourn', light: '150,190,255',
+    mourn:    { name: 'Mourn, the Barrow Warden', boss: true, champion: true, art: 'mourn', drawH: 86,
+                bodyH: 84, width: 32, hp: 68, speed: 45, chase: 700, reach: 68, dmg: 6, volley: 2, shot: 'moon',
+                atkTime: 1.3, hit: [0.58, 0.77], cd: [1.9, 2.2], xp: 185, coins: [35, 45], drops: [['wardenblade', 1], ['tonic', 1]], voice: 'ghost', armor: true, short: 'Mourn', light: '150,190,255',
                 enrageText: 'Mourn rings the grave-bell. The shades wake...', summon: 'shade' },
     wyrm:     { name: 'Ignaroth, the Cinder Wyrm', boss: true, champion: true, src: 'depths/', anims: { idle: ['wyrm-idle', 6, 7], move: ['wyrm-idle', 6, 10], attack: ['wyrm-breath', 7], hurt: null, death: null },
-                fw: 144, fh: 64, ax: 96, ay: 64, faceLeft: true, scale: 1.75, bodyH: 70, width: 70, hp: 120, speed: 50, chase: 900, reach: 84, dmg: 8, volley: 5, shot: 'fire',
-                atkTime: 1.3, hit: [0.55, 0.8], cd: [1.1, 1.6], xp: 300, coins: [45, 60], drops: [['wyrmfang', 1], ['tonic', 1]], voice: 'ogre', armor: true, short: 'Ignaroth', light: '255,120,40',
+                fw: 144, fh: 64, ax: 96, ay: 64, faceLeft: true, scale: 1.75, bodyH: 70, width: 70, hp: 100, speed: 46, chase: 900, reach: 84, dmg: 7, volley: 3, shot: 'fire',
+                atkTime: 1.4, hit: [0.58, 0.8], cd: [1.9, 2.3], xp: 280, coins: [45, 60], drops: [['wyrmfang', 1], ['tonic', 1]], voice: 'ogre', armor: true, short: 'Ignaroth', light: '255,120,40',
                 enrageText: 'Ignaroth beats his wings. Hounds pour out of the vents...', summon: 'hound' },
-    tidemaw:  { name: 'Tidemaw, the Drowned Bell', boss: true, champion: true, src: 'depths/', anims: { idle: ['drowned', 2, 3], move: ['drowned', 2, 5], attack: ['drowned', 2], hurt: null, death: null }, tint: '20,80,110,.35',
-                fw: 27, fh: 32, ax: 14, ay: 32, faceLeft: true, scale: 3.0, bodyH: 90, width: 50, hp: 150, speed: 46, chase: 900, reach: 80, dmg: 9, volley: 4, shot: 'moon',
-                atkTime: 1.2, hit: [0.5, 0.8], cd: [1.0, 1.5], xp: 380, coins: [55, 70], drops: [['tidecaller', 1], ['tonic', 1]], voice: 'ogre', armor: true, short: 'Tidemaw', light: '120,220,255',
+    tidemaw:  { name: 'Tidemaw, the Drowned Bell', boss: true, champion: true, art: 'tidemaw', drawH: 90,
+                bodyH: 83, width: 50, hp: 118, speed: 44, chase: 900, reach: 76, dmg: 8, volley: 3, shot: 'moon',
+                atkTime: 1.45, hit: [0.59, 0.78], cd: [2.05, 2.4], xp: 340, coins: [55, 70], drops: [['tidecaller', 1], ['tonic', 1]], voice: 'ogre', armor: true, short: 'Tidemaw', light: '120,220,255',
                 enrageText: 'Tidemaw tolls. The drowned rise from the black water...', summon: 'drowned' }
   });
   // Champion weapons.
@@ -6639,28 +6919,27 @@ const Overworld = (() => {
     tess: { name: 'TESS THE PEDDLER', color: '#d7b6ff' }, shrine: { name: 'MOON SHRINE', color: '#cfe6ff' }, board: { name: 'HUNT BOARD', color: '#e8d2a0' }
   });
   Object.assign(BOSS_LINES, {
-    skarn: { first: [
-        { who: 'skarn', text: 'A shiny tin knight in MY mire. The Hollow King is dead? Good. More forest for Skarn.' },
-        { who: 'rowan', text: 'Your goblins are raiding the village roads.' },
-        { who: 'skarn', text: 'Raiding? We RUN, tin-head. The moon is coming down. Skarn takes what Skarn can carry.' },
-        { who: 'skarn', text: 'And today Skarn carries your helmet.' }],
+    skarn: { first: () => [
+        { who: 'skarn', text: story.bossDefeated ? "You got rid of Grukk? Good. I never liked him." : "If Grukk sent you, tell him he can dig up his own swamp." },
+        { who: 'rowan', text: "I came because you're raiding the village road." },
+        { who: 'skarn', text: "We're leaving. Have you looked up lately? I’m taking what I can carry. Starting with that helmet." }],
       retry: [{ who: 'skarn', text: 'Back for more mud?' }], tip: 'His cleaver sends shockwaves. Jump them!', flag: 'mireStarted' },
     mourn: { first: [
-        { who: 'mourn', text: 'Who walks the barrows of the Watch? The dead are counted. The dead are kept.' },
-        { who: 'rowan', text: "I'm Aldric's son. These were his brothers." },
-        { who: 'mourn', text: 'Aldric... the one who buried the shard and left us beside it. We heard it whisper for twenty winters.' },
-        { who: 'mourn', text: 'Stay, then. Be counted.' }],
+        { who: 'mourn', text: "Don't take another step. They've dug up enough graves." },
+        { who: 'rowan', text: "I'm not with them. Aldric was my father. Is my father." },
+        { who: 'mourn', text: "He left me here with a bell and an oath. I rang it long after they buried me. Then the thieves came." },
+        { who: 'mourn', text: "I can't let another person through. Not even you." }],
       retry: [{ who: 'mourn', text: 'You return to your grave. Good.' }], tip: 'Swing at his moonfire to break it!', flag: 'barrowStarted' },
     wyrm: { first: [
-        { who: 'ignaroth', text: '(The heat itself speaks.) A morsel of the Silver Watch. Your caravans fed me well, once.' },
-        { who: 'ignaroth', text: 'I swallowed a star that fell from the moon. Now I am the only sun this deep.' },
-        { who: 'rowan', text: "Then I'll cut it out of you." }],
+        { who: 'ignaroth', text: 'Last Watchmen down here brought a whole wagon of silver. What did you bring?' },
+        { who: 'rowan', text: 'Nothing. I came for the stone you swallowed.' },
+        { who: 'ignaroth', text: "You can have it when I'm done with it." }],
       retry: [{ who: 'ignaroth', text: 'Still not ash? Let me help.' }], tip: 'Roll through the fire, strike after his breath.', flag: 'cinderStarted' },
-    tidemaw: { first: [
-        { who: 'tidemaw', text: '(A bell tolls under the water.) ...readers... we kept the readers... we wrote their names...' },
-        { who: 'tidemaw', text: 'The Queen took the singers and left us the ink. Now we drown in it.' },
-        { who: 'rowan', text: "One of those names is my mother's. Let me pass." },
-        { who: 'tidemaw', text: '...no one... leaves... the archive...' }],
+    tidemaw: { first: () => [
+        { who: 'tidemaw', text: 'I used to ring for the readers. Before the water came up the stairs.' },
+        { who: 'rowan', text: story.ch3Done ? 'One of them was Seren. Did you see where they took her?' : 'Do you remember any of their names?' },
+        { who: 'tidemaw', text: story.ch3Done ? "I couldn't see past the door. I could hear her singing, though." : "Some. I wrote them down. The rest are gone." },
+        { who: 'tidemaw', text: "Stay away from the bell." }],
       retry: [{ who: 'tidemaw', text: '...toll... toll...' }], tip: 'Break his moonfire with your sword, punish him up close.', flag: 'archiveStarted' }
   });
   Object.assign(BOSS_CINE, {
@@ -6687,17 +6966,17 @@ const Overworld = (() => {
     { id: 'star', kind: 'stone', scene: 'cinder', x: 1460, title: 'The Fallen Star', where: 'Scorched stone, Cinder Deep', hint: 'Deep in the cavern.',
       text: 'A SECOND SHARD FELL HERE ON THE NIGHT OF THE MOONFALL. THE MINERS CALLED IT THE EMBER STAR. A cave wyrm swallowed it whole and has not stopped burning since. The Pale Court never came for this one. Even they were afraid.' },
     { id: 'register', kind: 'page', scene: 'archive', x: 720, title: 'Register of Moon-Readers', where: 'Waterlogged register, Sunken Archive', hint: 'In the first reading hall.',
-      text: "Moon-readers in residence, the winter of the fever. ... Brother Calden. Ilse of the Marsh. Seren of the Hollow villages, visiting to study the well, with her husband's blessing and a locket of her little one. All taken at the Black Tide. All taken alive.", sign: '- Archive record' },
+      text: "Moon-readers in residence, the winter of the fever: Brother Calden. Ilse of the Marsh. S. of the Hollow villages, here to study the well. The rest of the page tore away in the flood.", sign: '- Archive record' },
     { id: 'lys', kind: 'page', scene: 'archive', x: 1460, title: 'The Long Winter', where: 'A scholar\'s note, Sunken Archive', hint: 'Deep in the archive.',
       text: "Morwen had a daughter named Lys. In the Long Winter the moon waned for nine nights and the cold came in. Lys did not wake. Morwen sat by the window for the whole of the tenth night and asked the moon why it had looked away. The next spring she began to pull it down." },
     { id: 'skarnend', kind: 'page', scene: null, x: 0, title: "Skarn's Hoard", where: 'Found where Skarn fell', hint: 'Defeat the champion of the Witchmire.',
       text: "Skarn's hoard is mostly spoons. Under the spoons is a Watch map with the Hollow circled, and a note in a pale, elegant hand: 'Dig where the crown-wearer sleeps. Payment on delivery.' Someone paid the goblins to dig up the shard." },
     { id: 'mournend', kind: 'page', scene: null, x: 0, title: 'The Bell-Ringer', where: 'Found where Mourn fell', hint: 'Defeat the champion of the Barrows.',
-      text: "Mourn rang the barrow bell every night for twenty winters so the shard's whisper could not reach the village. When the acolytes dug up his grave, the bell went quiet. That was the night the wolves first walked upright." },
+      text: "Mourn died with the other Watchmen. His spirit still rang the barrow bell each night for twenty winters to keep the shard quiet. A week ago, the acolytes opened his grave. The bell went silent. After that, the wolves started walking upright." },
     { id: 'ignarothend', kind: 'page', scene: null, x: 0, title: 'The Ember Star', where: 'Found where Ignaroth fell', hint: 'Defeat the champion of Cinder Deep.',
       text: 'The wyrm coughs up the Ember Star as it dies, a shard the size of a fist, still burning. Wren will want to see this. It is one shard the Pale Queen will never have.' },
     { id: 'tidemawend', kind: 'page', scene: null, x: 0, title: "Seren's Verse", where: 'Found where Tidemaw fell', hint: 'Defeat the champion of the Sunken Archive.',
-      text: "Inside the archive bell is a page in your mother's hand, a verse the moon-readers sang to keep the well bright: 'Wane, and I will wait. Fall, and I will catch you. Break, and I will sing you whole.' She was not singing for the Queen. She was singing against her." }
+      text: "A page tucked inside the bell. 'Ring once if the water reaches the stairs. If they come for the singers, ring twice. I won't sing for her.' The note is signed S." }
   );
   // Shrines, moon moths and hunt boards placed through the world.
   const SHRINES = { forest: 2560, hollow: 1160, pass: 1660, gloam: 1850, mire: 920, barrow: 1080, cinder: 820, archive: 1180 };
@@ -7012,9 +7291,9 @@ const Overworld = (() => {
         mire: [{ who: 'rowan', text: "A trail into the marsh. Goblin tracks everywhere... and something big dragging a blade." }],
         barrow: [{ who: 'rowan', text: 'Graves. Hundreds of them. Every stone has the silver tree of the Watch on it.' }, { who: 'rowan', text: "Someone has been digging them up." }],
         cinder: [{ who: 'rowan', text: 'An old caravan mine. The air is hot enough to burn... and something down there is breathing.' }],
-        archive: [{ who: 'rowan', text: "The Watch archive, flooded to the rafters. If anyone wrote down what happened to Mother, it's in here." }]
+        archive: [{ who: 'rowan', text: story.ch3Done ? "Maybe there's something here about where they took Mother." : "The old Watch archive. Let's see what the flood left behind." }]
       }[scene];
-      if (intro) setTimeout(() => { if (platformScene === scene && !dialogue) startDialogue(intro); }, 1300);
+      if (intro) setTimeout(() => { if (platformScene === scene && !dialogue && !bossFight && !bossOutro) startDialogue(intro); }, 1300);
     }
   }
   function depthsCine(c, boss, dt, th) {
@@ -7200,8 +7479,46 @@ const Overworld = (() => {
     if (R.side && story[R.bossFlag]) drawSignpost(R.width - 50, REGIONS[R.parent].name.replace(/^THE /, ''), 1);
     if (R.side) drawSignpost(60, REGIONS[R.parent].name.replace(/^THE /, ''), -1);
   }
+  const sceneryArt = Object.fromEntries(['woods', 'pillars', 'crystal-1', 'plant-2'].map(name => {
+    const image = new Image(); image.src = 'assets/scenery/' + name + '.png'; return [name, image];
+  }));
+  const sceneryByScene = {
+    forest: ['plant-2', 104, 232, '#efcf81', 24, 16, .82],
+    hollow: ['pillars', 372, 107, '#ba9ac9', 112, 42, .66],
+    pass: ['crystal-1', 228, 166, '#ffab68', 24, 24, .76],
+    gloam: ['pillars', 492, 308, '#91b9cb', 102, 38, .69],
+    mire: ['woods', 302, 164, '#acb977', 168, 54, .47],
+    barrow: ['pillars', 289, 142, '#a8b9ed', 112, 42, .72],
+    cinder: ['crystal-1', 178, 130, '#f99055', 32, 32, .91],
+    archive: ['pillars', 244, 112, '#8ed6c9', 110, 42, .76]
+  };
+  function drawRegionalScenery() {
+    const row = sceneryByScene[platformScene];
+    if (!row) return;
+    const [name, spacing, seed, glow, w, h, alpha] = row, img = sceneryArt[name];
+    const left = sideCameraX - 128, right = sideCameraX + 448, ground = SIDE_GROUND_Y;
+    ctx.save();
+    for (let i = Math.max(0, Math.floor((left - seed) / spacing)); i * spacing + seed < Math.min(right, sideWorldWidth() - 100); i++) {
+      const x = i * spacing + seed + ((i * 43) % 79) - 32;
+      if (FIRES.some(f => f.scene === platformScene && Math.abs(f.x - x) < 78)) continue;
+      if (region().arena && x > region().arena.left && i % 2) continue;
+      ctx.globalAlpha = alpha;
+      if (imgReady(img)) ctx.drawImage(img, Math.round(x - w / 2), ground - h, w, h);
+      // Ground glints and drifting motes mark the biome without adding fake platforms.
+      ctx.fillStyle = glow;
+      for (let j = 0; j < 4; j++) {
+        const cycle = (time * (5 + j) + i * 13 + j * 11) % 43;
+        ctx.globalAlpha = (0.30 + .27 * Math.sin(cycle * Math.PI / 43)) * (1 - cycle / 60);
+        const px = x + (j - 2) * 12 + Math.sin(time * .85 + j) * 7;
+        ctx.fillRect(Math.round(px), Math.round(ground - 7 - cycle), j === 0 ? 2 : 1, 1);
+      }
+      ctx.globalAlpha = .24; ctx.fillRect(x - 12, ground - 1, 8, 1); ctx.fillRect(x + 8, ground - 2, 5, 1);
+    }
+    ctx.restore();
+  }
   function drawDepthsWorld() {
     if (!outdoorScene()) return;
+    drawRegionalScenery();
     drawDepthDecor();
     const dg = DEPTH_GATES[platformScene];
     if (dg) drawDepthGate(REGIONS[dg].parentX, REGIONS[dg]);
@@ -7218,6 +7535,16 @@ const Overworld = (() => {
     const gr = ctx.createLinearGradient(0, 0, 0, H);
     gr.addColorStop(0, R.gradeTop); gr.addColorStop(1, R.gradeBot);
     ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
+    if (platformScene === 'cinder') {
+      // The pass opens into a mine here. Broken rock occludes the old skyline.
+      const offset = Math.floor(sideCameraX * 0.38);
+      for (let x = 0; x < W; x += 4) {
+        const u = (x + offset) * 0.064;
+        const edge = Math.floor(30 + 12 * Math.sin(u) + 10 * Math.sin(u * 0.57) + 7 * Math.cos(u * 2.2));
+        ctx.fillStyle = '#2a1218'; ctx.fillRect(x, 0, 4, edge);
+        ctx.fillStyle = '#562529'; ctx.fillRect(x, edge - 4, 4, 3);
+      }
+    }
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 5; i++) {
       const fx = ((i * 97 + time * (6 + i * 2) - sideCameraX * 0.3) % 420 + 420) % 420 - 50, fy = 150 + (i % 3) * 18;
@@ -7296,9 +7623,11 @@ const Overworld = (() => {
     sidePlayer.roll = null; sidePlayer.charge = null; sidePlayer.atk = null; sidePlayer.pray = null;
     sideCameraX = clamp(sidePlayer.x - canvas.width * 0.43, 0, Math.max(0, sideWorldWidth() - canvas.width));
     pickups.length = 0; bossWaves.length = 0; mobShots.length = 0; groundFires.length = 0; playerWaves.length = 0; ambient.length = 0;
+    bloodDrops.length = 0;
     if (from !== scene) maybeBloodMoon(questChapter() > 1 || story.bossDefeated ? 0.12 : 0.06);
     loadSceneMobs(scene);
     placeNpcs();
+    bossOutro = null; restoreBossOutro();
     depthsOnEnter(scene, from);
     if (from !== scene) { sfx('creak'); sceneTitle = { text: scene === 'forest' && x > CAMP.start ? "BRAM'S CAMP" : region().name, sub: REGION_SUBS[scene], t: time }; }
     keys.clear();
@@ -7366,6 +7695,14 @@ const Overworld = (() => {
       n.dir = sidePlayer.x < n.x ? -1 : 1;
       if (n.onArrive) { const f = n.onArrive; n.onArrive = null; f(); }
     }
+  }
+  function restoreBossOutro() {
+    const R = region();
+    if (!R.boss || !story[R.bossFlag]) return;
+    const page = { mire: 'skarnend', barrow: 'mournend', cinder: 'ignarothend', archive: 'tidemawend' }[platformScene];
+    const missing = R.side ? !story.pages.includes(page) :
+      platformScene === 'hollow' ? !story.chapterDone : platformScene === 'pass' ? !story.ch2Done : !story.ch3Done;
+    if (missing) bossOutro = { t: 0, x: R.bossX, jingle: true, scene: platformScene };
   }
   function updateStory(dt) {
     if (platformScene === 'forest') {
@@ -8591,9 +8928,16 @@ const Overworld = (() => {
     return { x: (e.clientX - r.left) * canvas.width / r.width, y: (e.clientY - r.top) * canvas.height / r.height };
   }
   function onCanvasPointer(e) {
-    if (introActive || paused) return;
+    if (introActive) return;
     const p = canvasPoint(e);
     const inside = (x, y, w, h) => p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + h;
+    if (paused) {
+      const row = Math.floor((p.y - 104) / 22);
+      if (row >= 0 && row < 3 && inside(78, 104 + row * 22, 164, 18)) {
+        pauseSelection = row; choosePauseOption(); e.preventDefault();
+      }
+      return;
+    }
     if (dialogue) { advanceDialogue(); e.preventDefault(); return; }
     if (fortunePanel()) { fortunePointer(p); e.preventDefault(); return; }
     if (panel === 'shop') {
@@ -9149,6 +9493,21 @@ const Overworld = (() => {
     if (lines.length > 7) invText('... ' + (inputMode === 'pad' ? '✕' : 'E') + ' READ ALL', x + w - 8, by + 72, '#ffe3a1', 'bold 5px monospace', 'right');
   }
 
+  function choosePauseOption() {
+    if (pauseSelection === 1) {
+      if (typeof toggleBloodEffects === 'function') toggleBloodEffects();
+      else setBloodEffects(!bloodEffects);
+      sfx('uiConfirm'); return;
+    }
+    const exit = pauseSelection === 2;
+    paused = false; pauseSelection = 0; keys.clear();
+    if (exit) {
+      const saveData = getSaveData();
+      stop();
+      if (onExit) onExit(saveData);
+    }
+  }
+
   function drawPauseMenu() {
     ctx.save();
     ctx.fillStyle = 'rgba(5, 8, 16, 0.76)';
@@ -9176,9 +9535,9 @@ const Overworld = (() => {
     ctx.font = '7px monospace';
     ctx.fillText('THE WOODS CAN WAIT', 160, 96);
 
-    const options = ['RESUME', 'SAVE & EXIT TO TITLE'];
+    const options = ['RESUME', 'BLOOD EFFECTS: ' + (bloodEffects ? 'ON' : 'OFF'), 'SAVE & EXIT TO TITLE'];
     options.forEach((label, i) => {
-      const y = 108 + i * 25;
+      const y = 104 + i * 22;
       const selected = i === pauseSelection;
       ctx.fillStyle = selected ? '#d3a56b' : '#302a35';
       ctx.fillRect(78, y, 164, 19);
@@ -9192,8 +9551,7 @@ const Overworld = (() => {
 
     ctx.fillStyle = '#b7b3ad';
     ctx.font = '6px monospace';
-    ctx.fillText(inputMode === 'pad' ? '↑ / ↓ SELECT     ✕ CHOOSE' : '↑ / ↓ SELECT     ENTER CHOOSE', 160, 165);
-    ctx.fillText(inputMode === 'pad' ? '○ OR OPTIONS TO RESUME' : 'ESC OR P TO RESUME', 160, 175);
+    ctx.fillText(inputMode === 'pad' ? '↑ / ↓ SELECT     ✕ CHOOSE' : '↑ / ↓ SELECT     ENTER CHOOSE', 160, 174);
     ctx.restore();
   }
 
@@ -9503,19 +9861,11 @@ const Overworld = (() => {
         pauseSelection = 0;
         keys.clear();
       } else if (k === 'arrowup' || k === 'w') {
-        pauseSelection = (pauseSelection + 1) % 2;
+        pauseSelection = (pauseSelection + 2) % 3;
       } else if (k === 'arrowdown' || k === 's') {
-        pauseSelection = (pauseSelection + 1) % 2;
+        pauseSelection = (pauseSelection + 1) % 3;
       } else if (k === 'enter' || k === ' ' || k === 'e') {
-        if (pauseSelection === 0) {
-          paused = false;
-          pauseSelection = 0;
-        } else {
-          const saveData = getSaveData();
-          paused = false;
-          stop();
-          if (onExit) onExit(saveData);
-        }
+        choosePauseOption();
       }
       e.preventDefault();
       e.stopPropagation();
@@ -9647,12 +9997,16 @@ const Overworld = (() => {
     dadNoteRead = !!(saveData && saveData.sideNoteRead);
     sideJumpQueued = false; sideAttackQueued = false; sidePlayer.attackTime = 0; sidePlayer.attackCooldown = 0; sidePlayer.hurtTime = 0; sidePlayer.invulnTime = 0; sidePlayer.deadTime = 0; sidePlayer.atk = null;
     combatFx.length = 0; damageNumbers.length = 0; pickups.length = 0; hitStop = 0; screenShake = 0; comboTimer = 0;
+    bloodDrops.length = 0; bloodBurst = 0;
+    setBloodEffects(typeof settings === 'undefined' || settings.blood !== false);
     loadSceneMobs(REGIONS[platformScene] ? platformScene : 'forest');
     placeNpcs();
     sidePlayer.roll = null; sidePlayer.charge = null; sidePlayer.pray = null; sidePlayer.drink = null; sidePlayer.rollCooldown = 0;
     attackHeld = false; sideRollQueued = false; sideUpperQueued = false;
     playerWaves.length = 0; mobShots.length = 0; groundFires.length = 0; ambient.length = 0;
     bossFight = null; bossOutro = null;
+    dialogue = null; bossWaves.length = 0;
+    restoreBossOutro();
     sceneTitle = null;
     sideCameraX = Math.max(0, sidePlayer.x - canvas.width * 0.43);
     insideHouse = platformScene === 'house';
@@ -9720,16 +10074,7 @@ const Overworld = (() => {
         pauseSelection = 0;
         keys.clear();
       } else if (action === 'primary') {
-        if (pauseSelection === 0) {
-          paused = false;
-          pauseSelection = 0;
-          keys.clear();
-        } else {
-          const saveData = getSaveData();
-          paused = false;
-          stop();
-          if (onExit) onExit(saveData);
-        }
+        choosePauseOption();
       }
       return;
     }
@@ -9786,5 +10131,16 @@ const Overworld = (() => {
     if (action === 'stats') { if (inForest) useQuickSlot(); else openPanel('stats'); return; }
     // ○ with nothing open does nothing, so it never pauses by accident.
   }
-  return { init, update, draw, stop, controllerAction, setInputMode };
+  function renderState() {
+    return JSON.stringify({ chapter: questChapter(), scene: platformScene,
+      phase: introActive ? 'intro' : paused ? 'paused' : panel || 'play',
+      introTime: introActive ? introTime : null,
+      player: { x: Math.round(sidePlayer.x), y: Math.round(sidePlayer.y), health: stats.health },
+      cameraX: Math.round(sideCameraX), boss: bossFight ? (bossFight.phaseTwo ? 'phase-two-intro' : bossFight.cine ? 'intro' : bossFight.active ? 'active' : 'dialogue') : null,
+      bossForm: theBoss()?.enraged ? 2 : theBoss() ? 1 : null,
+      bloodEffects, bloodParticles: bloodDrops.length,
+      enemies: sideMobs.filter(m => !m.dead && Math.abs(m.x - sidePlayer.x) < 220)
+        .map(m => ({ type: m.type, x: Math.round(m.x), y: Math.round(m.y), hp: m.hp })) });
+  }
+  return { init, update, draw, stop, controllerAction, setInputMode, setBloodEffects, renderState };
 })();
