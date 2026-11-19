@@ -128,6 +128,7 @@
     <div class="mobile-actions">
       <button type="button" data-game-key="e">E</button>
       <button type="button" data-game-key="Shift">RUN</button>
+      <button type="button" data-game-key="j">ATK</button>
       <button type="button" data-game-key="ArrowUp">JUMP</button>
       <button type="button" data-game-key="i">BAG</button>
       <button type="button" data-game-key="c">STATS</button>
@@ -898,7 +899,7 @@ function pollGamepad(now) {
   gamepadState.held = next;
   // PS-style layout: Cross confirm/interact, Circle back, Square inventory/delete,
   // Triangle stats, and Options/Start pause while playing.
-  const actions = [[0,'primary'],[1,'back'],[2,'inventory'],[3,'stats'],[9,'pause']];
+  const actions = [[0,'primary'],[1,'back'],[2,'inventory'],[3,'stats'],[7,'attack'],[9,'pause']];
   for (const [button, action] of actions) {
     const down = pressed(button), wasDown = gamepadState.actions.has(button);
     if (down && !wasDown) {
