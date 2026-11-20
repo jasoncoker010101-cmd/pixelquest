@@ -5777,6 +5777,10 @@ const Overworld = (() => {
       ctx.drawImage(beastArt.wrenIdle, 52, 20, 24, 24, x - 4, y - 4, 48, 48);
     } else if (who === 'nessa' && imgReady(coastArt.ferrier)) {
       ctx.drawImage(coastArt.ferrier, 5, 3, 29, 31, x - 2, y - 2, 44, 47);
+    } else if (imgReady(villageNpcArt[who]?.image)) {
+      const { image, head } = villageNpcArt[who];
+      const { sx, sy } = villageNpcFrame(who, 0, true);
+      ctx.drawImage(image, sx + head[0], sy + head[1], 34, 34, x, y, 40, 40);
     } else if (imgReady(residentArt[who])) {
       const guard = who === 'reeve' || who === 'senn';
       if (guard) ctx.drawImage(residentArt[who], 45, 49, 38, 36, x, y, 40, 40);
@@ -9040,7 +9044,9 @@ const Overworld = (() => {
         if (i % 2 === 0) p('#ead0a0', x - 1, 160, 5, 2);
       }
       shape('#453b53', [754,178],[800,178],[790,188],[765,188]); p('#b98b74', 754, 178, 46, 1);
-      p('#5c3e37', 252, 179, 20, 5); p('#9a9e9e', 246, 175, 20, 3); p('#6e838d', 255, 178, 9, 6);
+      if (!imgReady(villageNpcArt.orrin.image)) {
+        p('#5c3e37', 252, 179, 20, 5); p('#9a9e9e', 246, 175, 20, 3); p('#6e838d', 255, 178, 9, 6);
+      }
       for (let i = 0; i < 6; i++) {
         const y = 175 - (i * 7 + time * 16) % 38;
         p(i % 2 ? '#ca795e' : '#ffca89', 267 + Math.sin(i + time * 7) * (3 + (175 - y) / 6), y, i % 3 ? 1 : 2, 1);
@@ -9599,6 +9605,30 @@ const Overworld = (() => {
   const residentArt = Object.fromEntries([...Object.keys(WITNESS_APPEARANCE).filter(id => id !== 'reeve' && id !== 'senn'),
     'bram', 'seren', 'tess', 'orrin', 'mara', 'teo'].map(id => [id, loadImg(COURT_ART + 'resident-' + id + '.png')]));
   residentArt.reeve = residentArt.senn = hollowArt.dadIdle;
+  const VILLAGE_CELL_W = 96, VILLAGE_CELL_H = 104;
+  const VILLAGE_NPC_SPECS = {
+    // Row order matches tools/pack-village-npcs.py. Source art can face either way.
+    orrin:  { file: 'smith', facing: -1, head: [29, 31], clips: { idle: [0, 7, 6], work: [1, 12, 9], talk: [2, 11, 8] } },
+    linnet: { file: 'innkeeper', facing: -1, head: [30, 33], clips: { idle: [0, 7, 5], talk: [1, 10, 8] } },
+    martin: { file: 'villager', facing: 1, head: [33, 32], clips: { idle: [0, 7, 5], walk: [1, 12, 12], talk: [2, 9, 8] } },
+    nessel: { file: 'trader', facing: 1, head: [32, 30], clips: { idle: [0, 7, 5], sell: [1, 10, 8] } },
+  };
+  const villageNpcArt = Object.fromEntries(Object.entries(VILLAGE_NPC_SPECS).map(([id, spec]) =>
+    [id, { ...spec, image: loadImg('village-npcs/' + spec.file + '.png') }]));
+  function villageNpcFrame(who, walk = 0, portrait = false) {
+    const { clips } = VILLAGE_NPC_SPECS[who];
+    const still = prefersReducedMotion();
+    const speaks = dialogue?.lines[dialogue.i].who === who;
+    const inShop = panel === 'shop' && shopkeeper === who;
+    const inConversation = dialogue?.lines.some(line => line.who === who);
+    const pose = still ? 'idle' : clips.sell && inShop ? 'sell' : clips.talk && speaks ? 'talk'
+      : !portrait && !inConversation && clips.walk && walk ? 'walk'
+      : !portrait && !inConversation && !panel && clips.work && time % 7 < 1.35 ? 'work' : 'idle';
+    const [row, frames, fps] = clips[pose];
+    const clock = pose === 'walk' ? walk : pose === 'work' ? time % 7 : pose === 'talk' ? time - dialogue.t : time;
+    const frame = still ? 0 : Math.floor(clock * fps) % frames;
+    return { sx: frame * VILLAGE_CELL_W, sy: row * VILLAGE_CELL_H, pose };
+  }
   const settlementArt = Object.fromEntries(['timber-home', 'alder-tree', 'shingle'].map(id => [id, loadImg(COURT_ART + 'town-' + id + '.png')]));
   SPEAKERS.moonkeeper = { name: 'THE MOONSTONE KEEPER', color: '#b2e5ed' };
   SPEAKERS.veilscribe = { name: 'VEIL SCRIBE', color: '#d8ceed', mob: 'veilscribe' };
@@ -10054,6 +10084,18 @@ const Overworld = (() => {
   }
 
   function drawResident(who, x, y, scale, direction, walk = 0) {
+    const npc = villageNpcArt[who];
+    if (imgReady(npc?.image)) {
+      const { sx, sy } = villageNpcFrame(who, walk);
+      const size = scale * .5;
+      const dir = who === 'orrin' ? npc.facing : direction;
+      ctx.save(); ctx.imageSmoothingEnabled = false;
+      ctx.translate(Math.round(x), y); ctx.scale(dir * npc.facing, 1);
+      ctx.drawImage(npc.image, sx, sy, VILLAGE_CELL_W, VILLAGE_CELL_H,
+        -VILLAGE_CELL_W * size / 2, -VILLAGE_CELL_H * size, VILLAGE_CELL_W * size, VILLAGE_CELL_H * size);
+      ctx.restore();
+      return;
+    }
     const guard = who === 'reeve' || who === 'senn';
     const low = prefersReducedMotion();
     const base = guard && walk && !low ? hollowArt.dadRun : residentArt[who];

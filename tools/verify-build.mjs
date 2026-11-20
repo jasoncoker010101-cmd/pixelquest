@@ -28,7 +28,8 @@ const context = {
 const marker = '  return { init, update, draw, stop,';
 assert(js.includes(marker), 'Could not locate runtime data for validation');
 new vm.Script(js.replace(marker, `
-  window.buildData = { REGIONS, SCENE_MOBS, MOB_TYPES, STORY_DEFAULTS, LORE, FIRES, SFX_BANK, MUSIC_FILES, BOSS_FORMS, BOSS_LINES, PHASE_SHOWS, FOUNDRY };
+  window.buildData = { REGIONS, SCENE_MOBS, MOB_TYPES, STORY_DEFAULTS, LORE, FIRES, SFX_BANK, MUSIC_FILES, BOSS_FORMS, BOSS_LINES, PHASE_SHOWS, FOUNDRY,
+    VILLAGE_CELL_W, VILLAGE_CELL_H, VILLAGE_NPC_SPECS };
   window.bloodTest = { bloodDrops, spawnBlood, updateBlood, setBloodEffects };
   window.balanceTest = { xpForNext, gainXp, bossHitFloor, hurtByBoss, stats, equipment, skarnAttackFrame, SKARN_HEW, SKARN_SLAM };
   window.introTest = { introBookPage, introBookPose, introCaptionAt, INTRO_CAPTIONS, INTRO_DURATION, INTRO_SPACE_END, INTRO_LORE, INTRO_BOOK_END };
@@ -55,6 +56,19 @@ for (const [scene, mobList] of Object.entries(SCENE_MOBS)) {
   for (const [mob, x] of mobList) assert(MOB_TYPES[mob] && x >= 0 && x < REGIONS[scene]?.width, `Invalid ${mob} spawn in ${scene}`);
 }
 const sheet = name => fs.readFileSync(path.join(root, name));
+const { VILLAGE_CELL_W, VILLAGE_CELL_H, VILLAGE_NPC_SPECS } = context.window.buildData;
+for (const [who, { file, head, facing, clips }] of Object.entries(VILLAGE_NPC_SPECS)) {
+  const name = `assets/village-npcs/${file}.png`, png = sheet(name);
+  const rows = Object.values(clips);
+  assert(refs.has(name), `Village NPC atlas is not loaded: ${who}`);
+  assert(png.subarray(1, 4).toString() === 'PNG', `Invalid village NPC atlas: ${name}`);
+  assert.equal(png.readUInt32BE(16), Math.max(...rows.map(([, frames]) => frames)) * VILLAGE_CELL_W);
+  assert.equal(png.readUInt32BE(20), rows.length * VILLAGE_CELL_H);
+  assert.equal(new Set(rows.map(([row]) => row)).size, rows.length);
+  assert(rows.every(([row, frames, fps]) => row >= 0 && row < rows.length && frames > 0 && fps > 0));
+  assert(head[0] >= 0 && head[0] + 34 <= VILLAGE_CELL_W && head[1] >= 0 && head[1] + 34 <= VILLAGE_CELL_H);
+  assert(Math.abs(facing) === 1 && clips.idle[0] === 0);
+}
 for (const [id, [w, h, count, ms, ax, ay]] of Object.entries(FOUNDRY)) {
   const name = `assets/pvfx/${id}.png`, png = sheet(name);
   assert(png.subarray(1, 4).toString() === 'PNG', `Invalid PVFX strip: ${name}`);

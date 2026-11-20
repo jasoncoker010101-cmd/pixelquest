@@ -30,6 +30,7 @@ const hook = `
     mobs: () => sideMobs, defeat(type) { defeatMob(sideMobs.find(m => m.type === type && !m.dead), 1); },
     residents: () => townActors, lore: () => LORE, map: TIDE_MAP, fires: FIRES, roads: TOWN_ROADS,
     portrait: drawPortrait, residentsWithArt: residentArt, openFireMap: openFastTravelMap,
+    pose: (who, walk, portrait) => villageNpcFrame(who, walk, portrait),
     travel: fastTravel, moonThreshold, tick: update, controllerAction,
     capture(fn) { onSave = fn; },
     finish() {
@@ -68,6 +69,7 @@ action(151, /ALDER/);
 for (const n of [...q.residents()]) {
   assert(q.residentsWithArt[n.id], `Missing sprite for ${n.id}`);
   action(n.x, new RegExp(n.id === 'reeve' ? 'REEVE' : n.id, 'i'));
+  if (n.id === 'linnet') assert.equal(q.pose(n.id).pose, 'talk');
   talked(n.id); q.portrait(n.id, 0, 0);
   assert(q.save().story['met_' + n.id]);
   if (n.id === 'elin') {
@@ -104,6 +106,7 @@ for (const n of [...q.residents()]) {
   action(n.x, new RegExp(n.id, 'i')); talked(n.id);
   if (n.id === 'nessel') {
     assert.equal(q.shop().shopkeeper, 'nessel');
+    assert.equal(q.pose('nessel', 0, true).pose, 'sell');
     assert(q.shop().stock.includes('Iron Plating'));
     assert(!q.shop().stock.includes('Whetstone')); q.key('Escape');
   }
@@ -151,6 +154,9 @@ action(4650, /LANTERN QUAY/); current('harbor');
 q.reset({ ...ch3, platformScene: 'harbor', sideX: 100, story: { ...ch3.story, harborEntered: true } });
 assert(!q.moonThreshold(), 'A legacy Quay save does not need to replay Gloamhold');
 q.reset({ ...prior, platformScene: 'village', sideX: 351 });
+assert.equal(q.pose('orrin').pose, 'work');
+assert.equal(q.pose('orrin', 0, true).pose, 'idle');
+assert.equal(q.pose('martin', 0.4).pose, 'walk');
 for (const n of [...q.residents()]) { action(n.x, new RegExp(n.id, 'i')); talked(n.id); }
 q.draw();
 

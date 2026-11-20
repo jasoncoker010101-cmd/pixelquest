@@ -121,3 +121,10 @@ Pixel effects (assets/pvfx):
 - PVFX Foundry by Pixel VFX Studio (nerijs), CC0 1.0: https://nerijs.itch.io/pvfx-foundry
 - Exported from the creator’s online studio: https://pvfx.deimos.studio
 - Selected animation frames are packed into horizontal runtime sheets.
+
+Village residents (assets/village-npcs):
+- CraftPix, Village NPC Pixel Art Character Sprite Pack:
+  https://craftpix.net/product/village-npc-pixel-art-character-sprite-pack/
+- Paid-asset terms: https://craftpix.net/file-licenses/
+- Trimmed runtime atlases for Linnet, Nessel, Martin and Orrin. These are for
+  in-game use only; do not redistribute the original pack or export the artwork.
