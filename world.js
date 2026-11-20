@@ -4359,6 +4359,7 @@ const Overworld = (() => {
     if (!art) return;
     for (let r = 0; r < 12; r++) {
       const row = art[r];
+      if (!row) break;  // some late-added icons have fewer than 12 rows
       for (let c = 0; c < 12; c++) {
         const ch = row[c];
         if (!ch || ch === '.') continue;
@@ -5268,7 +5269,7 @@ const Overworld = (() => {
   function drawSideMobs() {
     sideMobs.forEach(m => {
       if (m.x < sideCameraX - 170 || m.x > sideCameraX + canvas.width + 170) return;
-      if (m.dead && m.deadTime > Math.max(3, (m.T.anims.death?.[1] || 0) / (m.T.anims.death?.[2] || 9) + 1.1)) return;
+      if (m.dead && m.deadTime > Math.max(3, (m.T.anims?.death?.[1] || 0) / (m.T.anims?.death?.[2] || 9) + 1.1)) return;
       // ground shadow
       const dist = SIDE_GROUND_Y - m.y;
       ctx.fillStyle = 'rgba(0,0,0,' + Math.max(0.08, 0.3 - dist / 300) + ')';

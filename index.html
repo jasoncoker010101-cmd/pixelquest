@@ -491,7 +491,7 @@
   </div>
 </div>
 <p id="game-load-error" role="alert" hidden>PixelQuest could not load its game files. Refresh to retry.</p>
-<script defer src="./world.js?v=watch-seal-cast-1"></script>
+<script defer src="./world.js?v=freeze-fix-1"></script>
 <script>
 // Core gameplay only requires files on this site. Account calls happen on demand.
 document.addEventListener('DOMContentLoaded', () => {
@@ -2173,21 +2173,31 @@ function pollGamepad(now) {
   }
 }
 
+let frameErrorLogged = false;
 function frame(now) {
-  pollGamepad(now);
-  const dt = Math.min(0.05, (now - last) / 1000);
-  last = now;
-  t += dt;
-  if (inWorld) {
-    ctx.textAlign = 'left';
-    Overworld.update(dt);
-    Overworld.draw();
-  } else {
-    update(dt);
-    draw();
-  }
-  drawCRT();
+  // Schedule the next frame first so a single error can never stop the loop
+  // (an uncaught throw here used to freeze the whole game).
   requestAnimationFrame(frame);
+  try {
+    pollGamepad(now);
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    t += dt;
+    if (inWorld) {
+      ctx.textAlign = 'left';
+      Overworld.update(dt);
+      Overworld.draw();
+    } else {
+      update(dt);
+      draw();
+    }
+    drawCRT();
+  } catch (err) {
+    if (!frameErrorLogged) { frameErrorLogged = true; console.error('PixelQuest frame error:', err); }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  }
 }
 window.render_game_to_text = () => inWorld ? Overworld.renderState() :
   JSON.stringify({ phase: document.getElementById('lock') ? 'locked' : state.screen, selection: state.sel, bloodEffects: settings.blood });
