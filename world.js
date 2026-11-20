@@ -199,6 +199,9 @@ const Overworld = (() => {
   const INTRO_LORE_LENGTH = INTRO_LORE.reduce((n, scene) => n + scene.seconds, 0);
   const INTRO_DURATION = 46.5 + INTRO_LORE_LENGTH;
   const INTRO_BOOK_END = INTRO_SPACE_END + INTRO_LORE_LENGTH;
+  const INTRO_PAGE_STARTS = [0, INTRO_SPACE_END];
+  for (const scene of INTRO_LORE) INTRO_PAGE_STARTS.push(INTRO_PAGE_STARTS.at(-1) + scene.seconds);
+  const BOOK_OPEN_AT = .48, BOOK_OPEN_TIME = 1.05, BOOK_TURN_TIME = .66, BOOK_EXIT_TIME = 1.6;
   const INTRO_CAPTIONS = [
     [1.85, 7.9, "Come a little closer. That's Earth down there. Looks peaceful enough, doesn't it?"],
     [9.18, 15.25, 'Twenty winters ago, the moon went dark for nine nights. And on one of those nights…'],
@@ -213,47 +216,26 @@ const Overworld = (() => {
     [66.46, 70.16, 'Still, people make a home here. They always have.'],
     [75.80, 80.85, 'And here, right at the edge of it all… Rowan. Time to wake up.'],
   ];
-  // The MP3 includes silent gaps for the scene cuts and countryside sound effects.
-  // Follow the visual clock after a slow frame, a seek, or a background-tab pause.
-  let introNarrator = null, introNarratorBlocked = false, introNarratorPlaying = false;
-  function introVoiceAvailable() {
-    return settings.sound !== false && !introNarratorBlocked && introNarrator &&
-      !introNarrator.error && !introNarrator.paused && introNarrator.readyState >= 3;
-  }
-  function syncIntroNarration() {
-    const a = introNarrator;
-    if (!a || introNarratorBlocked) return;
-    if (a.error) { introNarratorBlocked = true; return; }
-    if (!introActive || document.hidden || (typeof settings !== 'undefined' && settings.sound === false)) {
-      a.pause(); introNarratorPlaying = false; return;
-    }
-    if (a.readyState >= 1 && introTime >= a.duration) { a.pause(); return; }
-    if (a.readyState >= 1 && !a.seeking && Math.abs(a.currentTime - introTime) > .60) a.currentTime = introTime;
-    if (a.paused && !introNarratorPlaying && !a.ended) {
-      introNarratorPlaying = true;
-      a.play()?.catch(error => {
-        if (introNarrator !== a) return;
-        introNarratorPlaying = false;
-        if (error.name !== 'AbortError') introNarratorBlocked = true;
-      });
-    }
-  }
-  function stopIntroNarration() {
-    document.removeEventListener('visibilitychange', syncIntroNarration);
-    if (introNarrator) { introNarrator.pause(); introNarrator.currentTime = 0; introNarrator = null; }
-    introNarratorPlaying = false;
-  }
   function introLoreAt(t) {
-    t -= INTRO_SPACE_END;
-    if (t < 0) return null;
-    for (const scene of INTRO_LORE) {
-      if (t < scene.seconds) return { scene, t };
-      t -= scene.seconds;
+    for (let i = 0; i < INTRO_LORE.length; i++) {
+      if (t >= INTRO_PAGE_STARTS[i + 1] && t < INTRO_PAGE_STARTS[i + 2]) {
+        return { scene: INTRO_LORE[i], t: t - INTRO_PAGE_STARTS[i + 1] };
+      }
     }
     return null;
   }
+  function introCaptionAt(t) {
+    return INTRO_CAPTIONS.find(([start, end]) => t >= start && t < end)?.[2] || null;
+  }
   function introBookPage(t, lore = introLoreAt(t)) {
-    return t < INTRO_SPACE_END ? 0 : lore ? INTRO_LORE.indexOf(lore.scene) + 1 : t < INTRO_BOOK_END + 1.6 ? 5 : 6;
+    return t < INTRO_SPACE_END ? 0 : lore ? INTRO_LORE.indexOf(lore.scene) + 1 : t < INTRO_BOOK_END + BOOK_EXIT_TIME ? 5 : 6;
+  }
+  function introBookPose(t, page = introBookPage(t), reduced = false) {
+    const open = reduced ? Number(t >= BOOK_OPEN_AT) : smooth01((t - BOOK_OPEN_AT) / BOOK_OPEN_TIME);
+    const age = t - INTRO_PAGE_STARTS[page];
+    const turn = !reduced && page > 0 && page < 6 && age >= 0 && age < BOOK_TURN_TIME;
+    return { open, turn, fold: turn ? Math.cos(Math.PI * smooth01(age / BOOK_TURN_TIME)) : 0,
+      zoom: page === 5 ? smooth01((age - BOOK_TURN_TIME) / (BOOK_EXIT_TIME - BOOK_TURN_TIME)) : 0 };
   }
   let inputMode = 'keyboard';
   function setInputMode(mode) { inputMode = mode === 'pad' || mode === 'touch' ? mode : 'keyboard'; }
@@ -269,7 +251,6 @@ const Overworld = (() => {
   function finishIntro() {
     introActive = false;
     introTime = INTRO_DURATION;
-    stopIntroNarration();
     [introWolfHowlAudioOne, introWolfHowlAudioTwo].forEach(a => { a.pause(); a.currentTime = 0; });
     if (introReplayOnly) {
       introReplayOnly = false;
@@ -303,18 +284,19 @@ const Overworld = (() => {
       if (playback && playback.catch) playback.catch(() => {});
     } catch (_) {}
   }
-  function drawIntroFallbackCaptions() {
-    if (introVoiceAvailable()) return;
-    const caption = INTRO_CAPTIONS.find(([start, end]) => introTime >= start && introTime < end);
+  function drawIntroCaptions() {
+    const caption = introCaptionAt(introTime);
     if (!caption) return;
-    const output = wrapText(caption[2], 272, '8px monospace');
-    const height = 10 + output.length * 10;
-    const y = 223 - height;
+    const output = wrapText(caption, 272, '9px monospace');
+    const height = 11 + output.length * 11;
+    const y = 225 - height;
+    ctx.save();
     ctx.fillStyle = 'rgba(8,10,22,.88)';
     ctx.fillRect(13, y, 294, height);
     ctx.strokeStyle = '#d7bd83'; ctx.lineWidth = 1; ctx.strokeRect(13.5, y + .5, 293, height - 1);
-    ctx.font = '8px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff0ce';
-    output.forEach((line, i) => ctx.fillText(line, 22, y + 11 + i * 10));
+    ctx.font = '9px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff0ce';
+    output.forEach((line, i) => ctx.fillText(line, 22, y + 12 + i * 11));
+    ctx.restore();
   }
   // Broken, pixel-stepped sound distortions. These are intentionally not smooth circles.
   function drawGlitchHowl(x, y, intensity, seed = 0) {
@@ -801,12 +783,17 @@ const Overworld = (() => {
       // A distant village: cottages, a chapel and warm windows.
       const houses = [[62, 9, 7], [80, 12, 8], [101, 8, 6], [118, 11, 9], [150, 9, 7], [196, 10, 8], [214, 8, 6], [236, 12, 9], [262, 9, 7], [300, 8, 6]];
       houses.forEach(([x, w, h], i) => {
-        const base = Math.round(top(x + w / 2)) + 3;
-        g.fillStyle = '#151f33'; g.fillRect(x, base - h, w, h);
-        g.beginPath(); g.moveTo(x - 2, base - h); g.lineTo(x + w / 2, base - h - 5 - (i % 3)); g.lineTo(x + w + 2, base - h); g.closePath(); g.fill();
-        if (i % 2 === 0) g.fillRect(x + w - 3, base - h - 6, 2, 4);
-        const wins = w > 9 ? 2 : 1;
-        for (let k = 0; k < wins; k++) INTRO_VILLAGE.push({ x: x + 2 + k * (w - 5), y: base - h + 3, f: introHash(i * 3 + k) });
+        const base = Math.round(top(x + w / 2)) + 5 + i % 3;
+        const art = gloamArt.town;
+        const wide = i % 3 !== 0, src = wide ? TOWN_PARTS.small : TOWN_PARTS.tall;
+        const dw = w + 6, dh = h + (wide ? 5 : 13);
+        g.imageSmoothingEnabled = false;
+        if (imgReady(art)) g.drawImage(tintedSheet(art, '31,34,59,.31'), ...src, x - 3, base - dh, dw, dh);
+        else {
+          g.fillStyle = '#151f33'; g.fillRect(x, base - h, w, h);
+          g.beginPath(); g.moveTo(x - 2, base - h); g.lineTo(x + w / 2, base - dh); g.lineTo(x + w + 2, base - h); g.closePath(); g.fill();
+        }
+        INTRO_VILLAGE.push({ x: x + Math.round(w / 2), y: base - (wide ? 5 : 8), f: introHash(i * 3) });
       });
       // Chapel with a steeple.
       const cx = 172, cb = Math.round(top(cx)) + 3;
@@ -885,6 +872,19 @@ const Overworld = (() => {
     g.fillStyle = '#122030';
     [[x + 92, wallTop - 22, 22], [x + 104, wallTop - 8, 18], [x + 80, wallTop - 4, 16]].forEach(([cx, cy, r]) => { g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill(); });
     g.fillRect(x + 92, wallTop, 5, 34);
+    const home = settlementArt['timber-home'];
+    if (imgReady(home)) {
+      g.imageSmoothingEnabled = false;
+      g.fillStyle = '#484558'; g.fillRect(x + 65, base - 77, 10, 36);
+      g.fillStyle = '#625969'; g.fillRect(x + 63, base - 78, 14, 3);
+      g.drawImage(tintedSheet(home, '24,25,53,.33'), x - 1, base - 83, 90, 88);
+      for (const wx of [x + 16, x + 69]) {
+        g.fillStyle = '#443343'; g.fillRect(wx - 2, base - 23, 11, 10);
+        g.fillStyle = '#dfa562'; g.fillRect(wx, base - 22, 7, 7);
+        g.fillStyle = '#5c3b3b'; g.fillRect(wx + 3, base - 22, 1, 7);
+      }
+      return;
+    }
     // Stone foundation.
     g.fillStyle = '#3d4250'; g.fillRect(x - 2, base - 6, w + 4, 6);
     g.fillStyle = '#4e5464';
@@ -1074,6 +1074,7 @@ const Overworld = (() => {
       const e = smooth01((t - 25.5) / 5.5);
       cam = 520 + e * 712;
       zoom = 1.2 - e * 0.2;
+      focusY = 160 + e * 16;
     } else {
       const e = smooth01((t - 31) / 7.5);
       cam = 1232 + e * 6;
@@ -1166,7 +1167,7 @@ const Overworld = (() => {
       const base = Math.round(introGroundY(INTRO_HOUSE_X)) + 2;
       ctx.globalCompositeOperation = 'lighter';
       const flick = 0.9 + 0.1 * Math.sin(t * 7.3) * Math.sin(t * 3.1);
-      [[-34, base - 19], [-18, base - 19], [33, base - 19]].forEach(([ox, wy]) => {
+      [[-25, base - 19], [28, base - 19]].forEach(([ox, wy]) => {
         const lx = hx + ox;
         const g2 = ctx.createRadialGradient(lx, wy, 2, lx, wy, 26);
         g2.addColorStop(0, 'rgba(255,170,80,' + (0.32 * flick) + ')');
@@ -1183,7 +1184,7 @@ const Overworld = (() => {
       ctx.globalCompositeOperation = 'source-over';
       ctx.fillStyle = '#ffd890'; ctx.fillRect(Math.round(hx + 2), base - 32, 2, 3);
       // Chimney smoke rising and leaning with the breeze.
-      const chX = INTRO_HOUSE_X - 44 + 68 - cam, chY = base - 34 - 34;
+      const chX = INTRO_HOUSE_X - 44 + 70 - cam, chY = base - 77;
       for (let k = 0; k < 9; k++) {
         const life = ((t * 0.35 + k / 9) % 1);
         const px = chX + life * 26 + Math.sin(life * 6 + k) * 2;
@@ -1255,111 +1256,82 @@ const Overworld = (() => {
     ctx.closePath(); ctx.fill();
   }
 
-  function drawLoreMorwen(x, y, raised) {
-    ctx.save(); ctx.translate(x, y);
-    loreShape('#372a52', [[-8,-61],[4,-65],[14,-57],[15,-42],[23,-12],[26,0],[-26,0],[-24,-12],[-15,-35],[-15,-49]]);
-    loreShape('#63497c', [[-8,-60],[4,-63],[10,-54],[5,-44],[-6,-44],[-16,-22],[-21,-3],[-24,-3],[-20,-22],[-13,-43],[-13,-51]]);
-    loreShape('#1c192f', [[-7,-52],[3,-56],[10,-53],[10,-44],[4,-39],[-6,-42]]);
-    loreShape('#bd989e', [[5,-53],[10,-52],[10,-47],[13,-46],[10,-44],[7,-44],[5,-47]]);
-    if (raised) {
-      loreShape('#77578d', [[0,-36],[11,-41],[26,-54],[31,-67],[35,-65],[34,-54],[23,-40],[9,-28]]);
-      loreShape('#dbb8b6', [[31,-67],[33,-75],[35,-74],[35,-70],[39,-73],[40,-71],[35,-64]]);
-    } else {
-      loreShape('#604979', [[3,-35],[13,-25],[28,-21],[28,-17],[12,-17],[-1,-27]]);
-      ctx.fillStyle = '#bd989e'; ctx.fillRect(28, -21, 5, 4);
-    }
-    ctx.restore();
+  function drawLoreMorwen(x, y, frame) {
+    // Gothicvania figure, kept in the same costume across all flashbacks.
+    const art = residentArt.enna;
+    if (imgReady(art)) ctx.drawImage(tintedSheet(art, '63,46,105,.33'), frame * 48, 0, 48, 56, x - 43, y - 96, 86, 100);
+  }
+  function introPlate(image, x, y, w, h, tint) {
+    if (imgReady(image)) ctx.drawImage(tint ? tintedSheet(image, tint) : image, x, y, w, h);
   }
 
   function drawIntroLore({ scene, t }) {
-    const motion = prefersReducedMotion() ? 0 : t;
-    const sky = ctx.createLinearGradient(0, 12, 0, 182);
-    sky.addColorStop(0, scene.id === 'long-winter' ? '#111427' : '#14122c');
-    sky.addColorStop(1, scene.id === 'hollow-seal' ? '#32243b' : '#394364');
+    const reduced = prefersReducedMotion(), motion = reduced ? 0 : t;
+    const sky = ctx.createLinearGradient(0, 0, 0, 225);
+    sky.addColorStop(0, '#18182e'); sky.addColorStop(1, '#59527b');
     ctx.fillStyle = sky; ctx.fillRect(0, 0, 320, 240);
 
     if (scene.id === 'long-winter') {
-      ctx.fillStyle = '#12131f'; ctx.fillRect(0, 136, 320, 58);
-      for (let i = 0; i < 5; i++) {
-        ctx.fillStyle = '#222335'; ctx.fillRect(0, 29 + i * 22, 320, 1);
-        ctx.fillStyle = '#201e2a'; ctx.fillRect(0, 145 + i * 10, 320, 1);
+      introPlate(coastArt['court-wall'], 0, -8, 320, 168, '44,46,74,.31');
+      ctx.fillStyle = '#202036'; ctx.fillRect(0, 152, 320, 88);
+      const prop = (id, x, y, w, h) => drawInteriorArt(...PI_ART[id], x, y, w, h);
+      prop('rugBlue', 50, 112, 225, 118);
+      prop('windowBlue', 51, 22, 85, 80);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(65, 35, 57, 46); ctx.clip();
+      ctx.fillStyle = '#25304c'; ctx.fillRect(65, 35, 57, 46);
+      introPlate(frostArt[3], 63, 35, 66, 52);
+      for (let i = 0; i < 22; i++) {
+        ctx.fillStyle = i % 4 === 0 ? '#d6e4f3' : '#8e9eb6';
+        ctx.fillRect(65 + (introHash(i * 5.7) * 57 + motion * 3) % 57, 35 + (introHash(i * 9.3) * 46 + motion * 7) % 46, 1, 1);
       }
-      ctx.fillStyle = '#362d41'; ctx.fillRect(38, 36, 91, 92);
-      ctx.fillStyle = '#141b33'; ctx.fillRect(44, 42, 79, 80);
-      for (let i = 0; i < 34; i++) {
-        ctx.fillStyle = i % 5 === 0 ? '#deeaf4' : '#798fb4';
-        ctx.fillRect(46 + Math.floor((introHash(i * 7.7) * 74 + motion * (5 + i % 4)) % 74),
-          44 + Math.floor((introHash(i * 9.1) * 76 + motion * (13 + i % 6)) % 76), i % 4 === 0 ? 2 : 1, 1);
-      }
-      loreShape('#becbdf', [[44,116],[59,112],[76,116],[107,111],[123,116],[123,122],[44,122]]);
-      ctx.fillStyle = '#55445b'; ctx.fillRect(80, 42, 5, 80); ctx.fillRect(44, 80, 79, 4);
-      ctx.fillStyle = '#66576b'; ctx.fillRect(34, 123, 99, 5);
-      loreShape('#212a44', [[84,128],[120,128],[176,182],[37,182]]);
-      drawLoreMorwen(132, 169, false);
-      ctx.fillStyle = '#513e50'; ctx.fillRect(175, 131, 103, 24); ctx.fillRect(178, 154, 5, 17); ctx.fillRect(269, 154, 5, 17);
-      ctx.fillStyle = '#a19aba'; ctx.fillRect(180, 131, 26, 8);
-      loreShape('#76668f', [[200,134],[212,129],[236,134],[269,135],[269,148],[195,148]]);
-      ctx.fillStyle = '#9e88ae'; ctx.fillRect(201, 135, 42, 2);
-      ctx.fillStyle = '#b08c94'; ctx.fillRect(190, 131, 9, 4);
-      ctx.fillStyle = '#2b202d'; ctx.fillRect(188, 129, 8, 2);
-      ctx.fillStyle = '#cfb385'; ctx.fillRect(260, 119, 3, 11);
-      ctx.fillStyle = '#f9d49b'; ctx.fillRect(261, 115 - Math.round(Math.sin(motion * 7)), 1, 4);
-    } else if (scene.id === 'hollow-seal') {
-      loreShape('#100e1c', [[0,26],[38,23],[57,52],[77,53],[92,82],[116,89],[120,106],[193,106],[203,82],[227,70],[242,50],[275,34],[320,26],[320,194],[0,194]]);
-      loreShape('#30253d', [[0,141],[48,126],[72,131],[94,109],[128,116],[165,98],[189,114],[227,108],[261,126],[320,121],[320,186],[0,186]]);
-      loreShape('#4b3a58', [[63,168],[91,147],[121,141],[145,147],[171,130],[188,143],[216,146],[252,168],[225,180],[91,180]]);
-      const ward = smooth01((t - 4.0) / 1.4);
-      const light = ctx.createRadialGradient(161, 127, 4, 161, 127, 72);
-      light.addColorStop(0, `rgba(184,133,251,${.55 - ward * .29})`); light.addColorStop(1, 'rgba(184,133,251,0)');
-      ctx.fillStyle = light; ctx.fillRect(89, 55, 144, 130);
-      loreShape('#a887dc', [[138,148],[148,105],[169,78],[183,104],[173,138],[160,153]]);
-      loreShape('#f1e6ff', [[148,105],[169,78],[167,112],[155,134],[152,118]]);
-      loreShape('#625387', [[167,112],[169,78],[183,104],[173,138],[160,153]]);
-      loreShape('#2a2334', [[124,158],[153,154],[176,155],[193,160],[199,175],[117,175]]);
-      ctx.save(); ctx.globalAlpha = ward;
-      ctx.strokeStyle = '#e6ca98'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.ellipse(158, 161, 55, 15, 0, 0, Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = '#f4db9e';
-      for (let i = 0; i < 8; i++) {
-        const a = i * Math.PI / 4;
-        const x = Math.round(158 + Math.cos(a) * 61), y = Math.round(161 + Math.sin(a) * 17);
-        ctx.fillRect(x - 2, y, 5, 1); ctx.fillRect(x, y - 2, 1, 5);
-      }
+      ctx.fillStyle = '#656583'; ctx.fillRect(92, 35, 2, 46); ctx.fillRect(65, 57, 57, 2);
       ctx.restore();
+      prop('nightstand', 240, 108, 45, 47); prop('lamp', 251, 77, 24, 38);
+      prop('bedDoubleBlue', 156, 89, 87, 100);
+      ctx.fillStyle = 'rgba(20,22,45,.23)'; ctx.fillRect(0, 0, 320, 240);
+      tideGlow(263, 95, 60, '255,175,112', .42);
+      tideGlow(99, 71, 73, '143,176,255', .22);
+      drawLoreMorwen(129, 181, 0);
+    } else if (scene.id === 'hollow-seal') {
+      introPlate(hollowArt.back, 0, -20, 320, 240, '39,24,69,.44');
+      introPlate(hollowArt.middle, 0, 0, 320, 240, '30,21,49,.26');
+      introPlate(hollowArt.ground, 0, 154, 320, 80, '57,37,76,.33');
+      const ward = smooth01((t - 4.0) / 1.4);
+      tideGlow(161, 125, 86, '192,149,255', .55 - ward * .18);
+      introPlate(sceneryArt['crystal-1'], 117, 81, 86, 86, '145,128,247,.58');
+      drawFoundry('hex-sigil', 160, 151, motion, 1.45, 1, ward * .76, true);
     } else {
-      drawIntroBrightStars(0, 0, .6, motion);
-      loreShape('#2a2b4c', [[0,127],[32,118],[51,102],[65,111],[90,83],[109,112],[129,117],[160,110],[185,124],[211,115],[233,88],[252,113],[270,102],[298,117],[320,108],[320,185],[0,185]]);
-      loreShape('#191b32', [[0,146],[62,151],[105,133],[147,144],[186,132],[221,149],[260,138],[304,145],[320,135],[320,187],[0,187]]);
-      const moonBreakAt = 4.36; // Lands under “It broke” in the Orus track.
-      const fractured = scene.id === 'moonfall' && t >= moonBreakAt;
-      const y = scene.id === 'morwens-vow' ? 58 + Math.round(smooth01(t / 5) * 13) : 71;
+      drawIntroBrightStars(0, 0, .74, motion);
+      introPlate(passArt.far, 0, 20, 320, 192, '64,52,109,.58');
+      introPlate(gloamArt.forest, 0, 54, 320, 186, '43,36,77,.38');
+      const y = scene.id === 'morwens-vow' ? 54 + Math.round(smooth01(motion / 5) * 13) : 71;
+      const breakAt = 4.36, fractured = scene.id === 'moonfall' && t >= breakAt;
+      tideGlow(205, y, 69, '171,179,248', .33);
       if (fractured) {
-        drawFracturedMoon(206, y, 19, getIntroSkyMoon(), motion, 1);
-        const fall = prefersReducedMotion() ? .6 : smooth01((t - moonBreakAt) / 3.1);
-        for (let i = 0; i < 7; i++) {
-          const dx = (i - 2.8) * 19, x = Math.round(206 + fall * dx), sy = Math.round(y + fall * (34 + i * 9));
-          loreShape(i === 4 ? '#f4dfb9' : '#c196e0', [[x, sy],[x - Math.sign(dx) * 9, sy - 18],[x + 3, sy - 6]]);
+        drawFracturedMoon(205, y, 20, getIntroSkyMoon(), motion, 1);
+        const fall = reduced ? .62 : smooth01((t - breakAt) / 3);
+        for (let i = 0; fall > .04 && i < 7; i++) {
+          const x = 205 + fall * (i - 3) * 29, sy = y + fall * (45 + i * 13), size = i === 4 ? 24 : 13;
+          tideGlow(x, sy, size, '179,140,252', .28);
+          introPlate(sceneryArt['crystal-1'], x - size / 2, sy - size / 2, size, size, '181,153,251,.57');
         }
       } else {
         const moon = getIntroSkyMoon();
-        if (moon) ctx.drawImage(moon, 186, y - 20);
-        else { ctx.fillStyle = '#e2ddf2'; ctx.beginPath(); ctx.arc(206, y, 19, 0, Math.PI * 2); ctx.fill(); }
-        ctx.strokeStyle = '#b7a3dc'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(133, 92); ctx.quadraticCurveTo(171, 105 + Math.sin(motion * 1.3) * 6, 194, y + 17); ctx.stroke();
+        if (moon) ctx.drawImage(moon, 185, y - 20);
+        else { ctx.fillStyle = '#e2ddf2'; ctx.beginPath(); ctx.arc(205, y, 19, 0, Math.PI * 2); ctx.fill(); }
+        drawFoundry('arc-discharge', 155, 111, motion, .87, 1, .56, true);
       }
-      if (scene.id === 'moonfall') {
+      const guard = hollowArt.dadIdle;
+      if (scene.id === 'moonfall' && imgReady(guard)) {
         for (let i = 0; i < 3; i++) {
-          const x = 37 + i * 26, y = 141 + i * 6;
-          loreShape('#242338', [[x - 8,y],[x + 3,y - 9],[x + 10,y - 7],[x + 14,y + 31],[x - 11,y + 31]]);
-          ctx.fillStyle = '#9594aa'; ctx.fillRect(x, y - 14, 9, 9);
-          ctx.fillStyle = '#171927'; ctx.fillRect(x + 4, y - 11, 6, 2);
-          ctx.fillStyle = '#726b8e'; ctx.fillRect(x - 5, y + 3, 13, 2);
-          ctx.fillStyle = '#bbb0c7'; ctx.fillRect(x + 12, y - 5, 1, 27);
+          const scale = .66 + i * .1;
+          ctx.drawImage(tintedSheet(guard, '125,140,198,.24'), i * 128, 0, 128, 96, 4 + i * 23, 110 - i * 4, 128 * scale, 96 * scale);
         }
       }
-      drawLoreMorwen(98, 173, scene.id === 'morwens-vow' || !fractured);
+      drawLoreMorwen(scene.id === 'moonfall' ? 151 : 110, 198, fractured ? 0 : 4);
     }
-    drawIntroVignette(.6);
+    drawIntroVignette(.48);
   }
 
   function bookEmblem(x, y, r, page) {
@@ -1376,10 +1348,9 @@ const Overworld = (() => {
     ctx.restore();
   }
 
-  function drawBookCover(open) {
-    const thin = 1 - smooth01(open);
-    const x = Math.round(102 + open * 27);
-    ctx.save(); ctx.translate(x, 42); ctx.scale(Math.max(.02, thin), 1);
+  function drawBookCover(fold) {
+    if (fold <= .005) return;
+    ctx.save(); ctx.translate(132, 41); ctx.scale(fold * 1.42, 1);
     ctx.fillStyle = '#110d17'; ctx.fillRect(-3, 4, 121, 158);
     ctx.fillStyle = '#342333'; ctx.fillRect(0, 0, 116, 156);
     ctx.fillStyle = '#513747'; ctx.fillRect(5, 2, 108, 150);
@@ -1395,8 +1366,7 @@ const Overworld = (() => {
     ctx.restore();
   }
 
-  function drawStorybook(page, lore, t) {
-    const reduced = prefersReducedMotion();
+  function drawBookBackground() {
     const bg = ctx.createRadialGradient(157, 114, 26, 157, 114, 195);
     bg.addColorStop(0, '#54363b'); bg.addColorStop(.65, '#241b28'); bg.addColorStop(1, '#0c0b15');
     ctx.fillStyle = bg; ctx.fillRect(0, 0, 320, 240);
@@ -1405,49 +1375,103 @@ const Overworld = (() => {
       ctx.fillStyle = i % 2 ? 'rgba(172,110,78,.10)' : 'rgba(8,6,14,.23)';
       ctx.fillRect(0, y, 320, 1);
     }
-    const open = smooth01((introTime - .48) / .95);
+  }
+
+  const BOOK_ART = [143, 53, 144, 108];
+  const BOOK_SCREEN = [0, 0, 320, 240];
+  let bookArtCanvas = null;
+  function renderBookPlate(page, lore, t) {
+    if (!bookArtCanvas) {
+      bookArtCanvas = document.createElement('canvas');
+      bookArtCanvas.width = 320; bookArtCanvas.height = 240;
+    }
+    const main = ctx;
+    ctx = bookArtCanvas.getContext('2d');
+    ctx.save();
+    try {
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#0b0d1b'; ctx.fillRect(0, 0, 320, 240);
+      if (lore) drawIntroLore(lore);
+      else if (page === 5) drawIntroNight(t);
+      else drawIntroSpace(t);
+    } finally { ctx.restore(); ctx = main; }
+    return bookArtCanvas;
+  }
+  function drawBookIllustration(page, lore, t, [x, y, w, h]) {
+    // Crop the same 4:3 artwork at each size; never stretch the illustration.
+    const art = renderBookPlate(page, lore, t);
+    const s = Math.max(w / 320, h / 240);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    ctx.drawImage(art, x + (w - 320 * s) / 2, y + (h - 240 * s) / 2, 320 * s, 240 * s);
+    ctx.restore();
+  }
+  function drawBookLeft(page, lore) {
+    loreShape('#dcc398', [[24,43],[110,40],[132,48],[131,190],[112,184],[24,184]]);
+    ctx.strokeStyle = '#987449'; ctx.strokeRect(34.5, 53.5, 78, 121);
+    const title = lore?.scene.heading || (page === 5 ? ['THE', 'FRONTIER'] : ['BEFORE THE', 'MOONFALL']);
+    bookEmblem(74, 89, 19, page);
+    ctx.fillStyle = '#574033'; ctx.textAlign = 'center'; ctx.font = 'bold 11px Georgia, serif';
+    title.forEach((line, i) => ctx.fillText(line, 74, 131 + i * 13));
+    ctx.fillStyle = '#a47e4f'; ctx.fillRect(55, 153, 38, 1);
+  }
+  function drawBookRight(page, lore, t) {
+    loreShape('#ead7ae', [[132,48],[287,42],[296,48],[296,185],[136,192]]);
+    ctx.strokeStyle = '#987449'; ctx.strokeRect(142.5, 52.5, 145, 109);
+    drawBookIllustration(page, lore, t, BOOK_ART);
+    ctx.fillStyle = '#6b5140'; ctx.font = '7px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(['I', 'II', 'III', 'IV', 'V', 'VI'][page], 215, 181);
+  }
+  function drawStorybook(page, lore, t) {
+    const reduced = prefersReducedMotion();
+    const { open, turn, fold, zoom } = introBookPose(introTime, page, reduced);
+    const coverFold = Math.cos(Math.PI * open);
+    const prevTime = turn ? INTRO_PAGE_STARTS[page] - .001 : 0;
+    const prevLore = turn ? introLoreAt(prevTime) : null;
+    drawBookBackground();
+    ctx.save();
+    if (zoom > 0 && !reduced) {
+      // Push the camera through the printed frame, keeping the paper attached.
+      const [x, y, w, h] = BOOK_ART, cx = x + w / 2, cy = y + h / 2;
+      const scale = 1 + (320 / w - 1) * zoom;
+      ctx.translate(cx + (160 - cx) * zoom, cy + (120 - cy) * zoom);
+      ctx.scale(scale, scale);
+      ctx.translate(-cx, -cy);
+    }
+    ctx.translate(-52 * (1 - open) ** 2, 0);
     if (open > 0) {
-      ctx.save();
-      ctx.globalAlpha *= open;
-      ctx.fillStyle = '#100c16'; ctx.fillRect(13, 39, 294, 163);
+      // Hide the left page until the cover swings past the binding.
+      const left = open === 1 ? 13 : 132 - Math.max(0, -coverFold) * 119;
+      ctx.save(); ctx.beginPath(); ctx.rect(left, 32, 309 - left, 177); ctx.clip();
+      ctx.fillStyle = '#100c16'; ctx.fillRect(13, 42, 294, 160);
       loreShape('#5b3a48', [[16,38],[119,35],[136,42],[285,35],[306,45],[304,193],[139,205],[124,199],[16,194]]);
       loreShape('#bc9467', [[21,40],[124,36],[136,42],[288,39],[300,48],[299,187],[137,199],[124,193],[22,188]]);
-      if (!drawPaper('panel', 22, 37, 278, 155)) { ctx.fillStyle = '#e6cea3'; ctx.fillRect(22, 37, 278, 155); }
-      loreShape('#dcc398', [[24,43],[110,40],[132,48],[131,190],[112,184],[24,184]]);
-      loreShape('#ead7ae', [[133,48],[287,42],[296,48],[296,185],[137,192]]);
+      drawPaper('panel', 22, 37, 278, 155);
+      drawBookLeft(turn ? page - 1 : page, turn ? prevLore : lore);
+      drawBookRight(page, lore, t);
+      if (turn && Math.abs(fold) > .004) {
+        ctx.save();
+        ctx.translate(132, 0); ctx.scale(Math.abs(fold), 1); ctx.translate(-132, 0);
+        if (fold > 0) drawBookRight(page - 1, prevLore, prevTime);
+        else drawBookLeft(page, lore);
+        ctx.fillStyle = `rgba(94,55,37,${.33 * (1 - Math.abs(fold))})`;
+        ctx.fillRect(fold > 0 ? 132 : 24, 48, fold > 0 ? 163 : 108, 136);
+        ctx.restore();
+      }
       const gutter = ctx.createLinearGradient(120, 0, 146, 0);
       gutter.addColorStop(0, 'rgba(88,48,38,0)'); gutter.addColorStop(.5, 'rgba(88,48,38,.43)'); gutter.addColorStop(1, 'rgba(88,48,38,0)');
       ctx.fillStyle = gutter; ctx.fillRect(120, 45, 26, 147);
       loreShape('#833d49', [[128,46],[133,46],[133,204],[130,201],[127,204]]);
-      ctx.strokeStyle = '#987449'; ctx.strokeRect(34.5, 53.5, 78, 121);
-      ctx.strokeRect(144.5, 51.5, 141, 120);
-
-      ctx.save();
-      ctx.beginPath(); ctx.rect(147, 54, 136, 115); ctx.clip();
-      ctx.translate(128, 48); ctx.scale(.55, .63);
-      if (lore) drawIntroLore(lore);
-      else if (page === 5) drawIntroNight(t);
-      else drawIntroSpace(t);
-      ctx.restore();
-
-      const title = lore?.scene.heading || (page === 5 ? ['THE', 'FRONTIER'] : ['BEFORE THE', 'MOONFALL']);
-      bookEmblem(74, 89, 19, page);
-      ctx.fillStyle = '#574033'; ctx.textAlign = 'center'; ctx.font = 'bold 11px Georgia, serif';
-      title.forEach((line, i) => ctx.fillText(line, 74, 131 + i * 13));
-      ctx.fillStyle = '#a47e4f'; ctx.fillRect(55, 153, 38, 1);
-      ctx.fillStyle = '#6b5140'; ctx.font = '7px monospace';
-      ctx.fillText(['I', 'II', 'III', 'IV', 'V', 'VI'][page], 215, 181);
-
-      const age = lore?.t ?? (page === 5 ? introTime - INTRO_BOOK_END : 1);
-      if (age < .58 && !reduced) {
-        const p = smooth01(age / .58);
-        const x = 143 + Math.round(148 * p);
-        loreShape('#e9d8b3', [[x,46],[291,43],[291,181],[x + 7,188],[x - 7,168]]);
-        loreShape('#c1a47a', [[x,46],[x + 8,56],[x + 13,174],[x + 7,188],[x - 7,168]]);
-      }
       ctx.restore();
     }
-    if (open < 1 && (!reduced || introTime < .55)) drawBookCover(reduced ? 0 : open);
+    if (open < .5) drawBookCover(coverFold);
+    ctx.restore();
+    if (page === 5 && zoom > 0) {
+      ctx.save(); ctx.globalAlpha = zoom;
+      if (reduced) drawBookIllustration(page, lore, t, BOOK_SCREEN);
+      drawIntroLetterbox();
+      ctx.restore();
+    }
   }
 
   function drawIntro() {
@@ -1455,18 +1479,12 @@ const Overworld = (() => {
     const t = introTime < INTRO_SPACE_END ? introTime : introTime - INTRO_LORE_LENGTH;
     const page = introBookPage(introTime, lore);
     ctx.fillStyle = '#03050d'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    if (page < 5) {
+    if (page < 6) {
       drawStorybook(page, lore, t);
     } else if (t < 38.5) {
       drawIntroNight(t);
       drawIntroLetterbox();
       const fadeOut = Math.max(0, Math.min(1, (t - 36.8) / 1.7));
-      if (page === 5) {
-        const p = smooth01((introTime - INTRO_BOOK_END - .56) / 1.04);
-        ctx.save(); ctx.globalAlpha = 1 - p;
-        drawStorybook(page, null, t);
-        ctx.restore();
-      }
       if (fadeOut > 0) { ctx.fillStyle = 'rgba(0,0,0,' + fadeOut + ')'; ctx.fillRect(0, 0, 320, 240); }
     } else {
       const p = Math.min(1, (t - 38.5) / 1.4);
@@ -1479,11 +1497,9 @@ const Overworld = (() => {
       const fade = Math.max(0, Math.min(1, (t - 45.5) / 1));
       if (fade > 0) { ctx.fillStyle = 'rgba(0,0,0,' + fade + ')'; ctx.fillRect(0, 0, 320, 240); }
     }
-    drawIntroFallbackCaptions();
-    if (introTime < 4) {
-      ctx.fillStyle = 'rgba(235,229,211,.55)'; ctx.font = '6px monospace'; ctx.textAlign = 'right';
-      ctx.fillText(inputMode === 'touch' ? 'TAP TO SKIP' : 'PRESS ANY BUTTON TO SKIP', 306, 236);
-    }
+    drawIntroCaptions();
+    ctx.fillStyle = 'rgba(235,229,211,.72)'; ctx.font = '6px monospace'; ctx.textAlign = 'left';
+    ctx.fillText(inputMode === 'touch' ? 'TAP TO SKIP' : 'PRESS ANY BUTTON TO SKIP', 14, 236);
   }
   let worldClock = 0.28, wolfSpawned = false, wolfNoticeCooldown = 0;
   const wolves = [];
@@ -5005,6 +5021,12 @@ const Overworld = (() => {
       if (A.death) { const n = A.death[1], f = Math.min(n - 1, Math.floor(m.deadTime * (A.death[2] || 9))); return [A.death, A.death[3] === 'rev' ? n - 1 - f : f]; }
       return [A.idle, 0];
     }
+    const reveal = phasePose(m);
+    if (reveal !== null && (A.attack || A.idle)) {
+      const strip = A.attack || A.idle;
+      const p = prefersReducedMotion() ? .55 : smooth01(reveal);
+      return [strip, Math.min(strip[1] - 1, Math.floor(p * strip[1]))];
+    }
     if (A.rise && m.dormant) return [A.rise, m.rising ? Math.min(A.rise[1] - 1, Math.floor(m.rising * A.rise[2])) : 0];
     if (T.ai === 'nick' && m.st === 'ray') return [NICK_RAY, nickRayFrame(m.stT, nickFireAt(m.enraged))];
     if (T.ai === 'mare') {
@@ -5045,6 +5067,7 @@ const Overworld = (() => {
     const squash = m.dead && !T.anims.death && !T.boss ? Math.max(0.2, 1 - m.deadTime * 1.6) : 1;
     ctx.save();
     ctx.globalAlpha *= alpha;
+    if (T.boss && bossFight?.phaseTwo && bossFight.t > PHASE_REVEAL) ctx.filter = 'brightness(1.24)';
     ctx.translate(Math.round(m.x), Math.round(m.y + sink));
     if (flip) ctx.scale(-1, 1);
     if (m.type === 'skarn' && m.dead) {
@@ -5186,7 +5209,7 @@ const Overworld = (() => {
   }
   function drawChampion(m) {
     const T = m.T;
-    const phase = m.attackTime > 0 ? 1 - m.attackTime / m.atkLen : -1;
+    const phase = phasePose(m) ?? (m.attackTime > 0 ? 1 - m.attackTime / m.atkLen : -1);
     const strike = phase >= T.hit[0] && phase <= T.hit[1];
     const wind = phase < 0 ? 0 : strike ? 3 : phase < T.hit[0] ? -6 : -1;
     const stride = m.moving ? Math.round(Math.sin(m.walk * 0.7) * 2) : 0;
@@ -5253,9 +5276,8 @@ const Overworld = (() => {
         ctx.fillStyle = g; ctx.fillRect(m.x - fl, ly - fl, fl * 2, fl * 2); ctx.restore();
       }
       drawEliteAura(m);
-      if (m.enraged && !m.dead) drawBossForm(m, false);
+      drawBossPhaseArt(m);
       drawMob(m);
-      if (m.enraged && !m.dead) drawBossForm(m, true);
       const warning = mobWarning(m);
       if (warning) drawMobWarning(m, warning);
       if (!m.dead && !m.T.boss && !m.dormant && (time < m.showHpUntil || m.hp < m.maxHp || m.elite)) {
@@ -6884,26 +6906,26 @@ const Overworld = (() => {
   const CINE_END = 4.5;
   const PHASE_REVEAL = 1.05;
   const PHASE_END = 3.55;
-  // Each second form has its own outline, drawn behind the original animation.
+  // Phase-two identity, for the name card and matching sprite tint.
   const BOSS_FORMS = {
-    ogre: ['THE BROKEN CROWN', "Don't touch my crown!", '#a45987', '#ffbcaa', [[-27,-79,-7,35],[-10,-95,2,39],[1,-89,17,30]], [[-18,-49,10,5],[7,-33,6,3]]],
-    mare: ['THE UNBRIDLED', 'I never needed reins.', '#8e48a5', '#ffe3aa', [[-30,-73,2,42],[-17,-61,13,37],[5,-45,32,30],[18,-35,44,25]], [[-20,-36,8,3],[-12,-34,4,5]]],
-    demon: ['THE HUNGER', "Still here? Good. I'm hungry.", '#4757a6', '#a5edff', [[-12,-72,-79,54],[-6,-59,-58,35],[9,-75,76,53],[5,-56,56,34]], [[-37,-44,10,3],[-28,-42,4,5],[21,-34,6,2]]],
-    skarn: ['THE BONE MASK', "Fine. I'll wear hers.", '#825340', '#f2d6a4', [], []],
-    mourn: ['THE LAST WATCH', 'I can hear them again.', '#536699', '#c9e1ff', [[-24,-96,-33,28],[-10,-106,-8,35],[5,-93,16,31],[20,-53,33,39]], [[-10,-81,11,2],[-10,-37,22,3],[0,-44,2,14]]],
-    wyrm: ['THE EMBER STAR', "Get back. It's waking up.", '#be442a', '#ffdc7a', [[-34,-81,-50,32],[-20,-93,-29,43],[-7,-87,-3,36],[7,-73,18,47],[21,-61,36,32]], [[-28,-37,11,4],[-25,-33,8,3],[-20,-30,4,5]]],
-    tidemaw: ['THE CRACKED BELL', 'No. Not the bell.', '#386e64', '#c3f8cb', [[-31,-76,-29,65],[27,-71,39,61],[-19,-91,-3,33]], [[-20,-60,6,3],[-16,-57,4,6],[-12,-54,7,2],[-7,-52,2,7],[-32,-36,7,3],[26,-29,7,3]]]
+    ogre: ['THE BROKEN CROWN', "Don't touch my crown!", '#a45987', '#ffbcaa'],
+    mare: ['THE UNBRIDLED', 'I never needed reins.', '#8e48a5', '#ffe3aa'],
+    demon: ['THE HUNGER', "Still here? Good. I'm hungry.", '#4757a6', '#a5edff'],
+    skarn: ['THE BONE MASK', "Fine. I'll wear hers.", '#825340', '#f2d6a4'],
+    mourn: ['THE LAST WATCH', 'I can hear them again.', '#536699', '#c9e1ff'],
+    wyrm: ['THE EMBER STAR', "Get back. It's waking up.", '#be442a', '#ffdc7a'],
+    tidemaw: ['THE CRACKED BELL', 'No. Not the bell.', '#386e64', '#c3f8cb']
   };
   const PHASE_SHOWS = {
-    ogre:       { style: 'rubble', cue: 'slam', seed: 1 },
-    mare:       { style: 'flame', cue: 'fire', seed: 2 },
-    demon:      { style: 'eclipse', cue: 'demon', seed: 3 },
-    skarn:      { style: 'mire', cue: 'slam', seed: 4 },
-    mourn:      { style: 'spirits', cue: 'ghost', seed: 5 },
-    wyrm:       { style: 'eruption', cue: 'fire', seed: 6 },
-    tidemaw:    { style: 'bell', cue: 'gem', seed: 7 },
-    saltStag:   { style: 'crystal', cue: 'clash', seed: 8 },
-    wellKeeper: { style: 'lantern', cue: 'magic', seed: 9 }
+    ogre:       { aura: 'shadow-step', burst: 'air-burst', cue: 'slam', ground: true, split: true },
+    mare:       { aura: 'arc-discharge', burst: 'air-burst', cue: 'fire', ground: true, split: true },
+    demon:      { aura: 'hex-sigil', burst: 'void-rift', cue: 'demon' },
+    skarn:      { aura: 'shadow-step', burst: 'air-burst', cue: 'slam', ground: true, split: true },
+    mourn:      { aura: 'hex-sigil', burst: 'shadow-step', cue: 'ghost', split: true },
+    wyrm:       { aura: 'fireball-impact', burst: 'fireball-impact', cue: 'fire', ground: true, split: true },
+    tidemaw:    { aura: 'ripple', burst: 'arc-discharge', cue: 'gem', ground: true },
+    saltStag:   { aura: 'ripple', burst: 'arc-discharge', cue: 'clash', ground: true, split: true },
+    wellKeeper: { aura: 'hex-sigil', burst: 'void-rift', cue: 'magic' }
   };
   function beginBossSecondPhase(m) {
     Object.assign(bossFight, { phaseTwo: true, intro: true, cine: true, active: false, t: 0, ev: {}, skipPhase: false });
@@ -6917,16 +6939,14 @@ const Overworld = (() => {
     c.t += dt;
     boss.flash = Math.max(0, boss.flash - dt);
     if (!c.skipPhase && cineEvent(c, 'break', PHASE_REVEAL)) {
-      boss.enraged = true; screenShake = 6;
-      padRumble(0.68, 0.78, 290); sfx(PHASE_SHOWS[boss.type].cue, 0.9, 0.78);
-      const color = hexRgb(BOSS_FORMS[boss.type][3]);
-      const grounded = ['ogre', 'skarn', 'wyrm', 'saltStag'].includes(boss.type);
-      if (grounded) spawnDust(boss.x, SIDE_GROUND_Y, 14);
-      cineBurst(boss.x, grounded ? SIDE_GROUND_Y : boss.y - boss.T.bodyH * .55, 24,
-        { kind: grounded ? 'rock' : 'spark', speed: 105, life: 1.12, g: grounded ? 210 : -15, color, size: 3,
-          spread: grounded ? 2.8 : Math.PI * 2 });
+      boss.enraged = true;
+      const show = PHASE_SHOWS[boss.type];
+      if (!prefersReducedMotion()) {
+        screenShake = 2.5;
+        padRumble(.46, .58, 210);
+      }
+      sfx(show.cue, .88, .82);
     }
-    updateCineParticles(dt);
     if (!c.skipPhase && c.t < PHASE_END) return;
     boss.enraged = true;
     clearHeldInput();
@@ -6940,105 +6960,44 @@ const Overworld = (() => {
     Object.assign(add, { respawn: Infinity, summoned: true, attackCooldown: 1.65, dormant: false });
     sideMobs.push(add);
   }
-  function drawBossForm(m, front) {
-    const [, , shade, hot, blades, marks] = BOSS_FORMS[m.type];
-    ctx.save(); ctx.translate(Math.round(m.x), Math.round(m.y)); ctx.scale(-m.dir, 1);
-    if (front) {
-      for (const [x,y,w,h,dark] of marks) { ctx.fillStyle = dark ? shade : hot; ctx.fillRect(x,y,w,h); }
-    } else {
-      blades.forEach(([x,y,tip,len], i) => {
-        const w = Math.round(Math.sin(time * 8 + i) * 3), mid = Math.round((x + tip) / 2);
-        ctx.fillStyle = shade;
-        // Stepped silhouettes stay crisp at 320 × 240.
-        for (let j = 0; j < len; j += 3) {
-          const start = Math.round(tip + w + (mid - tip - w) * j / len);
-          const end = Math.round(tip + w + (x - tip - w) * j / len);
-          ctx.fillRect(Math.min(start,end) - 1, y + j, Math.abs(end-start) + 3 + Math.round(j * 0.19), 3);
-        }
-        ctx.fillStyle = hot; ctx.fillRect(tip + w, y, 2, 5);
-      });
-    }
-    ctx.restore();
+  function phasePose(m) {
+    if (!m.T.boss || !bossFight?.phaseTwo || m !== theBoss()) return null;
+    const p = (bossFight.t - PHASE_REVEAL + .26) / 1.28;
+    return p >= 0 && p <= 1 ? p : null;
   }
-  function drawPhasePower(boss, t, fade) {
-    const [,, shade, hot] = BOSS_FORMS[boss.type];
-    const { style, seed } = PHASE_SHOWS[boss.type];
-    const x = Math.round(boss.x - sideCameraX), y = Math.round(boss.y - boss.T.bodyH * .55);
-    const floor = SIDE_GROUND_Y, p = t - PHASE_REVEAL;
-    const build = clamp(t / PHASE_REVEAL, 0, 1);
-    const burst = p < 0 ? 0 : Math.max(0, 1 - p / 1.55);
-    const poly = (color, pts) => {
-      ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
-      for (const [px, py] of pts.slice(1)) ctx.lineTo(px, py);
-      ctx.closePath(); ctx.fill();
-    };
-    const orb = (px, py, r, color) => {
-      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
-    };
-    ctx.save();
-    if (p < 0) {
-      ctx.globalAlpha = fade * build * .78;
-      for (let i = 0; i < 18; i++) {
-        const a = i * 2.4 + t * (2 + seed * .19), r = (1 - build) * (30 + i * 4) + 13;
-        const px = Math.round(x + Math.cos(a) * r), py = Math.round(y + Math.sin(a) * r * .66);
-        ctx.fillStyle = i % 3 ? hot : shade; ctx.fillRect(px, py, i % 4 === 0 ? 3 : 2, 2);
+  function drawBossPhaseArt(m) {
+    if (!m.T.boss || m.dead) return;
+    const show = PHASE_SHOWS[m.type];
+    if (!show) return;
+    const c = bossFight?.phaseTwo && m === theBoss() ? bossFight : null;
+    const t = c ? c.t : time, x = m.x, y = m.y - m.T.bodyH * .54;
+    const floor = Math.min(SIDE_GROUND_Y, m.y + 3);
+    const size = clamp(m.T.bodyH / 60, .74, 1.28);
+    if (!c) {
+      // Keep combat readability: a quiet accent only during uncommitted movement.
+      if (m.enraged && !m.tele && m.attackTime <= 0 && !prefersReducedMotion()) {
+        drawFoundry(show.aura, x, m.T.fly ? y : floor - 7, t, size * .74, -m.dir, .23, true);
       }
-    } else if (burst > 0) {
-      ctx.globalAlpha = fade * burst * .87;
-      if (style === 'eclipse') {
-        const r = 26 + Math.min(16, p * 48);
-        orb(x, y - 24, r + 3, hot); orb(x + 4, y - 27, r, '#19152e');
-        for (let i = 0; i < 8; i++) {
-          const dx = (i < 4 ? -1 : 1) * (28 + (i % 4) * (13 + p * 9));
-          poly(shade, [[x + dx - 10,y - 18],[x + dx + 12,y - 42],[x + dx + 5,y - 11],[x + dx,y + 9]]);
-        }
-      } else if (style === 'bell' || style === 'lantern') {
-        for (let i = 0; i < 3; i++) {
-          const q = p - i * .13; if (q < 0) continue;
-          ctx.strokeStyle = i === 0 ? hot : shade; ctx.lineWidth = i === 0 ? 2 : 4;
-          ctx.beginPath(); ctx.ellipse(x, style === 'bell' ? floor - 12 - i * 15 : y, 10 + q * 111, 6 + q * (style === 'bell' ? 23 : 50), 0, 0, Math.PI * 2); ctx.stroke();
-        }
-        if (style === 'lantern') {
-          poly(hot, [[x,y-48],[x+12,y],[x,y+43],[x-12,y]]);
-          poly(shade, [[x,y-29],[x+5,y],[x,y+28],[x-5,y]]);
+      return;
+    }
+    const low = prefersReducedMotion(), p = t - PHASE_REVEAL;
+    const fade = smooth01(t / .37) * (1 - smooth01((t - 2.64) / .69));
+    if (p < 0) {
+      drawFoundry(show.aura, x, m.T.fly ? y + 7 : floor - 7, .26 + t, size * (1.12 + (low ? 0 : t * .13)), -m.dir, fade * .82, true);
+    } else {
+      const a = fade * (1 - smooth01((p - .78) / .91));
+      if (low) {
+        drawFoundry(show.burst, x, show.ground ? floor - 9 : y, .36, size * 1.28, -m.dir, a, true);
+      } else if (show.split) {
+        for (const dir of [-1, 1]) {
+          drawFoundry(show.burst, x + dir * (24 * size + p * 9), show.ground ? floor - 13 : y,
+            .16 + p * .75, size * 1.44, dir, a);
         }
       } else {
-        for (let i = -5; i <= 5; i++) {
-          const px = Math.round(x + i * (13 + p * 12));
-          const h = Math.round((17 + (5 - Math.abs(i)) * 6 + ((i + 5) * seed % 13)) * Math.min(1, p * 12) * Math.sqrt(burst));
-          if (style === 'spirits') {
-            const py = floor - 5 - p * (32 + (i + 5) % 4 * 22);
-            poly(shade, [[px-6,py],[px-5,py-8],[px,py-13],[px+5,py-8],[px+5,py+1],[px-2,py+7]]);
-            ctx.fillStyle = hot; ctx.fillRect(px - 3, py - 7, 2, 2); ctx.fillRect(px + 1, py - 7, 2, 2);
-          } else if (style === 'mire' || style === 'rubble') {
-            const w = style === 'mire' ? 12 : 8, base = floor - 1;
-            const tilt = style === 'mire' ? i * 2 : Math.sin(i * 13) * 8;
-            const dy = style === 'rubble' ? Math.round(p * (18 + 4 * (i * i % 7))) : 0;
-            const py = base - dy;
-            const sx = px + tilt;
-            poly(shade, [[px-w,py],[px-w,py-h*.42],[sx-w*.7,py-h*.64],[sx-w*.62,py-h],[sx+w*.43,py-h],[sx+w*.75,py-h*.66],[px+w,py-h*.4],[px+w,py]]);
-            poly(hot, [[sx-w*.58,py-h*.8],[sx-w*.55,py-h],[sx+w*.4,py-h],[sx+w*.68,py-h*.72],[sx-w*.09,py-h*.78]]);
-          } else if (style === 'flame' || style === 'eruption') {
-            const sway = (style === 'flame' ? Math.sign(i) * 10 : 0) + Math.sin(t * 18 + i) * 5;
-            const tall = style === 'eruption' ? 1 + (5 - Math.abs(i)) * .16 : .9;
-            for (let layer = 0; layer < 2; layer++) {
-              const w = layer ? 3.5 : 9, top = floor - h * tall * (layer ? .63 : 1);
-              ctx.fillStyle = layer ? hot : shade;
-              ctx.beginPath(); ctx.moveTo(px - w, floor);
-              ctx.quadraticCurveTo(px - w * 1.6, floor - h * .34, px + sway, top);
-              ctx.quadraticCurveTo(px + sway * .48, floor - h * .5, px + w, floor - h * .28);
-              ctx.quadraticCurveTo(px + w * 1.4, floor - h * .1, px + w, floor);
-              ctx.closePath(); ctx.fill();
-            }
-          } else {
-            const lean = Math.sign(i) * 6, w = 6, base = floor;
-            poly(shade, [[px-w,base],[px-w+2,base-h*.45],[px+lean,base-h],[px+lean+w,base-h*.46],[px+w,base]]);
-            poly(hot, [[px-2,base-h*.28],[px+lean,base-h],[px+lean+3,base-h*.57],[px+4,base-h*.23]]);
-          }
-        }
+        drawFoundry(show.burst, x, show.ground ? floor - 8 : y - 9, .2 + p * .78, size * 1.6, -m.dir, a);
       }
+      drawFoundry('ripple', x, floor + 1, .15 + p * .71, size * 1.19, 1, a * .53);
     }
-    ctx.restore();
   }
   function drawSecondPhase(c, boss) {
     const [title, line, shade, hot] = BOSS_FORMS[boss.type], t = c.t;
@@ -7046,17 +7005,16 @@ const Overworld = (() => {
     ctx.save();
     const vignette = ctx.createRadialGradient(boss.x - sideCameraX, boss.y - 45, 26, boss.x - sideCameraX, boss.y - 45, 169);
     vignette.addColorStop(0, 'rgba(8,6,17,0)');
-    vignette.addColorStop(1, 'rgba(8,6,17,' + (.78 * k) + ')');
+    vignette.addColorStop(1, 'rgba(8,6,17,' + (.62 * k) + ')');
     ctx.fillStyle = vignette; ctx.fillRect(0, 0, 320, 240);
-    drawPhasePower(boss, t, k);
-    drawCineFx();
     ctx.fillStyle = '#080610'; ctx.fillRect(0, 0, 320, bar); ctx.fillRect(0, 240 - bar, 320, bar);
     if (t > PHASE_REVEAL) {
       ctx.globalAlpha = Math.min(k, (t - PHASE_REVEAL) * 7);
       ctx.textAlign = 'center';
-      ctx.font = '7px monospace'; ctx.fillStyle = '#e8dfdf'; ctx.fillText('P H A S E   I I', 160, 10);
-      ctx.font = 'bold 12px monospace'; ctx.fillStyle = hot; ctx.fillText(title, 160, 24);
-      ctx.fillStyle = shade; ctx.fillRect(20, 21, 43, 1); ctx.fillRect(257, 21, 43, 1);
+      const name = bossNameParts(boss.T).name;
+      ctx.font = '7px monospace'; ctx.fillStyle = '#d8cfe2'; ctx.fillText('PHASE II  /  ' + name.toUpperCase(), 160, 10);
+      ctx.font = 'bold 13px monospace'; ctx.fillStyle = hot; ctx.fillText(title, 160, 25);
+      ctx.fillStyle = shade; ctx.fillRect(23, 21, 40, 1); ctx.fillRect(257, 21, 40, 1);
       ctx.font = '9px monospace'; ctx.fillStyle = '#eee7dc'; ctx.fillText(line, 160, 223);
       ctx.font = '7px monospace'; ctx.fillStyle = '#aea4b1';
       ctx.fillText((inputMode === 'pad' ? '\u2715' : inputMode === 'touch' ? 'USE' : 'E') + '  SKIP', 160, 235);
@@ -8575,8 +8533,8 @@ const Overworld = (() => {
       flag: 'wellBossSeen', tip: 'Roll through the glass volleys. Save room behind you.' }
   });
   Object.assign(BOSS_FORMS, {
-    saltStag: ['THE SALT CROWN', 'I kept what I could.', '#c6583c', '#ffe7a2', [[-17,-85,-29,51],[3,-88,17,39],[21,-70,47,30]], [[-14,-49,5,2]]],
-    wellKeeper: ['THE LAST LANTERN', "It was never my light.", '#307486', '#cefaf1', [[-17,-74,-45,51],[12,-85,44,49],[-7,-78,2,34]], [[-12,-41,25,2],[0,-51,2,27]]]
+    saltStag: ['THE SALT CROWN', 'I kept what I could.', '#c6583c', '#ffe7a2'],
+    wellKeeper: ['THE LAST LANTERN', "It was never my light.", '#307486', '#cefaf1']
   });
   Object.assign(BOSS_CINE, {
     saltStag: { nameAt: 1.85, main: '#ffd596', hot: '#fff3be', deep: '#9f542e', glow: '247,162,75', crest: 'fang' },
@@ -8900,7 +8858,7 @@ const Overworld = (() => {
   function drawReever(m) {
     const p = tidePixel, s = tideShape;
     const stride = m.moving ? Math.round(Math.sin(m.walk) * 5) : 0;
-    const attack = m.attackTime > 0 ? 1 - m.attackTime / m.atkLen : 0;
+    const attack = phasePose(m) ?? (m.attackTime > 0 ? 1 - m.attackTime / m.atkLen : 0);
     ctx.save(); ctx.translate(Math.round(m.x), Math.round(m.y)); ctx.scale(m.dir, 1);
     if (m.dead) { ctx.globalAlpha = Math.max(0, 1 - m.deadTime / .7); ctx.rotate(Math.min(1.45, m.deadTime * 2.3)); }
     const dark = '#151b29', iron = '#42616b', shell = '#9d9a78', glint = m.flash > 0 ? '#fff' : '#ded0a0';
@@ -10274,9 +10232,8 @@ const Overworld = (() => {
       { who: 'rowan', text: "This time I'm not letting you walk away." }],
     retry: [{ who: 'nick', text: "Watch my beak, not the snow." }] };
   BOSS_CINE.nick = { nameAt: 1.9, main: '#a5eaff', hot: '#f0fdff', deep: '#204b7f', glow: '119,213,255', crest: 'moon' };
-  BOSS_FORMS.nick = ['THE WHITEOUT', 'Now try it with your eyes shut.', '#3c6794', '#a7ecff',
-    [[-17,-49,-38,47],[11,-60,37,55],[2,-66,9,33]], [[-11,-45,20,2]]];
-  PHASE_SHOWS.nick = { nameAt: 1.74, style: 'crystal', cue: 'magic', seed: 10, main: '#a5eaff', hot: '#f0fdff', deep: '#204b7f', glow: '119,213,255', crest: 'moon' };
+  BOSS_FORMS.nick = ['THE WHITEOUT', 'Now try it with your eyes shut.', '#3c6794', '#a7ecff'];
+  PHASE_SHOWS.nick = { aura: 'ripple', burst: 'arc-discharge', cue: 'magic', split: true };
   const nickReduced = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const nickEase = v => { const n = clamp(v, 0, 1); return n * n * (3 - 2 * n); };
   const nickFireAt = enraged => enraged ? .74 : 1.10;
@@ -11327,8 +11284,7 @@ const Overworld = (() => {
     if (introActive) {
       if (document.hidden) return;
       introTime += dt;
-      syncIntroNarration();
-      if (introTime >= .48) {
+      if (introTime >= BOOK_OPEN_AT) {
         const page = introBookPage(introTime);
         if (page !== introBookCue) {
           introBookCue = page;
@@ -12936,16 +12892,11 @@ const Overworld = (() => {
     introActive = !saveData || typeof saveData !== 'object';
     introReplayOnly = options.replayIntro === true;
     introTime = 0; introBookCue = -1;
-    stopIntroNarration(); introNarratorBlocked = false;
     introWolfFleePaths = null;
     introWolfHowlOne = false; introWolfHowlTwo = false; introWolfHowlEcho = false;
     if (introActive && (typeof settings === 'undefined' || settings.sound !== false)) {
       try { audioCtx(); } catch (_) {}
       loadSfxFile('book_open'); loadSfxFile('book_flip');
-      introNarrator = new Audio('./assets/audio/intro-orus.mp3');
-      introNarrator.volume = .85;
-      introNarrator.preload = 'auto';
-      document.addEventListener('visibilitychange', syncIntroNarration);
     }
     if (introActive) { insideHouse = true; interiorPlayer.x = KID_SPAWN.x; interiorPlayer.y = KID_SPAWN.y; interiorPlayer.facing = KID_SPAWN.facing; }
     window.addEventListener('keydown', onKeyDown, true);
@@ -12959,7 +12910,6 @@ const Overworld = (() => {
   }
 
   function stop() {
-    stopIntroNarration();
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp);
     window.removeEventListener('blur', clearHeldInput);

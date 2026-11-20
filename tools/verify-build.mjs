@@ -31,7 +31,7 @@ new vm.Script(js.replace(marker, `
   window.buildData = { REGIONS, SCENE_MOBS, MOB_TYPES, STORY_DEFAULTS, LORE, FIRES, SFX_BANK, MUSIC_FILES, BOSS_FORMS, BOSS_LINES, PHASE_SHOWS, FOUNDRY };
   window.bloodTest = { bloodDrops, spawnBlood, updateBlood, setBloodEffects };
   window.balanceTest = { xpForNext, gainXp, bossHitFloor, hurtByBoss, stats, equipment, skarnAttackFrame, SKARN_HEW, SKARN_SLAM };
-  window.introTest = { introBookPage, INTRO_CAPTIONS, INTRO_DURATION, INTRO_SPACE_END, INTRO_LORE, INTRO_BOOK_END };
+  window.introTest = { introBookPage, introBookPose, introCaptionAt, INTRO_CAPTIONS, INTRO_DURATION, INTRO_SPACE_END, INTRO_LORE, INTRO_BOOK_END };
 ${marker}`), { filename: 'world.js' }).runInNewContext(context);
 const { REGIONS, SCENE_MOBS, MOB_TYPES, STORY_DEFAULTS, LORE, FIRES, SFX_BANK, MUSIC_FILES, BOSS_FORMS, BOSS_LINES, PHASE_SHOWS, FOUNDRY } = context.window.buildData;
 const unique = (rows, name) => assert.equal(new Set(rows.map(row => row.id)).size, rows.length, `Duplicate ${name} IDs`);
@@ -81,6 +81,9 @@ for (const [key, type] of Object.entries(MOB_TYPES)) {
       `Frame cell out of bounds: ${key}.${anim} in ${name}`);
   }
 }
+for (const [boss, show] of Object.entries(PHASE_SHOWS)) {
+  assert(BOSS_FORMS[boss] && FOUNDRY[show.aura] && FOUNDRY[show.burst], `Missing phase-two art for ${boss}`);
+}
 for (const [files] of Object.values(SFX_BANK)) for (const file of files) ref(`assets/audio/sfx/${file}.mp3`);
 for (const file of Object.values(MUSIC_FILES)) ref(`assets/audio/music/${file}.mp3`);
 for (const content of [html, js]) {
@@ -126,19 +129,30 @@ assert.equal(120 - stats.health, bossHitFloor(120, true, false), 'Endgame armor 
 assert(bossHitFloor(120, true, false) > bossHitFloor(120, false, false), 'Phase two is more dangerous');
 assert(bossHitFloor(120, true, false) > bossHitFloor(120, true, true), 'Hazards are less damaging than direct hits');
 
-const { introBookPage, INTRO_CAPTIONS, INTRO_DURATION, INTRO_SPACE_END, INTRO_LORE, INTRO_BOOK_END } = context.window.introTest;
+const { introBookPage, introBookPose, introCaptionAt, INTRO_CAPTIONS, INTRO_DURATION, INTRO_SPACE_END, INTRO_LORE, INTRO_BOOK_END } = context.window.introTest;
+assert(!refs.has('assets/audio/intro-orus.mp3'), 'The text-only opening must not load the voice track');
 assert.equal(introBookPage(0), 0, 'Start on the cover/Earth spread');
+assert.equal(introBookPose(.2).open, 0);
+assert(introBookPose(1).open > 0 && introBookPose(1).open < 1);
+assert.equal(introBookPose(1.8).open, 1);
 let pageStart = INTRO_SPACE_END;
 INTRO_LORE.forEach(({ seconds }, i) => {
   assert.equal(introBookPage(pageStart + 0.25), i + 1, 'Open each flashback on its own page');
-  assert.equal(introBookPage(pageStart + seconds - 0.1), i + 1, 'Hold each page for its narration');
+  assert.equal(introBookPage(pageStart + seconds - 0.1), i + 1, 'Hold each page for its story text');
+  assert(introBookPose(pageStart + .1).fold > 0, 'The previous illustration stays on the face of the turning page');
+  assert(introBookPose(pageStart + .55).fold < 0, 'The page turns over the spine');
+  assert(!introBookPose(pageStart + .1, i + 1, true).turn, 'Reduced motion disables page folds');
+  assert(!introBookPose(pageStart + .7).turn);
   pageStart += seconds;
 });
 assert.equal(introBookPage(INTRO_BOOK_END + 0.1), 5, 'The frontier begins as an illustration');
+assert.equal(introBookPose(INTRO_BOOK_END + .3).zoom, 0, 'The turn completes before zooming');
+assert(introBookPose(INTRO_BOOK_END + 1.45).zoom > introBookPose(INTRO_BOOK_END + .9).zoom, 'The village grows out of the illustration');
 assert.equal(introBookPage(INTRO_BOOK_END + 1.7), 6, 'The frontier opens into the world');
 let captionEnd = 0;
 for (const [start, end, line] of INTRO_CAPTIONS) {
-  assert(start >= captionEnd && end > start && end < INTRO_DURATION && line.length, 'Invalid or overlapping fallback caption');
+  assert(start >= captionEnd && end > start && end < INTRO_DURATION && line.length, 'Invalid or overlapping story text');
+  assert.equal(introCaptionAt((start + end) / 2), line, 'Text is available without an audio setting or track');
   captionEnd = end;
 }
 

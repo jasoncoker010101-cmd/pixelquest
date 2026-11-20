@@ -39,6 +39,16 @@ const hook = `
     },
     key(k) { onKeyDown({ key: k, preventDefault() {}, stopPropagation() {} }); },
     pointer() { onCanvasPointer({ preventDefault() {} }); },
+    phaseBossTypes: Object.keys(PHASE_SHOWS),
+    phaseBoss(type) {
+      const boss = makeMob(type, sidePlayer.x + 52, 80, 0);
+      sideMobs.splice(0, sideMobs.length, boss); boss.dormant = false;
+      bossFight = { active: true, ev: {} };
+      damageMob(boss, boss.maxHp + 2, 1, 0, true, false);
+      return boss;
+    },
+    hitBoss(boss) { damageMob(boss, 4, 1, 0, false, false); },
+    phase() { return { active: bossFight.active, cine: bossFight.phaseTwo, adds: sideMobs.filter(m => m.summoned).length }; },
     state() { return { moon: moonVisit?.beat, panel, paused, count: mobShots.length + bossWaves.length + playerWaves.length,
       held: keys.size, attack: !!sidePlayer.atk, dialogue: dialogue?.lines[dialogue.i].who }; }
   };
@@ -144,4 +154,18 @@ q.reset({ ...prior, platformScene: 'village', sideX: 351 });
 for (const n of [...q.residents()]) { action(n.x, new RegExp(n.id, 'i')); talked(n.id); }
 q.draw();
 
+for (const [i, type] of q.phaseBossTypes.entries()) {
+  q.reset({ ...prior, platformScene: 'hollow', sideX: 2900 });
+  const boss = q.phaseBoss(type), halfway = Math.ceil(boss.maxHp / 2);
+  assert.equal(boss.hp, halfway, `${type} must stop at the phase boundary`);
+  assert(q.phase().cine);
+  q.hitBoss(boss);
+  assert.equal(boss.hp, halfway, 'No damage during the phase-two entrance');
+  if (i % 2) q.key('e');
+  for (let j = 0; j < 119 && q.phase().cine; j++) { q.tick(.033); q.draw(); }
+  assert(q.phase().active && boss.enraged && !q.phase().cine, `${type} returns to combat`);
+  assert.equal(q.phase().adds, 1, 'Only one phase-two reinforcement spawns');
+}
+
 console.log('Court Road regression checks passed: both town routes, all residents, shops, campfires, both errands, persistent kills and lore, Moon encounter inputs and saves, and legacy east-road progression.');
+console.log('Phase-two regression checks passed for all boss forms, including skip and normal completion.');
