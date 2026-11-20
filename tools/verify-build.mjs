@@ -56,6 +56,13 @@ for (const [scene, mobList] of Object.entries(SCENE_MOBS)) {
   for (const [mob, x] of mobList) assert(MOB_TYPES[mob] && x >= 0 && x < REGIONS[scene]?.width, `Invalid ${mob} spawn in ${scene}`);
 }
 const sheet = name => fs.readFileSync(path.join(root, name));
+for (const [id, w, h] of [['storybook-and-town', 200, 116], ['watch-posts', 160, 64], ['aldric-at-seal', 256, 96]]) {
+  const name = `assets/distinct-cast/${id}.png`, png = sheet(name);
+  assert(refs.has(name) && png.subarray(1, 4).toString() === 'PNG', `Missing distinct cast atlas: ${name}`);
+  assert.equal(png.readUInt32BE(16), w);
+  assert.equal(png.readUInt32BE(20), h);
+  assert.equal(png[25], 6, `Atlas should provide real RGBA transparency: ${name}`);
+}
 const { VILLAGE_CELL_W, VILLAGE_CELL_H, VILLAGE_NPC_SPECS } = context.window.buildData;
 for (const [who, { file, head, facing, clips }] of Object.entries(VILLAGE_NPC_SPECS)) {
   const name = `assets/village-npcs/${file}.png`, png = sheet(name);

@@ -1257,9 +1257,16 @@ const Overworld = (() => {
   }
 
   function drawLoreMorwen(x, y, frame) {
-    // Gothicvania figure, kept in the same costume across all flashbacks.
-    const art = residentArt.enna;
-    if (imgReady(art)) ctx.drawImage(tintedSheet(art, '63,46,105,.33'), frame * 48, 0, 48, 56, x - 43, y - 96, 86, 100);
+    // Morwen alone uses the Hime design. No resident substitutes for her.
+    if (imgReady(distinctCastArt)) ctx.drawImage(distinctCastArt, frame * 20, 0, 20, 29, x - 34, y - 99, 68, 99);
+  }
+  function drawLoreWatchStandard(x, ground, scale) {
+    ctx.save(); ctx.translate(x, ground); ctx.scale(scale, scale);
+    ctx.fillStyle = '#c3cfdb'; ctx.fillRect(-1, -76, 2, 76);
+    loreShape('#566887', [[0,-69],[25,-66],[23,-39],[12,-45],[0,-40]]);
+    loreShape('#e1d9bc', [[12,-64],[16,-59],[13,-53],[9,-56]]);
+    loreShape('#d8dee9', [[0,-84],[-3,-76],[3,-76]]);
+    ctx.restore();
   }
   function introPlate(image, x, y, w, h, tint) {
     if (imgReady(image)) ctx.drawImage(tint ? tintedSheet(image, tint) : image, x, y, w, h);
@@ -1322,14 +1329,12 @@ const Overworld = (() => {
         else { ctx.fillStyle = '#e2ddf2'; ctx.beginPath(); ctx.arc(205, y, 19, 0, Math.PI * 2); ctx.fill(); }
         drawFoundry('arc-discharge', 155, 111, motion, .87, 1, .56, true);
       }
-      const guard = hollowArt.dadIdle;
-      if (scene.id === 'moonfall' && imgReady(guard)) {
-        for (let i = 0; i < 3; i++) {
-          const scale = .66 + i * .1;
-          ctx.drawImage(tintedSheet(guard, '125,140,198,.24'), i * 128, 0, 128, 96, 4 + i * 23, 110 - i * 4, 128 * scale, 96 * scale);
-        }
+      if (scene.id === 'moonfall') {
+        drawLoreWatchStandard(58, 204, .85);
+        drawLoreWatchStandard(89, 194, .65);
       }
-      drawLoreMorwen(scene.id === 'moonfall' ? 151 : 110, 198, fractured ? 0 : 4);
+      drawLoreMorwen(scene.id === 'moonfall' ? 151 : 110, 198,
+        reduced ? 0 : fractured ? 4 + Math.floor(motion * 4) % 2 : Math.floor(motion * 4) % 4);
     }
     drawIntroVignette(.48);
   }
@@ -1576,7 +1581,7 @@ const Overworld = (() => {
   }
   const hollowArt = {
     back: loadImg('hollow/back.png'), middle: loadImg('hollow/middle.png'), ground: loadImg('hollow/ground.png'), log: loadImg('hollow/log.png'),
-    dadIdle: loadImg('hollow/dad-idle.png'), dadRun: loadImg('hollow/dad-run.png'), dadSlash: loadImg('hollow/dad-slash.png')
+    dadIdle: loadImg('hollow/dad-idle.png'), dadWard: loadImg('distinct-cast/aldric-at-seal.png')
   };
   // Mini knight used in the top-down house once Dad's armor is on (2 cols x 4 rows of 90x45).
   const beastArt = { wrenIdle: loadImg('beasts/wren-idle.png'), wrenRun: loadImg('beasts/wren-run.png') };
@@ -5663,7 +5668,7 @@ const Overworld = (() => {
     { id: 'moonfall', kind: 'stone', scene: 'hollow', x: 700, title: 'The Moonfall', where: 'Rune stone, the Hollow', hint: 'A stone near the mouth of the Hollow.',
       text: 'MORWEN BROKE THE MOON, AND THE GREATEST SHARD OF IT FELL HERE. Where it struck, the dead do not rest and the wild things grow wrong. Take nothing the moon has dropped.' },
     { id: 'page3', kind: 'page', scene: 'hollow', x: 1800, title: 'Journal: Day 5', where: "Dad's journal, the Hollow", hint: 'Deep inside the Hollow.',
-      text: "Day 5. I found the one behind it all. A goblin chief grown huge on the shard's light. He calls himself Grukk, the Hollow King. He dug up the shard and sold it to pale riders heading east. All he kept was a splinter for his crown. I can't beat him alone. I'll hide past his throne and wait.", sign: '- A.' },
+      text: "Day 5. Grukk dug up the shard and sold it to riders heading east. He kept a splinter for his crown. The old Watch seal is failing where they dug through. I cannot hold it and fight him at the same time. If you follow, look for the silver tree cut into the stone.", sign: '- A.' },
     { id: 'aldric', kind: 'page', scene: null, x: 0, title: "Aldric's Story", where: 'Told by Dad, after the battle', hint: 'Find Dad.',
       text: "The Silver Watch didn't fall to monsters. We fell to the shard. It whispers. Half my brothers took it up and became the skeletons you fought. I buried it under a seal and never told you. Grukk dug it up and sold it to the Pale Court for a splinter to wear in his crown. The real shard rode east a week ago." },
     { id: 'oath', kind: 'page', scene: null, x: 0, title: 'The Broken Moon', where: 'Told by Dad, in the Hollow', hint: 'Talk to Dad after Chapter 1.',
@@ -5769,7 +5774,7 @@ const Overworld = (() => {
     } else if (who === 'rowan' && imgReady(knightSprites.idle)) {
       ctx.drawImage(knightSprites.idle, 50, 20, 28, 28, x - 2, y - 2, 56, 56);
     } else if (who === 'aldric' && imgReady(hollowArt.dadIdle)) {
-      ctx.drawImage(hollowArt.dadIdle, 50, 55, 28, 28, x - 2, y - 2, 56, 56);
+      ctx.drawImage(hollowArt.dadIdle, 55, 55, 27, 27, x + 1, y + 1, 38, 38);
     } else if (who === 'grukk') {
       const img = mobSheet(MOB_TYPES.ogre, MOB_TYPES.ogre.anims.idle);
       if (imgReady(img)) { ctx.translate(x + 40, y); ctx.scale(-1, 1); ctx.drawImage(img, 30, 0, 64, 64, -14, -6, 70, 70); }
@@ -5781,10 +5786,12 @@ const Overworld = (() => {
       const { image, head } = villageNpcArt[who];
       const { sx, sy } = villageNpcFrame(who, 0, true);
       ctx.drawImage(image, sx + head[0], sy + head[1], 34, 34, x, y, 40, 40);
+    } else if (Object.hasOwn(DISTINCT_TOWN_ROWS, who) && imgReady(distinctCastArt)) {
+      ctx.drawImage(distinctCastArt, 2, DISTINCT_TOWN_ROWS[who] * 29, 16, 17, x + 4, y + 2, 32, 34);
+    } else if (Object.hasOwn(WATCH_CAST_ROWS, who) && imgReady(watchCastArt)) {
+      ctx.drawImage(watchCastArt, 5, WATCH_CAST_ROWS[who] * 32, 22, 22, x, y, 40, 40);
     } else if (imgReady(residentArt[who])) {
-      const guard = who === 'reeve' || who === 'senn';
-      if (guard) ctx.drawImage(residentArt[who], 45, 49, 38, 36, x, y, 40, 40);
-      else ctx.drawImage(residentArt[who], 9, 8, 31, 33, x, y, 40, 43);
+      ctx.drawImage(residentArt[who], 9, 8, 31, 33, x, y, 40, 43);
     } else if (who === 'skarn') {
       const T = MOB_TYPES.skarn, img = mobSheet(T, T.anims.idle);
       if (imgReady(img)) ctx.drawImage(img, 52, 36, 45, 45, x, y, 40, 40);
@@ -6777,7 +6784,7 @@ const Overworld = (() => {
   }
 
   const CHAPTERS = {
-    1: { title: 'THE HOLLOW KING', color: '#ffe3a1', tease: 'The shard is still out there...', next: 'NEXT: TALK TO DAD IN THE HOLLOW' },
+    1: { title: 'THE HOLLOW KING', color: '#ffe3a1', tease: 'The shard is still out there...', next: 'NEXT: TALK TO DAD AT THE WATCH SEAL' },
     2: { title: 'THE ASHEN PASS', color: '#ffb48a', tease: 'The riders went to the drowned city...', next: 'NEXT: CHAPTER 3 - GLOAMHOLD' },
     3: { title: 'THE MOON-EATER', color: '#8fd8ff', tease: 'Mother is alive. The Pale Court has her.', next: 'NEXT: FOLLOW THE EAST ROAD TO LANTERN QUAY' },
     4: { title: 'THE PALE COURT', color: '#b8e5d0', tease: 'Somebody is singing beneath the gallery.', next: 'THE LOWER WELL REMAINS SEALED' }
@@ -6816,32 +6823,22 @@ const Overworld = (() => {
   }
 
   // ---- Dad (Aldric) ----
-  let dad = null;  // { x, dir, state: 'run'|'slash'|'idle', t, target, onArrive }
+  const WATCH_SEAL_X = 2548, ALDRIC_POST_X = 2573;
+  const dadAtSeal = () => ({ x: ALDRIC_POST_X, dir: -1, t: 0 });
+  let dad = null;
   let dadTalk = 0;
   let bossOutro = null;
   function updateDad(dt) {
     if (!dad) return;
     dad.t += dt;
-    if (dad.state === 'run') {
-      const d = dad.target - dad.x;
-      dad.dir = d < 0 ? -1 : 1;
-      dad.x += dad.dir * Math.min(Math.abs(d), 150 * dt);
-      if (Math.abs(d) < 2) { dad.state = dad.slashOnArrive ? 'slash' : 'idle'; dad.t = 0; if (dad.slashOnArrive) sfx('swingBig'); }
-    } else if (dad.state === 'slash' && dad.t > 6 / 12) {
-      dad.state = 'idle'; dad.t = 0;
-      if (dad.onArrive) { const f = dad.onArrive; dad.onArrive = null; f(); }
-    } else if (dad.state === 'idle') {
-      dad.dir = sidePlayer.x < dad.x ? -1 : 1;
-      if (dad.onArrive) { const f = dad.onArrive; dad.onArrive = null; f(); }
-    }
+    dad.dir = story.dadFound && sidePlayer.x >= dad.x ? 1 : -1;
   }
   function drawDad() {
     if (!dad) return;
-    const sheet = dad.state === 'run' ? hollowArt.dadRun : dad.state === 'slash' ? hollowArt.dadSlash : hollowArt.dadIdle;
+    const tending = !story.dadFound && imgReady(hollowArt.dadWard);
+    const sheet = tending ? hollowArt.dadWard : hollowArt.dadIdle;
     if (!imgReady(sheet)) return;
-    const n = dad.state === 'run' ? 12 : dad.state === 'slash' ? 6 : 4;
-    const fps = dad.state === 'run' ? 16 : dad.state === 'slash' ? 12 : 6;
-    const f = dad.state === 'slash' ? Math.min(n - 1, Math.floor(dad.t * fps)) : Math.floor(dad.t * fps) % n;
+    const f = prefersReducedMotion() ? 0 : Math.floor(dad.t * (tending ? 2 : 6)) % (tending ? 2 : 4);
     ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(Math.round(dad.x) - 10, SIDE_GROUND_Y - 1, 20, 2);
     ctx.save();
     ctx.translate(Math.round(dad.x), SIDE_GROUND_Y + 1);
@@ -6850,17 +6847,45 @@ const Overworld = (() => {
     ctx.restore();
   }
   function talkToDad() {
+    if (!story.bossDefeated && !story.dadFound && !story.chapterDone) {
+      startDialogue([
+        { who: 'rowan', text: 'Dad?' },
+        { who: 'aldric', text: 'Stay on this side of the stone. Grukk has been waiting for me to lift my hands.' },
+        { who: 'rowan', text: 'Let me take over.' },
+        { who: 'aldric', text: 'He will be on us before we can trade places. Stop him first. Then I need your hands here.' }
+      ]);
+      return;
+    }
+    if (!story.dadFound && !story.chapterDone) {
+      startDialogue([
+        { who: 'aldric', text: 'Rowan? Put your palm on the silver tree. Hold it steady.' },
+        { who: 'rowan', text: 'Like this? The stone is warm.' },
+        { who: 'aldric', text: 'That is it. Grukk broke the lower seal digging out the shard. This inner ward is the only thing keeping the dead below us.' },
+        { who: 'rowan', text: 'How long have you been holding it?' },
+        { who: 'aldric', text: 'Two days. Easier with two hands. There. Let go slowly.' },
+        { who: 'aldric', text: 'His crown held only a splinter. Grukk sold the real shard to pale riders. They rode east a week ago. Are you hurt?' },
+        { who: 'rowan', text: 'I can stand. Tell me what happened here.' },
+        { who: 'aldric', text: 'I will. Give me one breath.' }
+      ], () => {
+        story.dadFound = true; story.chapterDone = true;
+        addLore('aldric'); bossOutro = null;
+        if (onSave) onSave(getSaveData());
+        openChapterPanel(1);
+      });
+      return;
+    }
     if (story.chapterDone && !story.ch2Started) {
       startDialogue([
-        { who: 'aldric', text: "Put your hand on the stone. Feel it? Twenty winters ago, Morwen tried to pull the moon down. That’s what we call the Moonfall." },
-        { who: 'rowan', text: "She meant to break it?" },
-        { who: 'aldric', text: "No. Her little girl froze the winter the moon went dark. She wanted a moon that wouldn’t go dark again." },
-        { who: 'aldric', text: "We stopped her, but not before it broke. We buried the biggest piece here. Morwen got away." },
-        { who: 'rowan', text: "And the riders who took it. They’re hers?" },
-        { who: 'aldric', text: "The Pale Court, yes. Find our scout in the Ashen Pass. Give me a minute with this seal. Maybe I can still mend it." }
+        { who: 'aldric', text: 'I should have told you why I left. I thought the less you knew, the safer you would be.' },
+        { who: 'aldric', text: 'Twenty winters ago, Morwen tried to pull the moon down. We call it the Moonfall.' },
+        { who: 'rowan', text: 'She meant to break it?' },
+        { who: 'aldric', text: 'No. Her little girl froze the winter the moon went dark. She wanted a moon that would never go dark again.' },
+        { who: 'aldric', text: 'We stopped her, but not before it broke. We buried the biggest piece here. Morwen got away.' },
+        { who: 'rowan', text: 'Those riders who took it. Do they serve her?' },
+        { who: 'aldric', text: 'The Pale Court, yes. Find our scout in the Ashen Pass. I will stay and make sure the ward holds.' }
       ], () => {
         story.ch2Started = true; addLore('oath');
-        notice = 'New path: the Ashen Pass lies east, past the throne.'; noticeUntil = time + 3;
+        notice = 'New path: the Ashen Pass lies at the east exit.'; noticeUntil = time + 3;
         sfx('magic');
         if (onSave) onSave(getSaveData());
       });
@@ -6868,8 +6893,8 @@ const Overworld = (() => {
     }
     const lines = [
       [{ who: 'aldric', text: "Your mother would have been proud of you today. Furious, but proud." }],
-      [{ who: 'aldric', text: "The Ashen Pass is east, past the throne. Find the Watch scout at the lookout fire." }, { who: 'rowan', text: "I'll find her." }],
-      [{ who: 'aldric', text: "Bram's still selling that bread? Don't eat the burnt ones. He does it on purpose." }],
+      [{ who: 'aldric', text: 'The Ashen Pass is through the east exit. Find the Watch scout at the lookout fire.' }, { who: 'rowan', text: 'I will find her.' }],
+      [{ who: 'aldric', text: 'Does Bram still sell that bread? Leave the burnt ones. He does it on purpose.' }],
       [{ who: 'aldric', text: "Hold your strike and let the moon gather in the blade. The Watch called it a Moonblade. I taught your mother that one." }]
     ];
     startDialogue(lines[dadTalk++ % lines.length]);
@@ -6880,9 +6905,9 @@ const Overworld = (() => {
   const BOSS_LINES = {
     ogre: {
       first: [
-        { who: 'grukk', text: "That your father's armor? I knew he'd run out of places to hide." },
+        { who: 'grukk', text: 'Silver Watch. Another one? I left the last knight clinging to a stone.' },
         { who: 'rowan', text: "Where is he?" },
-        { who: 'grukk', text: "Behind the throne. Go on, try to get past me." }],
+        { who: 'grukk', text: 'At his precious seal. Wait long enough and you can dig him out yourself.' }],
       retry: [{ who: 'grukk', text: "You really don't know when to quit." }],
       tip: 'Jump over his shockwaves!', flag: 'bossStarted'
     },
@@ -7357,7 +7382,7 @@ const Overworld = (() => {
     noticeUntil = time + 3;
     if (onSave) onSave(getSaveData());
   }
-  let wren = null;   // the Watch scout (same shape as dad)
+  let wren = null;   // the Watch scout
   function updateBossOutro(dt) {
     if (!bossOutro) return;
     bossOutro.t += dt;
@@ -7376,25 +7401,11 @@ const Overworld = (() => {
       return;
     }
     if (REGIONS[bossOutro.scene] && REGIONS[bossOutro.scene].side) { if (bossOutro.t > 2.2) depthsOutro(); return; }
-    if (bossOutro.scene === 'hollow' && bossOutro.t > 2.6 && !dad) {
-      const side = sidePlayer.x > 3150 ? -1 : 1;
-      dad = { x: Math.min(HOLLOW_SIDE_WIDTH - 10, sideCameraX + canvas.width + 30), dir: -1, state: 'run', t: 0, target: sidePlayer.x + side * 34, slashOnArrive: false };
-      dad.onArrive = () => {
-        sidePlayer.facing = dad.x < sidePlayer.x ? -1 : 1;
-        startDialogue([
-          { who: 'aldric', text: 'Rowan? Let me look at you. Are you hurt?' },
-          { who: 'rowan', text: "I'm fine. How long were you stuck back there?" },
-          { who: 'aldric', text: "Two days. Thought I'd get a clean shot at him. Kept waiting." },
-          { who: 'aldric', text: "Look at his crown. That's just a splinter. He sold the rest to pale riders. They went east a week ago." },
-          { who: 'aldric', text: "Sit with me when you catch your breath. I owe you an explanation." }
-        ], () => {
-          story.dadFound = true; story.chapterDone = true;
-          addLore('aldric');
-          bossOutro = null;
-          if (onSave) onSave(getSaveData());
-          openChapterPanel(1);
-        });
-      };
+    if (bossOutro.scene === 'hollow' && bossOutro.t > 1.6) {
+      dad ??= dadAtSeal();
+      bossOutro = null;
+      notice = 'Find Aldric at the Watch seal, west of the throne.'; noticeUntil = time + 5;
+      return;
     }
     if (bossOutro.scene === 'pass' && bossOutro.t > 2.4 && !bossOutro.npc) {
       bossOutro.npc = true;
@@ -7458,8 +7469,15 @@ const Overworld = (() => {
       if (x > CAMP.sign - 20) return { label: 'ENTER THE HOLLOW', act: () => enterRegion('hollow', 130, 1) };
     } else if (platformScene === 'hollow') {
       if (x < 100) return { label: 'BACK TO THE FOREST', act: () => enterRegion('forest', CAMP.sign - 30, -1) };
-      if (dad && dad.state === 'idle' && Math.abs(x - dad.x) < 32 && story.dadFound) return { label: 'TALK TO DAD', act: talkToDad };
-      if (x > HOLLOW_SIDE_WIDTH - 70 && story.chapterDone) return story.ch2Started ? { label: 'TRAVEL TO THE ASHEN PASS', act: () => enterRegion('pass', REGIONS.pass.entry, 1) } : { label: 'TALK TO DAD FIRST', act: () => { notice = 'Dad has something to tell you first.'; noticeUntil = time + 2; sfx('uiError'); } };
+      if (dad && !bossFight && !bossOutro && Math.abs(x - dad.x) < 32) {
+        return { label: story.bossDefeated && !story.dadFound && !story.chapterDone ? 'HELP DAD HOLD THE SEAL' : 'TALK TO DAD', act: talkToDad };
+      }
+      if (x > HOLLOW_SIDE_WIDTH - 70 && (story.bossDefeated || story.chapterDone)) {
+        if (story.ch2Started) return { label: 'TRAVEL TO THE ASHEN PASS', act: () => enterRegion('pass', REGIONS.pass.entry, 1) };
+        return { label: story.chapterDone ? 'TALK TO DAD FIRST' : 'CHECK THE EAST ROAD', act: () => {
+          notice = 'Dad is at the Watch seal, west of the throne.'; noticeUntil = time + 4; sfx('uiError');
+        } };
+      }
     } else if (platformScene === 'pass') {
       if (x < 70) return { label: 'BACK TO THE HOLLOW', act: () => enterRegion('hollow', HOLLOW_SIDE_WIDTH - 90, -1) };
       if (story.nickAmbushed && Math.abs(x - NICK_TRAIL) < 24) return { label: 'FOLLOW THE FROST TRAIL', act: () => enterRegion('frost', REGIONS.frost.entry, 1) };
@@ -9186,7 +9204,7 @@ const Overworld = (() => {
   }
   function placeNpcs() {
     townActors = (TOWN_CAST[platformScene] || []).map(n => ({ ...n, home: n.x, facing: 1, t: 0, walk: 0 }));
-    dad = platformScene === 'hollow' && story.dadFound ? { x: 3060, dir: -1, state: 'idle', t: 0 } : null;
+    dad = platformScene === 'hollow' ? dadAtSeal() : null;
     wren = null;
     if (platformScene === 'pass') wren = story.passBossDefeated ? { x: 4150, dir: -1, state: 'idle', t: 0 } : { x: 1940, dir: -1, state: 'idle', t: 0 };
     if (platformScene === 'gloam') wren = story.gloamBossDefeated ? { x: 4300, dir: -1, state: 'idle', t: 0 } : { x: 2280, dir: -1, state: 'idle', t: 0 };
@@ -9220,10 +9238,10 @@ const Overworld = (() => {
   }
   function restoreBossOutro() {
     const R = region();
-    if (!R.boss || !story[R.bossFlag] || R.tide || platformScene === 'frost') return;
+    if (!R.boss || !story[R.bossFlag] || R.tide || platformScene === 'frost' || platformScene === 'hollow') return;
     const page = { mire: 'skarnend', barrow: 'mournend', cinder: 'ignarothend', archive: 'tidemawend' }[platformScene];
     const missing = R.side ? !story.pages.includes(page) :
-      platformScene === 'hollow' ? !story.chapterDone : platformScene === 'pass' ? !story.ch2Done : !story.ch3Done;
+      platformScene === 'pass' ? !story.ch2Done : !story.ch3Done;
     if (missing) bossOutro = { t: 0, x: R.bossX, jingle: true, scene: platformScene };
   }
   function updateStory(dt) {
@@ -9428,7 +9446,7 @@ const Overworld = (() => {
     page1: ['mira', 'The Empty Camps', 'Where did all the goblins go?', "Past my window. Whole families, carrying pots and babies. Their fires were still lit when I went to look. Whatever scared them is deeper in the woods."],
     page2: ['tamsin', 'Aldric at the Fire', 'You saw my dad?', "Three nights back. Bram told him the seal was cracking. Aldric left me half his supper and said to tell you to go home. He laughed when he said it. Knew you wouldn't."],
     moonfall: ['osk', 'Where the Moon Fell', 'What happened here?', "Morwen cracked the moon. Six of us went to see where the biggest piece landed. You'll pass the other five if you keep going. They won't be happy to see you."],
-    page3: ['pip', 'The King and the Riders', 'What did Grukk trade away?', "The big piece! The riders put it in a sack. He kept enough for his crown. A big knight was hiding past the throne. I pretended not to see him."],
+    page3: ['pip', 'The King and the Riders', 'What did Grukk trade away?', 'The big piece! The riders put it in a sack. He kept enough for his crown. I saw a knight press both hands against the silver tree stone. The footsteps underneath stopped.'],
     riders: ['pike', 'The Pale Riders', 'Why is the road deserted?', "I kept the lamps lit up to the bend. Then a rider took the light straight out of the glass. Didn't even slow down. I moved my post back here."],
     wrenlog: ['fenn', 'Seven Riders', 'What came through the pass?', "Seven riders carrying a light wrapped in black cloth. I followed until the mare screamed. Wren says she's still up there. I won't be going back to check."],
     ashroad: ['posta', 'The Ember Road', 'What did this road look like before?', "Cart tracks and silver dust all the way to Gloamhold. The Court burned the wagons here. Twelve winters, and the rock's still warm."],
@@ -9601,10 +9619,16 @@ const Overworld = (() => {
   townSpeaker('pella', 'PELLA', '#c6e1d3', '#61556c');
   townSpeaker('martin', 'MARTIN', '#efc0a0', '#496b66');
   townSpeaker('ida', 'IDA', '#e9c585', '#6c596b');
+  townSpeaker('sayo', 'SAYO', '#e3d4ff', '#5d516e');
+  townSpeaker('neri', 'NERI', '#e8bd9c', '#75524a');
+  townSpeaker('aki', 'AKI', '#d1e5a5', '#53674d');
+  const distinctCastArt = loadImg('distinct-cast/storybook-and-town.png');
+  const watchCastArt = loadImg('distinct-cast/watch-posts.png');
+  const DISTINCT_TOWN_ROWS = { sayo: 1, neri: 2, aki: 3 };
+  const WATCH_CAST_ROWS = { reeve: 0, senn: 1 };
   const ACTOR_POSES = new Set(['linnet', 'nessel', 'mira', 'enna', 'lys', 'seren']);
-  const residentArt = Object.fromEntries([...Object.keys(WITNESS_APPEARANCE).filter(id => id !== 'reeve' && id !== 'senn'),
+  const residentArt = Object.fromEntries([...Object.keys(WITNESS_APPEARANCE).filter(id => !Object.hasOwn(WATCH_CAST_ROWS, id) && !Object.hasOwn(DISTINCT_TOWN_ROWS, id)),
     'bram', 'seren', 'tess', 'orrin', 'mara', 'teo'].map(id => [id, loadImg(COURT_ART + 'resident-' + id + '.png')]));
-  residentArt.reeve = residentArt.senn = hollowArt.dadIdle;
   const VILLAGE_CELL_W = 96, VILLAGE_CELL_H = 104;
   const VILLAGE_NPC_SPECS = {
     // Row order matches tools/pack-village-npcs.py. Source art can face either way.
@@ -9637,15 +9661,15 @@ const Overworld = (() => {
   const TOWN_CAST = {
     aldersend: [
       { id: 'reeve', x: 176, pace: 25 }, { id: 'elin', x: 345, service: 'shop' },
-      { id: 'linnet', x: 527, service: 'rest' }, { id: 'ori', x: 949, pace: 32 },
+      { id: 'linnet', x: 527, service: 'rest' }, { id: 'sayo', x: 733, pace: 8 }, { id: 'ori', x: 949, pace: 32 },
       { id: 'fenna', x: 1368, service: 'orchard' }
     ],
     gateward: [
-      { id: 'senn', x: 165, pace: 24 }, { id: 'nessel', x: 421, service: 'shop' },
+      { id: 'senn', x: 165, pace: 24 }, { id: 'nessel', x: 421, service: 'shop' }, { id: 'neri', x: 592 },
       { id: 'farris', x: 833, service: 'rest' }, { id: 'tove', x: 1110, service: 'lamp' },
       { id: 'pella', x: 1335, pace: 26 }
     ],
-    village: [{ id: 'martin', x: 351, pace: 19 }, { id: 'ida', x: 906 }]
+    village: [{ id: 'martin', x: 351, pace: 19 }, { id: 'ida', x: 906 }, { id: 'aki', x: 1257, pace: 7 }]
   };
   const RESIDENTS = {
     reeve: [
@@ -9695,6 +9719,18 @@ const Overworld = (() => {
     ida: [
       [['ida', 'Don’t cross the flats in that helmet. Salt gets in a seam and works the whole winter.'], ['rowan', 'How do you get it out?'], ['ida', 'You find someone who likes you enough to help. Try Orrin first.']],
       [['ida', 'I wash the salt out at night. I swear the coats are stiff again by breakfast.']]
+    ],
+    sayo: [
+      [['sayo', 'Hold still. Is that a tear in your sleeve or an opening you meant to leave?'], ['rowan', 'A branch took it.'], ['sayo', 'Then the branch can pay. I mend clothes in the square. Leave the armor to a smith.']],
+      [['sayo', 'The bench by the fire is free. Sit with the torn side away from the sparks.']]
+    ],
+    neri: [
+      [['neri', 'I copy the arrival lists. Tell me who you are expecting, not who you are.'], ['rowan', 'Does the list go as far as the quay?'], ['neri', 'Mine stops at the tower. The ferry keeps its own list. Find the ferrier if you need a name.']],
+      [['neri', 'The rain got to the bottom of the list. I am copying it before the names lift off.']]
+    ],
+    aki: [
+      [['aki', 'Feet off the chalk, please. That line gets longer every time a wave reaches it.'], ['rowan', 'Are you taking bets on the tide?'], ['aki', 'No. I am finding a dry route home for the children. If you want a bet, try the ring.']],
+      [['aki', 'See where the chalk stops? That is the last dry patch before the reeds.']]
     ]
   };
   LORE.push(
@@ -9762,6 +9798,9 @@ const Overworld = (() => {
     } : null;
     if (S[seen] && service === 'shop') return after();
     if (S[seen] && n.id === 'reeve' && S.dadFound) return say([['reeve', 'Someone saw Aldric on his feet again. Next time you see him, tell him the road still has a chair.']]);
+    if (S[seen] && n.id === 'sayo' && S.alderPaid) return say([['sayo', 'Fenna brought me an egg instead of a fee. I take it the hens are laying again.']]);
+    if (S[seen] && n.id === 'neri' && S.lampPaid) return say([['neri', 'Tove sent three clear flashes from the tower. First time I could read the signal from here.']]);
+    if (S[seen] && n.id === 'aki' && S.netReturned) return say([['aki', 'Mara says the old tide chart is yours. Check what time it was drawn. A path can be dry in the morning and gone by supper.']]);
     if (S[seen] && n.id === 'senn' && S.moonVisitSeen) return say([
       ['senn', 'The rain stopped dead when you were out on the causeway. Even the gutters went quiet.'],
       ['rowan', 'What did you see?'],
@@ -10084,6 +10123,20 @@ const Overworld = (() => {
   }
 
   function drawResident(who, x, y, scale, direction, walk = 0) {
+    const townRow = DISTINCT_TOWN_ROWS[who], watchRow = WATCH_CAST_ROWS[who];
+    if (townRow !== undefined || watchRow !== undefined) {
+      const town = townRow !== undefined, image = town ? distinctCastArt : watchCastArt;
+      if (!imgReady(image)) return;
+      const still = prefersReducedMotion(), w = town ? 20 : 32, h = town ? 29 : 32;
+      const frame = still ? 0 : walk ? (town ? 6 : 1) + Math.floor(walk * 8) % 4
+        : town ? Math.floor((time + townRow / 3) * 4) % 4 : 0;
+      const sc = scale * (town ? 1.36 : 1.14);
+      ctx.save(); ctx.imageSmoothingEnabled = false;
+      ctx.translate(Math.round(x), y); ctx.scale(direction, 1);
+      ctx.drawImage(image, frame * w, (town ? townRow : watchRow) * h, w, h, -w * sc / 2, -h * sc, w * sc, h * sc);
+      ctx.restore();
+      return;
+    }
     const npc = villageNpcArt[who];
     if (imgReady(npc?.image)) {
       const { sx, sy } = villageNpcFrame(who, walk);
@@ -10096,23 +10149,14 @@ const Overworld = (() => {
       ctx.restore();
       return;
     }
-    const guard = who === 'reeve' || who === 'senn';
     const low = prefersReducedMotion();
-    const base = guard && walk && !low ? hollowArt.dadRun : residentArt[who];
+    const base = residentArt[who];
     if (!imgReady(base)) return;
     ctx.save(); ctx.imageSmoothingEnabled = false;
-    if (guard) {
-      const k = walk && !low ? 12 : 4;
-      const frame = low ? 0 : Math.floor((walk || time) * (walk ? 11 : 5)) % k;
-      const image = tintedSheet(base, who === 'senn' ? '78,151,189,.27' : '145,122,68,.24');
-      ctx.translate(Math.round(x), y); ctx.scale(direction * .84, .84);
-      ctx.drawImage(image, frame * 128, 0, 128, 96, -64, -96, 128, 96);
-    } else {
-      const acting = ACTOR_POSES.has(who), clock = time + who.charCodeAt(0) * .25;
-      const frame = low ? 0 : acting ? Math.floor(clock * 4) % 8 : walk ? 2 + Math.floor(walk * 9) % 4 : Math.abs(x - sidePlayer.x) < 55 ? 0 : 1;
-      ctx.translate(Math.round(x), y); ctx.scale(direction * scale, scale);
-      ctx.drawImage(base, frame * 48, 0, 48, 56, -24, acting ? -53 : -56, 48, 56);
-    }
+    const acting = ACTOR_POSES.has(who), clock = time + who.charCodeAt(0) * .25;
+    const frame = low ? 0 : acting ? Math.floor(clock * 4) % 8 : walk ? 2 + Math.floor(walk * 9) % 4 : Math.abs(x - sidePlayer.x) < 55 ? 0 : 1;
+    ctx.translate(Math.round(x), y); ctx.scale(direction * scale, scale);
+    ctx.drawImage(base, frame * 48, 0, 48, 56, -24, acting ? -53 : -56, 48, 56);
     ctx.restore();
   }
   function drawLoreSpots() {
@@ -10895,6 +10939,28 @@ const Overworld = (() => {
       else { ctx.fillStyle = (p.ph > 3 ? '#b8732e' : '#8a9a3a'); ctx.fillRect(x, y, 2, 1); ctx.fillRect(x + (Math.sin(time * 4 + p.ph) > 0 ? 1 : 0), y + 1, 1, 1); }
     });
   }
+  function drawWatchSeal() {
+    if (!sceneVisible(WATCH_SEAL_X, 58)) return;
+    const x = WATCH_SEAL_X, y = SIDE_GROUND_Y, repaired = story.dadFound;
+    if (imgReady(sceneryArt.pillars)) {
+      ctx.drawImage(sceneryArt.pillars, x - 58, y - 68, 116, 68);
+    }
+    tideShape('#282438', [x - 30,y],[x - 25,y - 48],[x - 12,y - 67],[x + 11,y - 67],[x + 25,y - 48],[x + 30,y]);
+    tideShape('#5f5b76', [x - 25,y - 5],[x - 20,y - 46],[x - 10,y - 61],[x + 10,y - 61],[x + 20,y - 46],[x + 25,y - 5]);
+    tideShape('#343248', [x - 19,y - 5],[x - 15,y - 43],[x - 8,y - 55],[x + 8,y - 55],[x + 15,y - 43],[x + 19,y - 5]);
+    const grain = repaired ? '#bac7df' : '#d7a7e2';
+    tidePixel(grain, x - 1, y - 36, 2, 18);
+    tideShape(grain, [x,y - 27],[x - 10,y - 34],[x - 9,y - 26],[x,y - 20],[x + 9,y - 26],[x + 10,y - 34]);
+    tidePixel(grain, x - 6, y - 18, 12, 1);
+    if (!repaired) {
+      tideShape('#171326', [x + 9,y - 60],[x + 3,y - 46],[x + 11,y - 41],[x + 6,y - 27],[x + 15,y - 40],[x + 7,y - 47]);
+      if (dad) drawFoundry('hex-sigil', x, y - 31, time, .55, 1, .46, true);
+    }
+    if (dad && !story.dadFound && !dialogue) {
+      ctx.fillStyle = '#1a1427'; ctx.fillRect(x - 25, y - 83, 50, 11);
+      invText('WATCH SEAL', x, y - 75, '#dfd7ea', 'bold 7px monospace', 'center');
+    }
+  }
   function drawSideHollow() {
     const W = canvas.width, H = canvas.height;
     ctx.save();
@@ -10941,7 +11007,7 @@ const Overworld = (() => {
       ctx.drawImage(hollowArt.log, 152, 0, 40, 40, pl.x + pl.w - 34, top, 40, 40);
     });
     // Entrance arch back to the forest and the King's throne in the arena.
-    if (platformScene === 'hollow') { drawSignpost(70, 'FOREST', -1); drawThrone(3128); }
+    if (platformScene === 'hollow') { drawSignpost(70, 'FOREST', -1); drawWatchSeal(); drawThrone(3128); }
     drawDepthsWorld();
     drawLoreSpots();
     drawDad();
@@ -12177,7 +12243,7 @@ const Overworld = (() => {
       ['Reach the camp at the far side', story.campReached],
       ['Enter the Hollow', story.hollowEntered],
       ['Defeat the Hollow King', story.bossDefeated],
-      ['Find Dad', story.dadFound]
+      ['Find Dad at the Watch seal', story.dadFound]
     ];
   }
   function drawQuestTab(x, y, w) {

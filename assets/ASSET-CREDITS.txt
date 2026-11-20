@@ -128,3 +128,12 @@ Village residents (assets/village-npcs):
 - Paid-asset terms: https://craftpix.net/file-licenses/
 - Trimmed runtime atlases for Linnet, Nessel, Martin and Orrin. These are for
   in-game use only; do not redistribute the original pack or export the artwork.
+
+Distinct storybook and settlement cast (assets/distinct-cast):
+- LyniaDesign, Tiny Pixel Japan Female Character Pack:
+  https://lyniadesign.itch.io/tiny-pixel-japan-female-character-pack
+  Four designs used only as Morwen, Sayo, Neri and Aki. Do not redistribute the pack.
+- Eldiran, 32x32 RPG Character Sprites (CC0):
+  https://opengameart.org/content/32x32-rpg-character-sprites
+  Two distinct character designs used for Reeve Sable and Sergeant Senn.
+- Aldric at the Watch seal uses Ansimuz's existing Terrible Knight crouch frames (CC0).

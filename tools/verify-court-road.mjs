@@ -29,7 +29,12 @@ const hook = `
     shop: () => ({ shopkeeper, stock: shopStock().map(item => item.name) }),
     mobs: () => sideMobs, defeat(type) { defeatMob(sideMobs.find(m => m.type === type && !m.dead), 1); },
     residents: () => townActors, lore: () => LORE, map: TIDE_MAP, fires: FIRES, roads: TOWN_ROADS,
-    portrait: drawPortrait, residentsWithArt: residentArt, openFireMap: openFastTravelMap,
+    portrait: drawPortrait,
+    castIdentity: id => id === 'morwen' ? 'storybook:0' : Object.hasOwn(DISTINCT_TOWN_ROWS, id) ? 'storybook:' + DISTINCT_TOWN_ROWS[id]
+      : Object.hasOwn(WATCH_CAST_ROWS, id) ? 'watch:' + WATCH_CAST_ROWS[id] : residentArt[id] ? 'resident:' + id : null,
+    openFireMap: openFastTravelMap,
+    seal: () => ({ x: WATCH_SEAL_X, dad: dad?.x, arenaLeft: REGIONS.hollow.arena.left, outro: !!bossOutro }),
+    tickBossOutro: updateBossOutro,
     pose: (who, walk, portrait) => villageNpcFrame(who, walk, portrait),
     travel: fastTravel, moonThreshold, tick: update, controllerAction,
     capture(fn) { onSave = fn; },
@@ -63,11 +68,14 @@ const current = (id) => assert.equal(q.save().platformScene, id);
 const talked = id => assert(q.finish().includes(id), `Missing dialogue for ${id}`);
 
 q.reset(prior);
+const distinct = ['morwen', 'sayo', 'neri', 'aki', 'reeve', 'senn'].map(q.castIdentity);
+assert(distinct.every(id => /^(storybook|watch):\d$/.test(id)));
+assert.equal(new Set(distinct).size, distinct.length);
 action(151, /ALDER/); current('aldersend'); assert(q.save().story.aldersendVisited);
 action(45, /WOODLAND/); current('forest');
 action(151, /ALDER/);
 for (const n of [...q.residents()]) {
-  assert(q.residentsWithArt[n.id], `Missing sprite for ${n.id}`);
+  assert(q.castIdentity(n.id), `Missing sprite for ${n.id}`);
   action(n.x, new RegExp(n.id === 'reeve' ? 'REEVE' : n.id, 'i'));
   if (n.id === 'linnet') assert.equal(q.pose(n.id).pose, 'talk');
   talked(n.id); q.portrait(n.id, 0, 0);
@@ -95,6 +103,31 @@ q.reset({ ...orchardSave, platformScene: 'orchard', sideX: 74 });
 assert(!q.mobs().some(m => m.type === 'granarycat'));
 assert(q.save().story.pages.includes('alderorder'));
 
+q.reset({ ...prior, platformScene: 'hollow', story: { ...prior.story, hollowSeen: true } });
+const seal = q.seal();
+assert(seal.x < seal.dad && seal.dad < seal.arenaLeft, 'The seal must be on the approach to the arena');
+action(seal.dad, /TALK TO DAD/); talked('aldric');
+assert(!q.save().story.dadFound && !q.save().story.chapterDone);
+q.pos(3240); assert(!q.interaction(), 'Ashen Pass is locked before defeating Grukk');
+q.defeat('ogre');
+const aftermath = q.save();
+assert(aftermath.story.bossDefeated && !aftermath.story.dadFound && aftermath.inventory.watchblade === 1);
+assert(q.seal().outro);
+for (let i = 0; i < 56; i++) q.tickBossOutro(.033);
+assert(!q.seal().outro && !q.save().story.dadFound, 'The victory beat must not trigger an automatic reunion');
+q.reset({ ...aftermath, sideX: 3060 });
+assert(!q.seal().outro && !q.interaction(), 'Legacy post-boss saves lead to the seal and not the old throne position');
+action(3240, /CHECK THE EAST ROAD/); current('hollow');
+action(seal.dad, /HOLD THE SEAL/); talked('aldric');
+const reunited = q.save();
+assert(reunited.story.dadFound && reunited.story.chapterDone && reunited.story.pages.includes('aldric') && !reunited.story.ch2Started);
+q.reset(reunited);
+action(3240, /TALK TO DAD FIRST/);
+action(seal.dad, /TALK TO DAD/); talked('aldric');
+assert(q.save().story.ch2Started && q.save().story.pages.includes('oath'));
+q.reset(q.save());
+action(3240, /ASHEN PASS/); current('pass');
+
 const ch3 = { ...prior, platformScene: 'gloam', sideX: 2153,
   story: { ...prior.story, chapterDone: true, ch2Done: true, gloamEntered: true, gloamGate: true,
     gloamBossDefeated: true, ch3Done: true, pages: ['seren'] } };
@@ -102,7 +135,7 @@ q.reset(ch3);
 action(2153, /GATEWARD/); current('gateward'); q.draw();
 action(1520, /SIGNAL TOWER/); talked('rowan');
 for (const n of [...q.residents()]) {
-  assert(q.residentsWithArt[n.id], `Missing sprite for ${n.id}`);
+  assert(q.castIdentity(n.id), `Missing sprite for ${n.id}`);
   action(n.x, new RegExp(n.id, 'i')); talked(n.id);
   if (n.id === 'nessel') {
     assert.equal(q.shop().shopkeeper, 'nessel');
@@ -173,5 +206,5 @@ for (const [i, type] of q.phaseBossTypes.entries()) {
   assert.equal(q.phase().adds, 1, 'Only one phase-two reinforcement spawns');
 }
 
-console.log('Court Road regression checks passed: both town routes, all residents, shops, campfires, both errands, persistent kills and lore, Moon encounter inputs and saves, and legacy east-road progression.');
+console.log('Court Road regression checks passed: distinct cast, both town routes, shops, campfires, errands, Watch seal and reloads, Moon encounter, and legacy east-road progression.');
 console.log('Phase-two regression checks passed for all boss forms, including skip and normal completion.');
