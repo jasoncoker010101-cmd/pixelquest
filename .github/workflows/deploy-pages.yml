@@ -28,11 +28,12 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/pixelquest-site"
           cp index.html world.js "$RUNNER_TEMP/pixelquest-site/"
-          rsync -a --exclude='*.zip' --exclude='*.psd' --exclude='*.aseprite' \
+          rsync -a --exclude='*.zip' --exclude='*.rar' --exclude='*.psd' --exclude='*.ase' --exclude='*.aseprite' \
             --exclude='*.pdf' --exclude='__MACOSX/' --exclude='._*' \
             --exclude='/goblinpack/' assets/ "$RUNNER_TEMP/pixelquest-site/assets/"
           node tools/verify-build.mjs "$RUNNER_TEMP/pixelquest-site"
           node tools/verify-tide.mjs
+          node tools/verify-court-road.mjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload site

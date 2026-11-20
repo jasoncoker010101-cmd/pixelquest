@@ -110,3 +110,14 @@ Depths creatures (assets/depths):
 Frostglass Ridge (assets/frost):
 - Admurin, Mega Admurin's Freebies: https://admurin.itch.io/mega-admurins-freebies
   Pengu boss, Winter Canines and Snowy Mountains parallax. Selected art adapted for use in PixelQuest; not licensed for redistribution as standalone assets.
+
+The Court Road expansion (assets/court-road):
+- Ansimuz, Legacy Collection (CC0): TinyRPG resident sprite bases, side-facing and walk poses, Top-Down-Town roof, timber house and tree art, plus Gothicvania resident and guard animation frames. Selected assets cropped and palette-swapped for the settlements.
+- SUCART, Moonstone Keeper / Eldermoon Grove: idle, airborne, landing, dash, and portrait frames supplied with the project.
+- Dark Mage, SkeletonKnight, NightBorne, and Enemy in the Dark (Free Pack): selected animation frames from the original uploads already in the repository.
+- AshDeal, Horror Enemy Pack: selected Cat Monster, Abomination, Mad Ghost, and Mage frames. Adapted for use in PixelQuest; not licensed for redistribution as a standalone pack.
+
+Pixel effects (assets/pvfx):
+- PVFX Foundry by Pixel VFX Studio (nerijs), CC0 1.0: https://nerijs.itch.io/pvfx-foundry
+- Exported from the creator’s online studio: https://pvfx.deimos.studio
+- Selected animation frames are packed into horizontal runtime sheets.

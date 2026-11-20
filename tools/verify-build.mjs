@@ -28,12 +28,12 @@ const context = {
 const marker = '  return { init, update, draw, stop,';
 assert(js.includes(marker), 'Could not locate runtime data for validation');
 new vm.Script(js.replace(marker, `
-  window.buildData = { REGIONS, SCENE_MOBS, MOB_TYPES, STORY_DEFAULTS, LORE, FIRES, SFX_BANK, MUSIC_FILES, BOSS_FORMS, BOSS_LINES, PHASE_SHOWS };
+  window.buildData = { REGIONS, SCENE_MOBS, MOB_TYPES, STORY_DEFAULTS, LORE, FIRES, SFX_BANK, MUSIC_FILES, BOSS_FORMS, BOSS_LINES, PHASE_SHOWS, FOUNDRY };
   window.bloodTest = { bloodDrops, spawnBlood, updateBlood, setBloodEffects };
   window.balanceTest = { xpForNext, gainXp, bossHitFloor, hurtByBoss, stats, equipment, skarnAttackFrame, SKARN_HEW, SKARN_SLAM };
   window.introTest = { introBookPage, INTRO_CAPTIONS, INTRO_DURATION, INTRO_SPACE_END, INTRO_LORE, INTRO_BOOK_END };
 ${marker}`), { filename: 'world.js' }).runInNewContext(context);
-const { REGIONS, SCENE_MOBS, MOB_TYPES, STORY_DEFAULTS, LORE, FIRES, SFX_BANK, MUSIC_FILES, BOSS_FORMS, BOSS_LINES, PHASE_SHOWS } = context.window.buildData;
+const { REGIONS, SCENE_MOBS, MOB_TYPES, STORY_DEFAULTS, LORE, FIRES, SFX_BANK, MUSIC_FILES, BOSS_FORMS, BOSS_LINES, PHASE_SHOWS, FOUNDRY } = context.window.buildData;
 const unique = (rows, name) => assert.equal(new Set(rows.map(row => row.id)).size, rows.length, `Duplicate ${name} IDs`);
 unique(LORE, 'lore');
 unique(FIRES, 'fire');
@@ -55,6 +55,20 @@ for (const [scene, mobList] of Object.entries(SCENE_MOBS)) {
   for (const [mob, x] of mobList) assert(MOB_TYPES[mob] && x >= 0 && x < REGIONS[scene]?.width, `Invalid ${mob} spawn in ${scene}`);
 }
 const sheet = name => fs.readFileSync(path.join(root, name));
+for (const [id, [w, h, count, ms, ax, ay]] of Object.entries(FOUNDRY)) {
+  const name = `assets/pvfx/${id}.png`, png = sheet(name);
+  assert(png.subarray(1, 4).toString() === 'PNG', `Invalid PVFX strip: ${name}`);
+  assert.equal(png.readUInt32BE(16), w * count, `Invalid PVFX frames: ${id}`);
+  assert.equal(png.readUInt32BE(20), h, `Invalid PVFX height: ${id}`);
+  assert(ms > 0 && ax >= 0 && ax < w && ay >= 0 && ay < h, `Invalid timing or pivot: ${id}`);
+}
+for (const [id, w, h] of [['moon-idle', 2550, 150], ['moon-jump-start', 750, 150], ['moon-jump-loop', 450, 150],
+  ['moon-land', 600, 150], ['moon-dash', 2250, 150], ['moon-portrait', 160, 160],
+  ['observer-1', 1024, 255], ['observer-2', 512, 255], ['observer-3', 1792, 255]]) {
+  const png = sheet(`assets/court-road/${id}.png`);
+  assert.equal(png.readUInt32BE(16), w, `Invalid strip width: ${id}`);
+  assert.equal(png.readUInt32BE(20), h, `Invalid strip height: ${id}`);
+}
 for (const [key, type] of Object.entries(MOB_TYPES)) {
   for (const [anim, data] of Object.entries(type.anims || {})) {
     if (!data) continue;

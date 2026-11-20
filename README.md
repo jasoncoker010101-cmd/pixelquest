@@ -10,7 +10,14 @@ A small, retro-inspired pixel adventure that runs in your browser. Explore the c
 - XP, level stats, and partial recovery still apply at every level. Choose a major blessing at levels 5, 10, 15, 20, and so on. Offers wait until combat clears, and saved offers keep the same cards when you reload. Unclaimed blessings from older saves carry forward.
 - Defeat Grukk to earn **Watchrunner**, a sword with +4 attack and a lower roll cost. Win all three waves of the Breakwater arena to earn the **Breakwater Sigil**, which restores 12 extra stamina on a perfect dodge while equipped. Saves that already earned either victory receive its reward.
 - Watch for the new enemy wind-up marks and ground cues. Impact and defeat effects remain visible with Blood Effects disabled. Dialogue, pause, inventory, and milestone screens use art from Humble Pixel's paper UI.
-- Run `node tools/verify-tide.mjs` for regression checks on exploration, milestones, reward saves, combat cues, and equipment, and `node tools/verify-build.mjs` for runtime asset checks.
+- Run `node tools/verify-tide.mjs` for legacy progression, combat, and Salt Coast checks; `node tools/verify-court-road.mjs` for the new routes, errands, and story encounter; and `node tools/verify-build.mjs` for runtime asset checks.
+
+## The Court Road expansion
+
+- Take the signposted branch near the woodland entrance to **Alder’s End**. Visit the bakehouse, the Bent Alder Inn, the square’s campfire, and Fenna’s farm. Fenna’s granary errand takes you into the Outer Orchard, where there’s a shortcut home once the shed is clear.
+- Look for the lantern road just before Gloamhold’s old gate to reach **Gateward**. Shop at the market, rest at the Dry Coat, or talk to Tove at the signal house to open the Lamp Annex route. Recovering the lens changes the tower and Tove’s dialogue.
+- After Vael, continue east along the causeway. The Moonstone Keeper’s appearance is a story scene, not a boss fight. Existing saves past Gloamhold can continue without replaying that chapter.
+- New enemies use frames from the project’s supplied character packs. [PVFX Foundry](https://nerijs.itch.io/pvfx-foundry) provides the sprite effects for spell hits, charged attacks, fireball impacts, lanterns, smoke, and the causeway scene.
 
 ## Frostglass and the Cinder Seam
 
